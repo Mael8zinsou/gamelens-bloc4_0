@@ -21,10 +21,11 @@ un incident réel et sa méthode d'investigation (C4.4.2).
 ## Continuité avec les Blocs 1 à 3 (à respecter, ne pas contredire)
 
 - Architecture Medallion + Lambda hybride : Bronze (S3), Silver batch (Snowflake), Silver speed
-  (PostgreSQL), Gold (Snowflake mart). **Compte d'essai Snowflake disponible** : le Gold cible
-  désormais Snowflake réellement (`sql/schema_gold_snowflake.sql`), le prototype PostgreSQL
-  (`sql/schema_gold.sql`) reste comme mise au point initiale et référence de comparaison, pas comme
-  cible finale.
+  (PostgreSQL), Gold (Snowflake mart). **Compte d'essai Snowflake à recréer** (constaté le
+  19/08/2026, recréation volontairement différée, voir la note de calendrier en fin de fichier) :
+  le Gold cible Snowflake (`sql/schema_gold_snowflake.sql`), le prototype PostgreSQL
+  (`sql/schema_gold.sql`) reste comme mise au point initiale et référence de comparaison, et sert
+  de cible provisoire tant que Snowflake n'est pas disponible.
 - Orchestration batch : Apache Airflow. Temps réel : Apache Kafka (ou toute alternative légère
   équivalente si Kafka est trop lourd à faire tourner en local — à documenter comme un choix assumé).
   Calcul distribué : **Snowpark** (choisi le 19/08/2026 plutôt que PySpark local, pour un calcul
@@ -46,10 +47,12 @@ un incident réel et sa méthode d'investigation (C4.4.2).
   `fact_prices`, `fact_popularity_history` (grain journalier, colonnes larges, pas de modèle EAV),
   plus une vue `v_popularity_dashboard` et un warehouse `gamelens_wh` dimensionné XS avec
   auto-suspend à 60s pour préserver les crédits d'essai.
-- Sources de données : API RAWG (catalogue), Steam Web API (`GetNumberOfCurrentPlayers`, sans auth),
-  Twitch API (OAuth), scraping GOG (mesures anti-bot rencontrées et arbitrées au Bloc 3 — cet
-  incident est un bon candidat pour l'incident réel du C4.4.2, à rejouer plutôt qu'à documenter a
-  posteriori si l'occasion se présente).
+- Sources de données : API RAWG (catalogue), Steam Web API (`GetNumberOfCurrentPlayers`, sans auth,
+  et `appdetails`/`price_overview` pour la tarification), Twitch API (OAuth).
+  **Le scraping GOG n'est plus une source du Bloc 4** : l'arbitrage du Bloc 3 (3.3) l'a sorti du
+  périmètre, et la tarification passe donc par l'API Steam. L'incident GOG n'a plus à être rejoué
+  pour le C4.4.2 : INC-004, réellement vécu le 19/08/2026, remplit ce rôle. GOG reste en filet
+  de sécurité.
 
 ## Référentiel Bloc 4 — ce qui doit être livré
 
@@ -66,8 +69,11 @@ un incident réel et sa méthode d'investigation (C4.4.2).
 - Système de supervision et alertes (C4.3.1).
 - Feuille de route d'exploitation (C4.3.2) — tâches, échéances, maintenance, points de vigilance.
 - Documentation technique (C4.3.3).
-- Cahier de recettes et de tests (C4.4.1) — voir `sql/test_schema_gold.sql` pour le format retenu
-  (PASS/FAIL vérifié sur un résultat attendu, pas seulement "la requête s'exécute sans erreur").
+- Cahier de recettes et de tests (C4.4.1). Format retenu : PASS/FAIL vérifié sur un résultat
+  attendu, pas seulement "la requête s'exécute sans erreur". Le test d'idempotence de la session 1
+  (rejeu des offsets Kafka, 0 inséré sur 15 relus) est le premier cas conforme à ce format.
+  Note : `sql/test_schema_gold.sql`, référencé par une version antérieure de ce fichier, n'existe
+  pas dans le dépôt.
 - Méthodologie d'investigation et de traitement d'un incident réel (C4.4.2).
 
 ## État d'avancement
