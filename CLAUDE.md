@@ -134,3 +134,31 @@ Mis à jour le 19/08/2026 en fin de session 1.
 - Pas de tiret cadratin (—) dans les documents écrits destinés au dossier ou au support final.
 - Ce fichier (`CLAUDE.md`) doit être tenu à jour au fil de l'avancement : cocher les cases,
   documenter les choix techniques assumés (ex : alternative à Kafka) et les échecs rencontrés.
+
+### Trois documents de suivi à tenir à jour à chaque session
+
+Ils ne se recouvrent pas et n'ont pas le même lecteur. Aucun ne doit être écrit
+rétrospectivement en fin de projet.
+
+| Document | Contenu | Sert à |
+|---|---|---|
+| `docs/journal_incidents.md` | Uniquement les incidents, au format imposé par la grille C4.4.2 (nature, investigation, scénarios, communication aux parties prenantes, résultat) | Livrable C4.4.2 |
+| `docs/observations.md` | Surprises, fausses pistes, hypothèses démenties, arbitrages pris sur le vif, anecdotes | Les 15 minutes d'échange avec le jury, qui portent rarement sur ce qui a marché du premier coup |
+| `docs/commandes_successives.md` | Trace chronologique des commandes et requêtes réellement exécutées, en distinguant diagnostic ponctuel et procédure reproductible | Cahier de recettes C4.4.1 et documentation technique C4.3.3 |
+
+En fin de session, les quatre fichiers de suivi sont mis à jour ensemble :
+ces trois-là plus le tableau d'avancement de `CLAUDE.md`.
+
+### Note de calendrier sur le compte d'essai Snowflake
+
+Un compte d'essai Snowflake a une durée de vie limitée (30 jours, crédits
+plafonnés). Le recréer avant d'en avoir l'usage immédiat consommerait la fenêtre
+d'essai pendant une période où rien ne l'utilise, avec le risque qu'elle soit
+expirée le jour de la soutenance. La recréation est donc **volontairement
+différée** jusqu'au moment où les modèles dbt et le DAG de promotion seront
+prêts à être pointés dessus.
+
+Conséquence de conception à respecter d'ici là : tout ce qui est construit vers
+la couche Gold doit l'être derrière une frontière de configuration, de sorte que
+le basculement PostgreSQL vers Snowflake soit un changement de connexion et non
+une réécriture.

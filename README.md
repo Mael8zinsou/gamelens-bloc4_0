@@ -43,11 +43,10 @@ docker compose up -d                 # PostgreSQL + Kafka
 Copy-Item .env.example .env          # puis ajuster si besoin
 python -m pip install -r requirements.txt
 
-cd ingestion
-python create_topics.py              # declaration explicite des topics
-python seed_game_mapping.py          # referentiel des titres suivis
-python steam_producer.py --once      # un cycle de collecte
-python kafka_to_postgres.py --timeout 30
+python ingestion/create_topics.py       # declaration explicite des topics
+python ingestion/seed_game_mapping.py  # referentiel des titres suivis
+python ingestion/steam_producer.py --once
+python ingestion/kafka_to_postgres.py --timeout 30 --depuis-le-debut
 ```
 
 **Point de configuration important.** PostgreSQL est publie sur le port hote
@@ -71,7 +70,9 @@ n'est necessaire.
 | `sql/schema_gold.sql` | Prototype PostgreSQL du Gold, conserve comme reference |
 | `sql/verify_snowflake_constraints.sql` | Verification empirique des contraintes Snowflake |
 | `dags/` | DAG Airflow |
-| `docs/journal_incidents.md` | Journal d'incidents tenu au fil de la construction |
+| `docs/journal_incidents.md` | Journal d'incidents, format impose par la grille C4.4.2 |
+| `docs/observations.md` | Observations de session : surprises, fausses pistes, arbitrages |
+| `docs/commandes_successives.md` | Trace chronologique des commandes reellement executees |
 | `tests/` | Tests automatises, executes par la CI |
 
 ## Etat d'avancement
