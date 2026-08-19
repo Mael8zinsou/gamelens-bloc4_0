@@ -1,0 +1,10 @@
+# Socle applicatif GameLens (hors Airflow, qui tourne dans son propre conteneur)
+requests==2.32.3
+kafka-python==2.3.0
+psycopg2-binary==2.9.9
+python-dotenv==1.0.1
+pandas==2.2.2
+
+# Qualite et tests (utilises par la CI, C4.2.3)
+pytest==8.3.3
+ruff==0.6.9

@@ -1,0 +1,90 @@
+# ============================================================================
+# GameLens - socle d'infrastructure local, Bloc 4
+# ----------------------------------------------------------------------------
+# Ce fichier est lui-meme une piece justificative : il liste les composants
+# retenus (C4.1.2) et documente la procedure de demarrage (C4.3.3).
+#
+# Demarrage :  docker compose up -d
+# Etat      :  docker compose ps
+# Arret     :  docker compose down        (les volumes sont conserves)
+# ============================================================================
+
+name: gamelens
+
+services:
+
+  # --------------------------------------------------------------------------
+  # PostgreSQL : couche Silver speed de l'architecture Lambda (Bloc 1).
+  # Heberge aussi la base de metadonnees d'Airflow, sur une base separee, pour
+  # eviter un cinquieme conteneur sur un poste de developpement.
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: gamelens-postgres
+    environment:
+      POSTGRES_DB: gamelens
+      POSTGRES_USER: gamelens_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devlocal_app}
+      TZ: UTC
+    ports:
+      # Port hote 5433 volontairement, pas 5432 : un service PostgreSQL 18 natif
+      # tourne deja sur le poste et retient le port 5432. Docker publie alors le
+      # port sans erreur visible mais sans effet reel (cf. INC-004). Le port
+      # INTERNE reste 5432 : les conteneurs se joignent via postgres:5432.
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema_silver_speed.sql:/docker-entrypoint-initdb.d/10_schema_silver_speed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gamelens_app -d gamelens"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Apache Kafka en mode KRaft (sans ZooKeeper), noeud unique.
+  #
+  # Choix assume : le Bloc 1 prevoyait Kafka, et CLAUDE.md autorisait une
+  # alternative plus legere si Kafka s'averait trop lourd en local. Le mode
+  # KRaft, disponible depuis Kafka 3.3, supprime la dependance a ZooKeeper et
+  # ramene le cluster a un seul conteneur : l'alternative n'est donc pas
+  # necessaire, c'est bien Apache Kafka qui tourne, pas un substitut.
+  #
+  # Deux listeners distincts, piege classique en local : INTERNAL pour les
+  # conteneurs (kafka:29092), EXTERNAL pour les processus du poste hote
+  # (localhost:9092). Un listener unique fait echouer l'un des deux cotes.
+  # --------------------------------------------------------------------------
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: gamelens-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 168
+      CLUSTER_ID: gamelens-kraft-cluster-01
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  kafka_data:

@@ -1,0 +1,20 @@
+{
+  "_commentaire": "Panel de titres suivis par GameLens. Le portefeuille de Kestrel Interactive est fictif ; les titres listes ici constituent le panel concurrent reel, seul observable publiquement. Le Bloc 1 citait 570/730/1091500 a titre d'exemple : ces trois titres AAA ont ete remplaces par un panel de jeux independants, coherent avec le positionnement de Kestrel Interactive.",
+  "titres": [
+    {"steam_appid": 1145360, "unified_name": "Hades",             "developer": "Supergiant Games",   "genre": "Roguelike"},
+    {"steam_appid": 1145350, "unified_name": "Hades II",          "developer": "Supergiant Games",   "genre": "Roguelike"},
+    {"steam_appid": 367520,  "unified_name": "Hollow Knight",     "developer": "Team Cherry",        "genre": "Metroidvania"},
+    {"steam_appid": 413150,  "unified_name": "Stardew Valley",    "developer": "ConcernedApe",       "genre": "Simulation"},
+    {"steam_appid": 105600,  "unified_name": "Terraria",          "developer": "Re-Logic",           "genre": "Sandbox"},
+    {"steam_appid": 588650,  "unified_name": "Dead Cells",        "developer": "Motion Twin",        "genre": "Roguelike"},
+    {"steam_appid": 646570,  "unified_name": "Slay the Spire",    "developer": "Mega Crit Games",    "genre": "Deckbuilder"},
+    {"steam_appid": 1794680, "unified_name": "Vampire Survivors", "developer": "poncle",             "genre": "Roguelite"},
+    {"steam_appid": 294100,  "unified_name": "RimWorld",          "developer": "Ludeon Studios",     "genre": "Simulation"},
+    {"steam_appid": 427520,  "unified_name": "Factorio",          "developer": "Wube Software",      "genre": "Simulation"},
+    {"steam_appid": 1313140, "unified_name": "Cult of the Lamb",  "developer": "Massive Monster",    "genre": "Roguelike"},
+    {"steam_appid": 2379780, "unified_name": "Balatro",           "developer": "LocalThunk",         "genre": "Deckbuilder"},
+    {"steam_appid": 504230,  "unified_name": "Celeste",           "developer": "Extremely OK Games", "genre": "Plateforme"},
+    {"steam_appid": 632470,  "unified_name": "Disco Elysium",     "developer": "ZA/UM",              "genre": "RPG", "_nom_steam": "Disco Elysium - The Final Cut", "_note": "Nom commercial Steam different du nom unifie : cas reel de resolution d identifiants traite par game_mapping (Bloc 1)."},
+    {"steam_appid": 391540,  "unified_name": "Undertale",         "developer": "tobyfox",            "genre": "RPG"}
+  ]
+}

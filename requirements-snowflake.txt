@@ -1,0 +1,6 @@
+# Dependances Snowflake, isolees car le compte d'essai est a recreer (19/08/2026).
+# A installer quand le compte sera de nouveau disponible.
+snowflake-connector-python==3.9.1
+snowflake-snowpark-python==1.20.0
+dbt-core==1.8.3
+dbt-snowflake==1.8.3

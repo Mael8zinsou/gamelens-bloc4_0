@@ -1,0 +1,39 @@
+# Secrets et configuration locale
+.env
+.env.*
+!.env.example
+*.pem
+*.p8
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Airflow (etat local, non versionne)
+airflow.db
+airflow.cfg
+webserver_config.py
+logs/
+docker/airflow/logs/
+standalone_admin_password.txt
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+.user.yml
+
+# Donnees locales et sorties de run (les LOGS DE PREUVE sont dans docs/preuves/)
+data/raw/
+data/tmp/
+*.parquet
+
+# Systeme
+.DS_Store
+Thumbs.db
