@@ -72,28 +72,58 @@ un incident réel et sa méthode d'investigation (C4.4.2).
 
 ## État d'avancement
 
+Mis à jour le 19/08/2026 en fin de session 1.
+
 | Élément | Statut |
 |---|---|
+| Dépôt git dédié, structure, .gitignore | ✅ Fait (dépôt initialisé sur place, décision 2b) |
+| Socle Docker (PostgreSQL 16 + Kafka 3.9 KRaft) | ✅ Construit, démarré, conteneurs *healthy* |
+| Schéma Silver speed PostgreSQL | ✅ Construit et initialisé automatiquement au démarrage du conteneur |
+| Pipeline temps réel (Steam Web API) | ✅ **Exécuté de bout en bout** : 15 titres collectés, publiés dans Kafka, écrits en base. Idempotence prouvée par rejeu (15 relus, 0 inséré). |
 | Schéma Gold PostgreSQL (prototype) | ✅ Construit et testé (contraintes + rôles vérifiés) |
-| Schéma Gold Snowflake (cible réelle) | 🟡 Conçu et relu, **exécution réelle à faire côté utilisateur** (Snowsight ou Claude Code) |
-| Pipeline temps réel (Steam Web API) | 🔴 À faire |
-| Orchestrateur (Airflow) | 🔴 À faire |
-| Calcul distribué (Snowpark, décidé le 19/08) | 🔴 À faire |
+| Schéma Gold Snowflake (cible réelle) | 🔴 Bloqué : compte d'essai à recréer (INC-003) |
+| Orchestrateur (Airflow) | 🔴 À faire, en conteneur obligatoirement (INC-001) |
+| Calcul distribué (Snowpark, décidé le 19/08) | 🔴 Bloqué par la recréation du compte Snowflake |
 | Pipeline CI/CD | 🔴 À faire |
-| Supervision et alertes | 🔴 À faire |
-| Documentation technique / feuille de route | 🔴 À faire, une fois le reste construit (décrire le réel, pas l'anticiper) |
-| Cahier de recettes complet | 🔴 À faire au fil de l'eau, pas à la fin. Voir `sql/verify_snowflake_constraints.sql` : à exécuter pour de vrai et consigner les résultats observés. |
-| Incident réel documenté | 🔴 À faire (candidat : rejouer l'incident GOG du Bloc 3) |
+| Supervision et alertes | 🟡 Amorcé : table `speed.pipeline_runs` alimentée par tous les composants |
+| Documentation technique / feuille de route | 🟡 Amorcé : `README.md`. Le reste une fois le reste construit. |
+| Cahier de recettes complet | 🟡 Premiers résultats réels disponibles (idempotence, résolution des 15 appid) |
+| Incident réel documenté | ✅ **INC-004 retenu** : collision de ports masquée par une erreur d'encodage. Incident réellement vécu, investigué et résolu en session 1. L'incident GOG du Bloc 3 reste en filet de sécurité. |
+
+## Faits d'environnement à ne pas redécouvrir
+
+- **PostgreSQL est publié sur le port hôte 5433**, pas 5432 : un service
+  `postgresql-x64-18` natif occupe 5432 et Docker publie alors sans effet réel ni
+  message d'erreur. Ne pas « corriger » ce port. Voir INC-004.
+- **Airflow ne tourne pas nativement sous Windows** (POSIX requis). Conteneur obligatoire.
+- **Docker depuis Git Bash** : préfixer par `MSYS_NO_PATHCONV=1` et utiliser `pwd -W`,
+  sinon MSYS réécrit le chemin du volume. Depuis PowerShell, rien à faire.
+- **Kafka tourne en mode KRaft**, sans ZooKeeper : c'est bien Apache Kafka, pas une
+  alternative allégée. L'autorisation de substituer Kafka n'a pas eu à être utilisée.
+- Le chemin de travail contient accents et espaces, et cela **ne pose pas** de problème
+  à Docker Desktop : hypothèse testée et écartée (INC-002).
+
+## Décisions de session 1 (19/08/2026)
+
+- Runtime : Docker Desktop (1a). Dépôt : sur place, `git init` local (2b).
+  Snowflake : compte d'essai à recréer (3d). Échéance : jalonnement par livrable (4d).
+- **Tarification sans GOG** : l'arbitrage du Bloc 3 (3.3) a sorti le suivi tarifaire GOG
+  du périmètre. `fact_prices` est donc alimentée par l'API Steam `appdetails`
+  (`price_overview`), vérifiée fonctionnelle. Cela lève la contradiction entre le schéma
+  Gold et le Bloc 3, sans vider la table de faits.
+- **Panel de titres** : 15 jeux indépendants réels, chaque `appid` vérifié en direct.
+  Les trois AAA cités en exemple au Bloc 1 (570, 730, 1091500) sont écartés, incohérents
+  avec le positionnement d'éditeur indépendant de Kestrel Interactive.
+- **Incident C4.4.2** : privilégier un incident réellement vécu pendant la construction
+  plutôt que rejouer GOG. INC-004 remplit ce rôle et couvre les quatre rubriques exigées
+  par la grille, y compris la communication aux parties prenantes, souvent oubliée.
 
 ## Prochaine étape immédiate
 
-1. Ouvrir ce dossier dans VS Code avec Claude Code.
-2. Exécuter `sql/schema_gold_snowflake.sql` dans Snowsight ou via Claude Code (connecteur Python /
-   SnowSQL). Noter tout ajustement de syntaxe nécessaire dans ce fichier CLAUDE.md et dans le script
-   lui-même (commentaire daté).
-3. Exécuter `sql/verify_snowflake_constraints.sql` et remplacer les commentaires "ATTENDU" par les
-   résultats réellement observés (avec capture d'écran si utile pour le support de soutenance).
-4. Revenir en conversation pour concevoir le premier des 3 pipelines (temps réel, Steam Web API).
+1. Recréer le compte d'essai Snowflake, puis exécuter `sql/schema_gold_snowflake.sql`
+   et `sql/verify_snowflake_constraints.sql` en consignant les résultats observés.
+2. Monter Airflow en conteneur et écrire le DAG de promotion Silver speed vers Gold.
+3. Écrire le pipeline CI/CD (GitHub Actions), C4.2.3 étant éliminatoire.
 
 ## Conventions de travail
 
