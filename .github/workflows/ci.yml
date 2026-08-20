@@ -134,10 +134,15 @@ jobs:
           echo "le socle n a pas demarre a temps"; docker compose logs --tail 50; exit 1
 
       - name: Verifier l'initialisation du schema Silver speed
+        # information_schema.tables compte aussi les vues : sans le filtre sur
+        # table_type, le controle attendait 4 et en trouvait 5. Tables et vue
+        # sont verifiees separement, ce qui rend le diagnostic immediat.
         run: |
-          docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc \
-            "SELECT count(*) FROM information_schema.tables WHERE table_schema='speed'" | grep -q '^4$'
-          echo "4 tables presentes dans le schema speed"
+          tables=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='speed' AND table_type='BASE TABLE'")
+          vues=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc "SELECT count(*) FROM information_schema.views WHERE table_schema='speed'")
+          echo "schema speed : ${tables} table(s), ${vues} vue(s)"
+          [ "${tables}" = "4" ] || { echo "attendu 4 tables, observe ${tables}"; exit 1; }
+          [ "${vues}" = "1" ] || { echo "attendu 1 vue, observe ${vues}"; exit 1; }
 
       - name: Executer le pipeline temps reel de bout en bout
         env:
@@ -195,6 +200,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Normaliser le nom du depot en minuscules
+        # github.repository conserve la casse du compte (ici Mael8zinsou), or
+        # un nom d'image Docker doit etre entierement en minuscules. Sans cette
+        # normalisation, la publication echoue sur invalid reference format.
+        run: echo "DEPOT=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: S'authentifier aupres du registre GitHub
         uses: docker/login-action@v3
         with:
@@ -212,8 +223,8 @@ jobs:
           # precise du depot. Sans la seconde, un retour arriere consisterait a
           # esperer que latest pointe encore sur la bonne image.
           tags: |
-            ghcr.io/${{ github.repository }}/airflow:latest
-            ghcr.io/${{ github.repository }}/airflow:${{ github.sha }}
+            ghcr.io/${{ env.DEPOT }}/airflow:latest
+            ghcr.io/${{ env.DEPOT }}/airflow:${{ github.sha }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -221,4 +232,4 @@ jobs:
       - name: Recapitulatif
         run: |
           echo "### Image publiee" >> $GITHUB_STEP_SUMMARY
-          echo "- ghcr.io/${{ github.repository }}/airflow:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- ghcr.io/${{ env.DEPOT }}/airflow:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
