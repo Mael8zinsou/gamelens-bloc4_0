@@ -46,10 +46,10 @@ jobs:
         run: python -m pip install --upgrade pip ruff==0.6.9
 
       - name: Lint
-        run: ruff check ingestion dags tests supervision
+        run: ruff check ingestion dags tests supervision entrepot
 
       - name: Format
-        run: ruff format --check ingestion dags tests supervision
+        run: ruff format --check ingestion dags tests supervision entrepot
 
   tests:
     name: Tests unitaires

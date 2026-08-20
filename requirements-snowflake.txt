@@ -1,6 +1,17 @@
-# Dependances Snowflake, isolees car le compte d'essai est a recreer (19/08/2026).
-# A installer quand le compte sera de nouveau disponible.
-snowflake-connector-python==3.9.1
-snowflake-snowpark-python==1.20.0
-dbt-core==1.8.3
-dbt-snowflake==1.8.3
+# Outillage Snowflake : dbt et Snowpark.
+#
+# Ces dependances sont volontairement SEPAREES de requirements.txt et ne sont
+# jamais installees dans l'environnement Python du poste. Raison constatee le
+# 20/08/2026 : snowflake-snowpark-python impose snowflake-connector-python 4.x,
+# incompatible avec la contrainte ~=3.0 de dbt-snowflake 1.8, et remonte au
+# passage la version de requests epinglee par requirements.txt.
+#
+# Elles vivent donc dans leur propre conteneur (docker/snowflake/Dockerfile),
+# pour la meme raison qu'Airflow : un jeu de dependances qui entre en conflit
+# avec le reste s'isole plutot qu'il ne s'arbitre.
+#
+# Versions resolues conjointement, sans conflit, et figees ici.
+snowflake-snowpark-python==1.54.0
+snowflake-connector-python==4.7.2
+dbt-core==1.12.2
+dbt-snowflake==1.12.0

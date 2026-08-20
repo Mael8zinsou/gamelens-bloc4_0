@@ -303,6 +303,41 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # --------------------------------------------------------------------------
+  # Outillage Snowflake : dbt et Snowpark.
+  #
+  # Service d'outillage, pas de service permanent : il n'est pas demarre par
+  # `docker compose up` grace au profil, et s'invoque a la demande.
+  #
+  #   docker compose run --rm snowflake-cli python entrepot/verifier_connexion.py
+  #   docker compose run --rm snowflake-cli dbt debug
+  #
+  # L'isolation repare un conflit reel constate le 20/08/2026 : Snowpark impose
+  # snowflake-connector-python 4.x, que dbt-snowflake 1.8 refusait, et remonte
+  # au passage la version de requests epinglee pour l'ingestion. Meme raison
+  # qu'Airflow : un jeu de dependances qui entre en conflit s'isole.
+  # --------------------------------------------------------------------------
+  snowflake-cli:
+    build:
+      context: .
+      dockerfile: docker/snowflake/Dockerfile
+    image: gamelens/snowflake-cli:1.0
+    profiles: ["outillage"]
+    env_file:
+      # required: false, car .env n'existe pas sur un poste vierge ni en CI, et
+      # son absence ferait echouer la validation du fichier compose entier,
+      # y compris pour les services qui ne s'en servent pas.
+      - path: .env
+        required: false
+    volumes:
+      - ./entrepot:/projet/entrepot:ro
+      - ./ingestion:/projet/ingestion:ro
+      - ./sql:/projet/sql:ro
+      - ./dbt:/projet/dbt
+      # La cle privee est montee en lecture seule et n'entre jamais dans l'image.
+      - ./secrets:/projet/secrets:ro
+    working_dir: /projet
+
 volumes:
   postgres_data:
   kafka_data:
