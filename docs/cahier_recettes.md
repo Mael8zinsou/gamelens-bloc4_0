@@ -312,28 +312,56 @@ Trois comportements vérifiés séparément.
 
 # 5. Tests de non-régression automatisés
 
-Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt
+Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt privé
 `Mael8zinsou/gamelens-bloc4_0`.
 
-| Étage | Contenu | Première exécution réelle |
+| Étage | Contenu | État au 20/08/2026 |
 |---|---|---|
-| `qualite` | `ruff check` et `ruff format --check` | ✅ vert du premier coup |
-| `tests` | 14 tests unitaires, sans réseau ni base | ✅ vert du premier coup |
-| `dag` | Intégrité du DAG dans un conteneur jetable | ✅ vert du premier coup |
-| `integration` | Socle Docker réel, pipeline complet, rejeu d'idempotence | ❌ puis corrigé, voir TS-07 |
-| `publication` | Image Airflow poussée sur `ghcr.io` | Ignoré tant que l'intégration échoue |
+| `qualite` | `ruff check` et `ruff format --check` sur 4 répertoires | ✅ |
+| `tests` | Tests unitaires, sans réseau ni base | ✅ `14 passed, 13 skipped` |
+| `dag` | Intégrité du DAG dans un conteneur jetable | ✅ |
+| `integration` | Socle Docker réel, 6 contrôles métier | ✅ |
+| `publication` | Image Airflow poussée sur `ghcr.io` | ✅ deux étiquettes |
 
-Les 14 tests unitaires couvrent la structure de la watchlist (5 cas) et la
-lecture des réponses tarifaires Steam (9 cas : tarif plein, promotion à 60 %,
-prix initial absent, jeu sans tarif exposé, réponse en échec, et 4 cas de
-conversion des centimes).
+## Détail des contrôles de l'étage d'intégration
+
+Chacun a une assertion explicite, aucun ne se contente d'un code de retour nul.
+
+| Contrôle | Assertion | Observé |
+|---|---|---|
+| Initialisation des schémas | Les 17 objets nommés de `speed` et `mart` existent | aucun manquant |
+| Cloisonnement des rôles | 13 cas de la matrice de droits, refus compris | `13 passed`, dont `refuse] PASSED` |
+| Pipeline temps réel | Le pipeline écrit réellement des lignes | > 0 |
+| Idempotence du puits | Le rejeu ne duplique rien | `avant rejeu : 15, apres rejeu : 15` |
+| Moteur d'alertes | Il évalue ses règles **et se trace lui-même** | `executions du moteur tracees : 1` |
+
+Le partage entre les deux étages est vérifié et non supposé : les 13 tests de
+sécurité sont **ignorés** par l'étage `tests`, qui n'a pas de base, et
+**exécutés** par l'étage `integration`. Un test qui se saute silencieusement là
+où il devrait tourner serait un faux vert, exactement le travers que le reste du
+cahier cherche à éviter.
+
+## Ce que la CI a réellement attrapé
+
+Trois échecs sur les quatre premières exécutions réelles, tous instructifs, et
+aucun n'était une régression du code livré :
+
+1. **Session 2** : le contrôle du schéma comptait `information_schema.tables`
+   sans filtrer `table_type`, qui inclut les vues. Défaut de l'assertion.
+2. **Session 2** : le nom d'image `ghcr.io` conservait la majuscule du compte,
+   or un nom d'image Docker doit être en minuscules. Repéré par relecture avant
+   qu'il ne se manifeste.
+3. **Session 3** : le même contrôle a de nouveau échoué, cette fois pour une
+   raison légitime, la supervision ayant ajouté une table et six vues.
+   L'assertion par comptage a été remplacée par une vérification des objets
+   nommés. Voir OBS-32.
 
 **Point à assumer à l'oral** : la première exécution réelle du workflow a
-échoué. C'est le résultat normal et utile d'une chaîne d'intégration. Les trois
-premiers étages avaient été rejoués localement avec les mêmes commandes et
-passaient ; l'étage qui a échoué est précisément celui qui ne pouvait pas
-l'être, faute d'un environnement jetable en local. Une CI qui passe au vert du
-premier coup sur cinq étages n'a en général rien vérifié.
+échoué, et deux des trois échecs portaient sur le test lui-même plutôt que sur
+le système testé. C'est le fonctionnement normal d'une chaîne d'intégration. Les
+étages rejoués localement passaient ; ceux qui ont cassé sont ceux qui ne
+pouvaient pas l'être, faute d'environnement jetable en local. Une CI qui passe
+au vert du premier coup sur cinq étages n'a en général rien vérifié.
 
 ---
 
