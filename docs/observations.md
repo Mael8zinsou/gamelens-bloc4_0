@@ -440,3 +440,26 @@ et le SHA complet du commit.
 Le double étiquetage n'est pas décoratif. Sans l'étiquette par SHA, revenir à
 une version antérieure consisterait à espérer que `latest` pointe encore sur la
 bonne image, ce qui n'est pas une procédure de retour arrière mais un pari.
+
+## OBS-24. La CI dépend d'une API tierce, et c'est un compromis à assumer
+
+Trois exécutions du workflow, les deux dernières vertes sur les cinq étages :
+la chaîne est reproductible et non un coup de chance.
+
+Mais l'étage d'intégration appelle **la vraie API Steam** à chaque exécution.
+C'est ce qui lui donne sa valeur, il teste le pipeline réel de bout en bout
+plutôt qu'une simulation, et c'est aussi sa fragilité : si Steam est
+indisponible, modifie son format de réponse ou limite les adresses des runners
+GitHub, la CI passe au rouge pour une raison **étrangère au code livré**.
+
+Le compromis est assumé plutôt que corrigé, pour deux raisons. D'abord, une
+rupture de contrat d'une API amont est exactement ce qu'un pipeline de données
+doit détecter, et l'apprendre par la CI vaut mieux que par un tableau de bord
+faux. Ensuite, les tests unitaires, eux, sont entièrement hors ligne : les neuf
+cas de lecture tarifaire s'exécutent sur des réponses simulées. La logique reste
+donc vérifiable même si Steam tombe, seul l'étage d'intégration devient rouge.
+
+À inscrire comme point de vigilance dans la feuille de route d'exploitation
+(C4.3.2) : une CI rouge n'implique pas nécessairement une régression, et savoir
+distinguer les deux fait partie de la procédure d'exploitation. C'est aussi une
+question probable du jury sur la fiabilité d'une chaîne dépendant de tiers.
