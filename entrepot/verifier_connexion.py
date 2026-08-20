@@ -50,7 +50,18 @@ def main() -> int:
     try:
         import snowflake.connector
 
-        conn = snowflake.connector.connect(**params)
+        try:
+            conn = snowflake.connector.connect(**params)
+        except Exception as premiere:
+            # A la toute premiere connexion, l'entrepot virtuel et la base
+            # n'existent pas encore. Le connecteur echoue en s'y positionnant,
+            # avec un message qui laisse croire a un probleme d'authentification.
+            # On retente sans contexte pour trancher entre les deux causes.
+            if "does not exist" not in str(premiere) and "Object" not in str(premiere):
+                raise
+            print("  entrepot ou base absents, nouvelle tentative sans contexte")
+            conn = snowflake.connector.connect(**parametres(avec_contexte=False))
+            print("  (l authentification fonctionne : ce sont les objets qui manquent)")
     except Exception as exc:
         message = str(exc)
         print(f"  ECHEC DE CONNEXION : {type(exc).__name__}\n  {message[:400]}\n")

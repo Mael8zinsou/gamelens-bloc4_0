@@ -62,8 +62,15 @@ def _charger_cle_privee(chemin: str, phrase: str | None):
     )
 
 
-def parametres() -> dict:
-    """Assemble les parametres de connexion depuis l'environnement."""
+def parametres(avec_contexte: bool = True) -> dict:
+    """Assemble les parametres de connexion depuis l'environnement.
+
+    `avec_contexte=False` omet l'entrepot virtuel, la base et le schema. C'est
+    necessaire a la toute premiere connexion : ces objets n'existent pas encore,
+    et le connecteur echoue en tentant de s'y positionner. L'erreur obtenue
+    parle alors d'objet inexistant, ce qui laisse croire a un probleme
+    d'authentification alors que celle-ci a parfaitement fonctionne.
+    """
     compte = os.getenv("SNOWFLAKE_ACCOUNT")
     utilisateur = os.getenv("SNOWFLAKE_USER")
     if not compte or not utilisateur:
@@ -77,12 +84,13 @@ def parametres() -> dict:
         "account": compte,
         "user": utilisateur,
         "role": os.getenv("SNOWFLAKE_ROLE", "ACCOUNTADMIN"),
-        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "gamelens_wh"),
-        "database": os.getenv("SNOWFLAKE_DATABASE", "gamelens"),
-        "schema": os.getenv("SNOWFLAKE_SCHEMA", "mart"),
         "client_session_keep_alive": False,
         "application": "GameLens_RNCP39586",
     }
+    if avec_contexte:
+        params["warehouse"] = os.getenv("SNOWFLAKE_WAREHOUSE", "gamelens_wh")
+        params["database"] = os.getenv("SNOWFLAKE_DATABASE", "gamelens")
+        params["schema"] = os.getenv("SNOWFLAKE_SCHEMA", "mart")
 
     chemin_cle = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
     mot_de_passe = os.getenv("SNOWFLAKE_PASSWORD")
@@ -106,11 +114,11 @@ def mode_authentification() -> str:
     return "paire de cles RSA" if os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH") else "mot de passe"
 
 
-def connexion():
+def connexion(avec_contexte: bool = True):
     """Ouvre une connexion via le connecteur Python."""
     import snowflake.connector
 
-    return snowflake.connector.connect(**parametres())
+    return snowflake.connector.connect(**parametres(avec_contexte))
 
 
 def session_snowpark():

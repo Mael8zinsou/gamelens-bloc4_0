@@ -12,6 +12,18 @@
 #
 # Versions resolues conjointement, sans conflit, et figees ici.
 snowflake-snowpark-python==1.54.0
-snowflake-connector-python==4.7.2
+# L'extra pandas apporte pyarrow, requis par write_pandas pour televerser un
+# jeu de donnees vers Snowflake sans passer par un fichier intermediaire.
+snowflake-connector-python[pandas]==4.7.2
+# pandas 2.3.3 et non 2.2.3 comme dans requirements.txt : l'extra pandas du
+# connecteur exige une version plus recente, et un pin trop bas rendait la
+# resolution impossible. Les deux environnements etant isoles, la divergence
+# est sans consequence.
+pandas==2.3.3
+# Lecture de la couche Silver speed, source de la promotion vers Gold.
+psycopg2-binary==2.9.12
+# 1.2 minimum, exige par dbt-core 1.12 : le pin a 1.0.1 recopie de
+# requirements.txt rendait la resolution impossible.
+python-dotenv>=1.2
 dbt-core==1.12.2
 dbt-snowflake==1.12.0

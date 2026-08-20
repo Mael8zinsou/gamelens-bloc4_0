@@ -329,6 +329,12 @@ services:
       # y compris pour les services qui ne s'en servent pas.
       - path: .env
         required: false
+    environment:
+      # Frontiere de configuration : depuis le reseau Docker, la couche Silver
+      # se joint par postgres:5432, alors que .env porte les valeurs du poste
+      # hote (localhost:5433). Le code est identique, seule la connexion change.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
     volumes:
       - ./entrepot:/projet/entrepot:ro
       - ./ingestion:/projet/ingestion:ro
@@ -337,6 +343,9 @@ services:
       # La cle privee est montee en lecture seule et n'entre jamais dans l'image.
       - ./secrets:/projet/secrets:ro
     working_dir: /projet
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres_data:
