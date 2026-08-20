@@ -1,0 +1,16 @@
+# Declaration du fournisseur de tableaux de bord : Grafana charge les fichiers
+# JSON du repertoire monte et les recharge toutes les 30 secondes. Les tableaux
+# de bord vivent donc dans le depot git, au meme titre que le reste du code.
+apiVersion: 1
+
+providers:
+  - name: gamelens
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

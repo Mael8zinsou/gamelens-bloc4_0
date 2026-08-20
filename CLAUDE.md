@@ -91,9 +91,9 @@ Mis à jour le 20/08/2026 en fin de session 2.
 | Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté** : 15 dim_games, 15 faits popularité, 45 faits prix |
 | Schéma Gold Snowflake (cible finale) | 🔴 Bloqué : compte d'essai à recréer (INC-003) |
 | **C4.2.3 pipeline CI/CD** | ✅ **Exécuté, 5 étages verts** sur `Mael8zinsou/gamelens-bloc4_0` (privé). Qualité, tests, intégrité du DAG, intégration sur infrastructure jetable, publication d'image sur `ghcr.io` avec double étiquetage `latest` et SHA. Le premier run avait échoué : défaut dans l'assertion, pas dans l'infra (OBS-22). |
-| Supervision et alertes | 🟡 `speed.pipeline_runs` alimentée par tous les composants, angle mort trouvé et corrigé (INC-007). Reste : visualisation et alertes. |
-| Documentation technique / feuille de route | 🟡 `README.md` et les trois documents de suivi. Feuille de route d'exploitation à écrire. |
-| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : 13 PASS, 1 partiel, 1 en attente. Chaque cas oppose un attendu explicite à un observé daté. |
+| **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. |
+| Documentation technique / feuille de route | 🟡 `README.md`, les trois documents de suivi et le cahier de recettes. **Feuille de route d'exploitation (C4.3.2) reste à écrire.** |
+| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **20 PASS, 0 partiel, 1 en attente** (contraintes Snowflake). Tests fonctionnels, structurels, de sécurité, de supervision et de non-régression. |
 | Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-007 s'y ajoutent comme incidents secondaires. |
 
 ## Faits d'environnement à ne pas redécouvrir
@@ -114,7 +114,16 @@ Mis à jour le 20/08/2026 en fin de session 2.
   la version exacte plutôt que d'un tutoriel Airflow 2.
 - **Après toute modification d'un DAG**, lancer `airflow dags reserialize` : l'analyseur
   ne rescanne le dossier que toutes les 5 minutes.
-- Interface Airflow sur **http://localhost:8080**, compte `admin` / `admin`.
+- Interface Airflow sur **http://localhost:8080**, Grafana sur **http://localhost:3000**,
+  compte `admin` / `admin` pour les deux.
+- **Un seul modèle de rôles** pour toute la plateforme, celui du Bloc 1 :
+  `etl_service`, `analyst`, `dashboard_viewer`, plus `gamelens_app` comme propriétaire.
+  Les rôles `gamelens_etl` et `gamelens_reader` d'une version antérieure ont été
+  supprimés (OBS-25). Ne pas en réintroduire.
+- Les **seuils de supervision sont définis en SQL** (`sql/schema_supervision.sql`),
+  pas dans Grafana : l'outil affiche les indicateurs, il ne les définit pas.
+- Les logs Airflow contiennent des `:` dans les noms de dossier, **illisibles par un
+  client Windows**. Les lire via `docker exec ... cat`, pas depuis l'hôte.
 - La base de métadonnées Airflow est une base séparée sur la **même** instance
   PostgreSQL que la couche Silver speed. Choix d'échelle de développement assumé.
 
@@ -139,8 +148,11 @@ Mis à jour le 20/08/2026 en fin de session 2.
    puis exécuter `sql/schema_gold_snowflake.sql` et `sql/verify_snowflake_constraints.sql`
    en consignant les résultats observés.
 2. Écrire le calcul distribué Snowpark, dernière des trois méthodes de C4.2.2.
-3. Compléter la supervision : visualisation des indicateurs et système d'alertes
-   (C4.3.1), au-delà de la table `speed.pipeline_runs` déjà alimentée.
+3. Écrire la feuille de route d'exploitation (C4.3.2) : tâches, échéances,
+   planification de la maintenance, points de vigilance. Le journal d'alertes et
+   sa colonne `resolue_le` fournissent déjà la matière sur les durées d'incident.
+4. Consolider la documentation technique (C4.3.3) et préparer le support de
+   soutenance (30 min de présentation).
 
 ## Conventions de travail
 

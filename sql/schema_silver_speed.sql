@@ -123,20 +123,51 @@ COMMENT ON VIEW speed.v_daily_player_stats IS
     'Agregat journalier de la frequentation, promu vers mart.fact_popularity_history par le DAG Airflow. observation_count sert de controle de completude.';
 
 -- ----------------------------------------------------------------------------
--- Roles applicatifs, declinaison locale des 4 roles poses au Bloc 1.
+-- Roles applicatifs.
+--
+-- Ce sont les MEMES trois roles que ceux du schema Gold (sql/schema_gold.sql),
+-- eux-memes repris du modele de securite pose au Bloc 1 : etl_service,
+-- analyst, dashboard_viewer, le quatrieme role admin etant tenu par le
+-- proprietaire de la base. Une premiere version de ce fichier avait introduit
+-- deux roles distincts, gamelens_etl et gamelens_reader, ce qui aurait donne
+-- deux modeles de securite concurrents pour une seule plateforme.
+--
+-- La creation est gardee par IF NOT EXISTS dans les deux fichiers : chacun
+-- reste executable seul, dans n'importe quel ordre, sans conflit.
+--
+-- Principe applique aux deux couches : le role de restitution n'accede jamais
+-- aux tables, seulement aux vues agregees. PostgreSQL evalue les droits d'une
+-- vue avec ceux de son proprietaire, pas ceux de l'appelant : dashboard_viewer
+-- peut donc lire la vue sans posseder le moindre droit sur les tables sous
+-- jacentes. C'est ce qui rend le cloisonnement reel et non declaratif.
 -- ----------------------------------------------------------------------------
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'gamelens_etl') THEN
-        CREATE ROLE gamelens_etl LOGIN PASSWORD 'devlocal_etl';
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'etl_service') THEN
+        CREATE ROLE etl_service LOGIN PASSWORD 'devlocal_etl';
     END IF;
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'gamelens_reader') THEN
-        CREATE ROLE gamelens_reader LOGIN PASSWORD 'devlocal_reader';
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'analyst') THEN
+        CREATE ROLE analyst LOGIN PASSWORD 'devlocal_analyst';
+    END IF;
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'dashboard_viewer') THEN
+        CREATE ROLE dashboard_viewer LOGIN PASSWORD 'devlocal_dashboard';
     END IF;
 END
 $$;
 
-GRANT USAGE ON SCHEMA speed TO gamelens_etl, gamelens_reader;
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA speed TO gamelens_etl;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA speed TO gamelens_etl;
-GRANT SELECT ON speed.v_daily_player_stats TO gamelens_reader;
+GRANT USAGE ON SCHEMA speed TO etl_service, analyst, dashboard_viewer;
+
+-- etl_service ecrit, mais ne supprime jamais : aucun DELETE n'est accorde.
+-- Une anomalie du pipeline ou un compte compromis ne peut donc pas effacer
+-- l'historique de collecte, seulement l'enrichir ou le corriger.
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA speed TO etl_service;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA speed TO etl_service;
+
+-- analyst : lecture large sur la couche Silver, y compris les evenements bruts.
+GRANT SELECT ON ALL TABLES IN SCHEMA speed TO analyst;
+
+-- dashboard_viewer : uniquement l'agregat journalier, jamais les evenements.
+GRANT SELECT ON speed.v_daily_player_stats TO dashboard_viewer;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA speed GRANT SELECT, INSERT, UPDATE ON TABLES TO etl_service;
+ALTER DEFAULT PRIVILEGES IN SCHEMA speed GRANT SELECT ON TABLES TO analyst;

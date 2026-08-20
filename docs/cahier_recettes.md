@@ -177,16 +177,43 @@ Exécutés à chaque run par la tâche `controler_qualite_gold`, en PASS/FAIL.
 
 # 3. Tests de sécurité
 
-## TSEC-01. Cloisonnement des rôles de la couche Gold
+## TSEC-01. Cloisonnement effectif des rôles applicatifs
 
-- **Objet** : `dashboard_viewer` n'accède qu'à la vue, pas aux tables de faits.
-- **Méthode** : `GRANT SELECT` limité à `mart.v_popularity_dashboard`.
-- **Observé (19/08/2026)** : rôles créés et droits appliqués sans erreur.
-- **Verdict** : **PARTIEL**. Les droits sont posés mais le refus effectif n'a pas
-  été testé par une connexion sous le rôle. **À compléter** : se connecter en
-  `dashboard_viewer` et vérifier qu'un `SELECT` direct sur
-  `mart.fact_popularity_history` est bien rejeté. Un droit accordé se vérifie,
-  un droit refusé se teste.
+- **Objet** : vérifier la matrice complète des droits, **refus compris**. Un
+  droit accordé se vérifie en l'exerçant, un droit refusé ne se constate qu'en
+  tentant l'opération interdite.
+- **Méthode** : `tests/test_securite_roles.py`, une connexion par rôle, 13 cas
+  paramétrés, chacun dans une transaction annulée. Seule
+  `InsufficientPrivilege` est interceptée : une table manquante lèverait
+  `UndefinedTable` et ferait échouer le test au lieu de se déguiser en refus.
+
+| Rôle | Vue Gold | Agrégat Silver | Table de faits Gold | Dimension Gold | Événements bruts | Écriture | Suppression |
+|---|---|---|---|---|---|---|---|
+| `dashboard_viewer` | ✅ | ✅ | ⛔ | ⛔ | ⛔ | ⛔ | n/a |
+| `analyst` | ✅ | ✅ | ✅ | ✅ | ✅ | ⛔ | ⛔ |
+| `etl_service` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⛔ |
+
+- **Observé (20/08/2026)** : **13 tests sur 13 conformes**, dont 7 refus.
+- **Verdict** : **PASS**.
+- **Automatisé** : oui, étage `integration` de la CI. Ignorés automatiquement
+  quand la base n'est pas joignable, donc sautés par l'étage `tests`.
+
+### Validation du test lui-même
+
+Un test de refus peut passer pour de mauvaises raisons. Vérification faite :
+
+1. `GRANT SELECT ON mart.fact_popularity_history TO dashboard_viewer`
+2. relance du test : **échec**, `attendu refuse, obtenu autorise`
+3. `REVOKE`, relance : **13 tests verts**
+
+Le test détecte donc réellement une brèche de cloisonnement.
+
+### Défaut corrigé à cette occasion
+
+L'écriture de ce test a révélé que la plateforme portait **deux modèles de rôles
+concurrents** : `etl_service` / `analyst` / `dashboard_viewer` côté Gold, et
+`gamelens_etl` / `gamelens_reader` côté Silver. Aligné sur le modèle du Bloc 1,
+rôles orphelins supprimés. Voir OBS-25.
 
 ## TSEC-02. Non-exposition des secrets dans le dépôt
 
@@ -197,9 +224,93 @@ Exécutés à chaque run par la tâche `controler_qualite_gold`, en PASS/FAIL.
   dépôt distant est **privé**.
 - **Verdict** : **PASS**.
 
+## TSEC-03. Moindre privilège de l'outil de visualisation
+
+- **Objet** : Grafana ne se connecte pas avec le propriétaire de la base.
+- **Méthode** : source de données provisionnée avec le rôle `analyst`, en
+  lecture seule.
+- **Attendu** : connexion fonctionnelle, écriture impossible.
+- **Observé (20/08/2026)** : `Database Connection OK` via l'API Grafana, et
+  l'impossibilité d'écrire est garantie par TSEC-01, qui teste ce rôle.
+- **Verdict** : **PASS**.
+
 ---
 
-# 4. Tests de non-régression automatisés
+# 4. Tests de supervision (C4.3.1)
+
+## TSUP-01. Les indicateurs reflètent l'état réel de la plateforme
+
+- **Méthode** : lecture de `speed.v_supervision_synthese` après une session de
+  travail réelle.
+- **Attendu** : un état par élément surveillé, cohérent avec ce qui s'est
+  effectivement passé.
+- **Observé (20/08/2026)** :
+
+| Élément | Valeur | État |
+|---|---|---|
+| Fraîcheur fréquentation | 209,3 min | critique |
+| Complétude de la collecte | 100 % | nominal |
+| Latence du pipeline (p95) | 64 890 s | critique |
+| Retard de l'entrepôt Gold | 0 jour | nominal |
+
+- **Verdict** : **PASS**. Les deux états critiques sont **exacts** : le
+  producteur ne tourne pas en continu sur un poste de développement, et les
+  15 messages de la session 1 sont réellement restés 18 heures dans Kafka avant
+  d'être consommés. L'indicateur de latence a donc détecté un incident réel dès
+  sa création, sans qu'on le lui demande. Voir OBS-29.
+
+## TSUP-02. Cycle de vie complet d'une alerte
+
+Trois comportements vérifiés séparément.
+
+| Étape | Attendu | Observé (20/08/2026) |
+|---|---|---|
+| Déclenchement | Alertes ouvertes avec valeur et seuil | 2 déclenchées, 2 nouvelles |
+| Persistance sans doublon | Condition inchangée, aucune nouvelle ligne | 2 déclenchées, **0 nouvelle**, 2 lignes en base |
+| Fermeture automatique | Condition levée, alerte résolue et horodatée | `[RESOLUE] fraicheur_frequentation` |
+
+- **Verdict** : **PASS**. La colonne `resolue_le` permet de mesurer la durée d'un
+  incident, pas seulement son occurrence.
+
+## TSUP-03. Remontée des alertes par l'orchestrateur
+
+- **Méthode** : DAG `gamelens_supervision`, déclenché avec un avertissement
+  ouvert et aucune alerte critique.
+- **Attendu** : `evaluer_regles` réussit, `remonter_alertes_critiques` réussit
+  en signalant l'avertissement, sans faire échouer le run.
+- **Observé (20/08/2026)** : les deux tâches en succès, avec en journal
+  `[AVERTISSEMENT] latence_pipeline (ouverte depuis 2026-08-20 11:24)` puis
+  `1 avertissement(s) ouvert(s), aucune alerte critique.`
+- **Verdict** : **PASS**. La séparation entre évaluer et s'alarmer permet de
+  distinguer « la plateforme va mal » de « le moteur d'alertes est cassé ».
+  Voir OBS-31.
+
+## TSUP-04. Tous les panneaux du tableau de bord fonctionnent
+
+- **Objet** : un panneau dont la requête échoue reste affiché avec un message
+  discret et se confond avec un panneau vide.
+- **Méthode** : `supervision/verifier_tableau_bord.py`, qui exécute la requête
+  de chaque panneau **à travers l'API Grafana**, donc en passant par la source
+  de données provisionnée et son rôle en lecture seule.
+- **Attendu** : 7 panneaux fonctionnels, 0 en échec.
+- **Observé (20/08/2026)** : **7 sur 7**, de 1 à 5 lignes chacun.
+- **Verdict** : **PASS**. Le contrôle valide d'un coup le SQL, la résolution de
+  la source de données, les droits du rôle `analyst` et la présence effective du
+  tableau de bord provisionné.
+
+## TSUP-05. Le moteur d'alertes se supervise lui-même
+
+- **Objet** : conséquence directe d'INC-007, où un composant tournait sans
+  laisser de trace.
+- **Attendu** : une ligne `moteur_alertes` dans `speed.pipeline_runs` après
+  chaque évaluation.
+- **Observé (20/08/2026)** : ligne présente, `lus=6, ecrits=2`.
+- **Verdict** : **PASS**.
+- **Automatisé** : oui, étage `integration` de la CI, avec assertion explicite.
+
+---
+
+# 5. Tests de non-régression automatisés
 
 Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt
 `Mael8zinsou/gamelens-bloc4_0`.
@@ -226,7 +337,7 @@ premier coup sur cinq étages n'a en général rien vérifié.
 
 ---
 
-# 5. Fonctionnalités attendues non encore couvertes
+# 6. Fonctionnalités attendues non encore couvertes
 
 Le critère demande que le cahier reprenne **l'ensemble** des fonctionnalités
 attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
@@ -237,19 +348,22 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 | Couche Gold sur Snowflake | Non exécutée | Idem |
 | Popularité diffusée (Twitch) | Non branchée | Colonnes présentes mais nulles |
 | Catalogue RAWG | Non branché | `dim_games` alimentée depuis la watchlist |
-| Refus effectif pour `dashboard_viewer` | À tester | Voir TSEC-01 |
-| Système d'alertes | Non construit | Supervision limitée à `speed.pipeline_runs` |
+| Alertes vers un canal externe | Non construit | Les alertes sont persistées et remontées par Airflow, mais aucune notification par courriel ou messagerie n'est configurée |
 
 ---
 
-# 6. Synthèse
+# 7. Synthèse
 
 | Catégorie | PASS | PARTIEL | EN ATTENTE |
 |---|---|---|---|
 | Fonctionnels | 5 | 0 | 0 |
 | Structurels | 7 | 0 | 1 |
-| Sécurité | 1 | 1 | 0 |
-| **Total** | **13** | **1** | **1** |
+| Sécurité | 3 | 0 | 0 |
+| Supervision | 5 | 0 | 0 |
+| **Total** | **20** | **0** | **1** |
+
+Les tests de sécurité comptent pour 3 cas au niveau du cahier, mais 13 cas
+paramétrés au niveau de l'exécution.
 
 Trois de ces tests ont échoué avant de passer, et c'est ce qui leur donne de la
 valeur : TS-02 a révélé des contraintes d'unicité manquantes, TS-03 a été conçu

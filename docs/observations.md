@@ -463,3 +463,149 @@ donc vérifiable même si Steam tombe, seul l'étage d'intégration devient roug
 (C4.3.2) : une CI rouge n'implique pas nécessairement une régression, et savoir
 distinguer les deux fait partie de la procédure d'exploitation. C'est aussi une
 question probable du jury sur la fiabilité d'une chaîne dépendant de tiers.
+
+---
+
+# Session 3, 20 août 2026
+
+Objet : test de sécurité manquant, puis système de supervision et d'alertes
+(C4.3.1).
+
+## OBS-25. Deux modèles de sécurité concurrents, découverts en écrivant le test
+
+Le test de sécurité devait simplement combler la lacune TSEC-01 du cahier de
+recettes. En préparant la matrice de droits, un problème plus profond est
+apparu : **la plateforme avait deux modèles de rôles incompatibles**.
+
+Le schéma Gold reprenait fidèlement les quatre rôles du Bloc 1 (`admin`,
+`etl_service`, `analyst`, `dashboard_viewer`). Le schéma Silver speed, écrit en
+session 1, avait inventé de son côté `gamelens_etl` et `gamelens_reader`. Deux
+couches d'une même plateforme, deux vocabulaires, aucun recouvrement.
+
+Rien ne cassait, ce qui explique que personne ne l'ait vu : chaque couche
+fonctionnait avec ses propres rôles. Le défaut ne se manifeste qu'au moment où
+l'on cherche à répondre à la question « qui a le droit de faire quoi sur la
+plateforme ? », et où l'on découvre qu'il n'y a pas de réponse unique.
+
+Corrigé en alignant Silver sur le modèle du Bloc 1, avec suppression des deux
+rôles orphelins. Le même modèle s'applique désormais aux deux couches, ce qui
+est la seule version défendable devant un jury qui a lu le Bloc 1.
+
+Enseignement : écrire un test de sécurité oblige à énoncer le modèle de
+sécurité. Tant qu'on se contente d'accorder des droits, on peut en avoir deux
+sans s'en apercevoir.
+
+## OBS-26. Le test de refus a été testé lui-même
+
+Sept des treize tests de sécurité vérifient qu'une opération est **refusée**. Un
+tel test est piégeux : il peut passer pour de mauvaises raisons, par exemple si
+la table n'existe pas ou si la connexion échoue silencieusement.
+
+Vérification faite : `GRANT SELECT ON mart.fact_popularity_history TO
+dashboard_viewer`, relance du test, qui **échoue** avec `attendu refuse, obtenu
+autorise`. Puis `REVOKE`, relance, retour au vert.
+
+Le test détecte donc réellement une brèche de cloisonnement, il ne se contente
+pas de passer. C'est la même discipline que le test négatif de la porte de
+fraîcheur en session 2, appliquée à la sécurité.
+
+Détail de conception qui rend le piège moins probable : seule
+`InsufficientPrivilege` est interceptée. Une table manquante lèverait
+`UndefinedTable`, qui remonterait en erreur de test plutôt que de se déguiser
+en refus.
+
+## OBS-27. Grafana plutôt que Prometheus, et pourquoi ce n'est pas de la paresse
+
+Le réflexe attendu pour de la supervision est Prometheus plus Grafana. Ce projet
+n'utilise que Grafana, branché directement sur PostgreSQL, et c'est un choix
+qu'il faut savoir défendre.
+
+Prometheus excelle sur des métriques système collectées par des exporteurs :
+processus, mémoire, requêtes par seconde. Les indicateurs surveillés ici sont
+d'une autre nature, ce sont des indicateurs **métier et de pipeline** : fraîcheur
+de la donnée, complétude de la collecte, latence de bout en bout, fiabilité par
+composant. Ils sont déjà calculés dans une base relationnelle, à partir du
+journal d'exécution que tous les composants alimentent.
+
+Les réexporter vers Prometheus ajouterait un composant, un format de stockage et
+un exporteur, sans ajouter la moindre information. Pire, cela rendrait les
+indicateurs dépendants d'un outil, alors qu'ils restent aujourd'hui
+interrogeables en SQL par n'importe quel client.
+
+Formulation courte pour l'oral : **Prometheus aurait transporté des indicateurs
+déjà disponibles, sans en produire un seul de plus.**
+
+## OBS-28. Les indicateurs sont définis en SQL, pas dans l'outil
+
+Corollaire du choix précédent, et le point de conception dont je suis le plus
+convaincu sur cette session.
+
+Les seuils et les états (`nominal`, `avertissement`, `critique`) sont calculés
+dans la vue `speed.v_supervision_synthese`, pas dans la configuration des
+panneaux Grafana. Trois conséquences :
+
+- le même état est renvoyé quel que soit le client, Grafana, `psql`, un DAG
+  Airflow ou le moteur d'alertes, alors que des seuils saisis dans l'interface
+  n'existeraient que pour Grafana ;
+- les seuils sont versionnés et relisibles en revue de code ;
+- si Grafana est arrêté, la supervision reste interrogeable.
+
+**L'outil affiche les indicateurs, il ne les définit pas.** Source de données et
+tableau de bord sont eux-mêmes provisionnés depuis le dépôt : aucune
+configuration n'est saisie à la main dans l'interface.
+
+## OBS-29. L'indicateur de latence a détecté un incident réel dès sa création
+
+Le meilleur genre de validation : celle qu'on ne cherchait pas.
+
+À peine créé, l'indicateur de latence p95 est monté à **64 890 secondes, soit
+plus de 18 heures**, et a déclenché son alerte. Ce n'est ni un bug ni une valeur
+de test : les 15 messages produits en fin de session 1 sont restés dans Kafka
+jusqu'à ce que le consumer soit relancé le lendemain matin. Leur écart entre
+`collected_at` et `ingested_at` est donc réellement de 18 heures.
+
+L'indicateur a donc mesuré, sans qu'on lui demande, exactement ce pour quoi il
+est fait : un consumer arrêté pendant que le producteur continue. Et il reste
+allumé tant que ces événements sont dans la fenêtre de 24 heures, ce qui est le
+comportement correct.
+
+C'est la meilleure preuve possible qu'un indicateur n'est pas décoratif. Il vaut
+mieux le raconter ainsi que d'exhiber un tableau de bord entièrement vert.
+
+## OBS-30. Une alerte doit se refermer toute seule, et se souvenir
+
+Trois comportements du moteur d'alertes, vérifiés séparément plutôt que
+supposés.
+
+- **Déclenchement** : deux alertes ouvertes sur six règles, avec le message et
+  la valeur observée.
+- **Pas de doublon** : à la seconde évaluation, condition inchangée, `2
+  déclenchées dont 0 nouvelle`, et toujours deux lignes en base. Sans cela, une
+  règle évaluée tous les quarts d'heure produirait 96 lignes par jour pour un
+  seul problème, et le journal deviendrait illisible au moment précis où l'on en
+  a besoin.
+- **Fermeture automatique** : après relance du producteur et du consumer,
+  `[RESOLUE] fraicheur_frequentation revenue sous le seuil`, avec horodatage de
+  résolution.
+
+Ce dernier point est ce qui distingue un journal d'alertes d'un flux de
+notifications : la colonne `resolue_le` permet de mesurer **combien de temps** un
+incident a duré, pas seulement qu'il a eu lieu. C'est directement réutilisable
+pour la feuille de route d'exploitation (C4.3.2).
+
+## OBS-31. Séparer « évaluer » de « s'alarmer »
+
+Dans le DAG de supervision, la tâche qui évalue les règles **réussit toujours**,
+y compris quand des alertes se déclenchent. C'est une seconde tâche qui échoue
+en présence d'une alerte critique.
+
+La distinction paraît byzantine et ne l'est pas. Sans elle, un run en échec ne
+permettrait pas de distinguer deux situations qui appellent des réactions
+opposées : **la plateforme va mal**, ou **le moteur d'alertes est cassé**. Dans
+le premier cas on traite l'incident métier, dans le second on ne peut plus faire
+confiance à rien de ce que la supervision affiche.
+
+Même raison pour laquelle la tâche de remontée n'écrit pas dans
+`speed.pipeline_runs` : son échec décrit l'état de la plateforme, pas une
+défaillance de composant. Les confondre fausserait la règle `echecs_composants`,
+qui compterait la supervision elle-même parmi les pannes qu'elle surveille.

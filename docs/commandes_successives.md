@@ -655,3 +655,210 @@ gh run view <id> --log | grep -iE "pushing manifest|naming to ghcr"
 | Executer le pipeline temps reel | Steam, Kafka et PostgreSQL de bout en bout depuis un runner |
 | Verifier le resultat en base | Le pipeline a reellement ecrit des lignes |
 | Verifier l'idempotence du puits | Le rejeu des offsets ne duplique rien, test de la session 1 automatise |
+
+---
+
+# Session 3, 20 août 2026
+
+## Phase 1. Alignement du modèle de rôles (OBS-25)
+
+Découvert en préparant le test de sécurité : deux modèles concurrents.
+
+```bash
+# [BASH] (diagnostic) Comparaison des rôles déclarés par les deux couches
+grep -n "CREATE ROLE\|GRANT" sql/schema_silver_speed.sql
+grep -n "CREATE ROLE\|GRANT" sql/schema_gold.sql
+# -> Silver : gamelens_etl, gamelens_reader
+#    Gold   : etl_service, analyst, dashboard_viewer
+```
+
+```powershell
+# [PS] (procédure) Application du schéma Silver corrigé, idempotent
+docker cp "sql/schema_silver_speed.sql" gamelens-postgres:/tmp/silver.sql
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -v ON_ERROR_STOP=1 -f /tmp/silver.sql
+
+# [PS] Suppression des deux rôles orphelins
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c "DROP OWNED BY gamelens_etl, gamelens_reader; DROP ROLE IF EXISTS gamelens_etl; DROP ROLE IF EXISTS gamelens_reader;"
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c "SELECT rolname FROM pg_roles WHERE rolname NOT LIKE 'pg\_%';"
+# -> airflow, analyst, dashboard_viewer, etl_service, gamelens_app
+```
+
+## Phase 2. Test de sécurité, et test du test
+
+```bash
+# [BASH] (procédure) 13 cas paramétrés, 3 rôles, refus compris
+python -m pytest tests/test_securite_roles.py -v
+# -> 13 passed
+```
+
+```powershell
+# [PS] Le test détecte-t-il réellement une brèche ? Cassure volontaire.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c "GRANT SELECT ON mart.fact_popularity_history TO dashboard_viewer;"
+```
+
+```bash
+# [BASH] Le test DOIT maintenant échouer
+python -m pytest tests/test_securite_roles.py -k "lire_la_table_de_faits_Gold-refuse"
+# -> FAILED : "attendu refuse, obtenu autorise". Le test est donc réel.
+```
+
+```powershell
+# [PS] Rétablissement, puis retour au vert
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c "REVOKE SELECT ON mart.fact_popularity_history FROM dashboard_viewer;"
+```
+
+## Phase 3. Couche de supervision
+
+Fichier créé : `sql/schema_supervision.sql`, cinq vues d'indicateurs, une table
+d'alertes, une vue de synthèse.
+
+```powershell
+# [PS] (procédure) Application du schéma de supervision
+docker cp "sql/schema_supervision.sql" gamelens-postgres:/tmp/supervision.sql
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -v ON_ERROR_STOP=1 -f /tmp/supervision.sql
+```
+
+```sql
+-- [SQL] État consolidé de la plateforme, un élément surveillé par ligne
+SELECT * FROM speed.v_supervision_synthese;
+-- Observé : fraîcheur 209 min (critique), complétude 100 % (nominal),
+-- latence p95 64 890 s (critique), retard Gold 0 jour (nominal).
+-- Les deux états critiques sont exacts, voir OBS-29.
+```
+
+## Phase 4. Moteur d'alertes et cycle de vie
+
+Fichier créé : `supervision/regles_alertes.py`, six règles déclarées comme données.
+
+```bash
+# [BASH] (procédure) Première évaluation
+python supervision/regles_alertes.py
+# -> 2 déclenchée(s) dont 2 nouvelle(s), 0 résolue(s), 4 nominale(s)
+
+# [BASH] Seconde évaluation, condition inchangée : pas de doublon attendu
+python supervision/regles_alertes.py
+# -> 2 déclenchée(s) dont 0 nouvelle(s) ; mentions "(deja ouverte)"
+```
+
+```sql
+-- [SQL] Le journal ne contient bien que deux lignes, pas quatre
+SELECT alerte_id, regle, severite, valeur, seuil, resolue_le
+FROM speed.alertes ORDER BY alerte_id;
+```
+
+```bash
+# [BASH] Retour de la donnée, puis réévaluation : fermeture attendue
+python ingestion/steam_producer.py --once
+python ingestion/kafka_to_postgres.py --timeout 12
+python supervision/regles_alertes.py
+# -> [RESOLUE] fraicheur_frequentation revenue sous le seuil
+#    L'alerte de latence reste ouverte, à juste titre : les événements en
+#    retard de la session 1 sont encore dans la fenêtre de 24 heures.
+```
+
+## Phase 5. DAG de supervision
+
+Fichier créé : `dags/gamelens_supervision.py`, cadence de 15 minutes.
+
+```powershell
+# [PS] (procédure) Recréation des conteneurs pour monter supervision/
+docker compose up -d
+docker exec gamelens-airflow-scheduler airflow dags reserialize
+docker exec gamelens-airflow-scheduler airflow dags list
+# -> gamelens_promotion_gold et gamelens_supervision
+
+# [PS] Déclenchement, avec un avertissement ouvert et aucune alerte critique
+docker exec gamelens-airflow-scheduler airflow dags trigger gamelens_supervision --run-id supervision-01
+docker exec gamelens-airflow-scheduler airflow tasks states-for-dag-run gamelens_supervision supervision-01
+# -> les deux tâches en success, comme attendu
+
+# [PS] Lecture du journal DEPUIS le conteneur : le nom de dossier contient des
+#      deux-points, illisibles par un client Windows.
+docker exec gamelens-airflow-scheduler sh -c "cat '/opt/airflow/logs/dag_id=gamelens_supervision/run_id=supervision-01/task_id=remonter_alertes_critiques/attempt=1.log'"
+# -> "1 avertissement(s) ouvert(s), aucune alerte critique."
+```
+
+## Phase 6. Visualisation Grafana, provisionnée comme code
+
+Fichiers créés : `docker/grafana/provisioning/datasources/postgres.yml`,
+`docker/grafana/provisioning/dashboards/gamelens.yml`,
+`docker/grafana/dashboards/gamelens_supervision.json` (7 panneaux).
+
+```powershell
+# [PS] (procédure) Démarrage
+docker compose up -d grafana
+```
+
+```bash
+# [BASH] (procédure) Vérification par l'API, sans passer par le navigateur
+curl -s http://localhost:3000/api/health
+# -> {"database":"ok","version":"11.6.0"}
+
+curl -s -u admin:admin http://localhost:3000/api/datasources
+# -> GameLens PostgreSQL | uid=gamelens-pg | url=postgres:5432 | user=analyst
+#    Le rôle est bien analyst, en lecture seule, pas le propriétaire.
+
+curl -s -u admin:admin http://localhost:3000/api/datasources/uid/gamelens-pg/health
+# -> {"message":"Database Connection OK","status":"OK"}
+
+curl -s -u admin:admin "http://localhost:3000/api/search?query=GameLens"
+# -> GameLens, supervision de la plateforme | uid=gamelens-supervision
+```
+
+```bash
+# [BASH] (procédure) Contrôle des 7 panneaux, requêtes exécutées via l'API
+python supervision/verifier_tableau_bord.py
+# -> 7 panneau(x) fonctionnel(s), 0 en echec
+```
+
+## Phase 7. Extension de la chaîne d'intégration
+
+Deux étapes ajoutées à l'étage `integration` : tests de sécurité sur les rôles,
+et contrôle de fumée du moteur d'alertes avec assertion sur sa propre trace
+dans `speed.pipeline_runs`, conséquence directe d'INC-007.
+
+```bash
+# [BASH] (procédure) Contrôles locaux avant de pousser, mêmes commandes qu'en CI
+python -m ruff check ingestion dags tests supervision
+python -m ruff format --check ingestion dags tests supervision
+python -m pytest tests -q
+# -> 27 passed (14 unitaires + 13 de sécurité)
+```
+
+## Récapitulatif des états vérifiés en fin de session 3
+
+| Vérification | Commande | Résultat observé |
+|---|---|---|
+| Modèle de rôles unifié | `SELECT rolname FROM pg_roles` | 3 rôles applicatifs, plus le propriétaire |
+| Cloisonnement effectif | `pytest tests/test_securite_roles.py` | 13 sur 13, dont 7 refus |
+| Le test de refus détecte une brèche | GRANT puis REVOKE | échec attendu, puis retour au vert |
+| Indicateurs de supervision | `SELECT * FROM speed.v_supervision_synthese` | 5 éléments, états exacts |
+| Déclenchement d'alerte | `regles_alertes.py` | 2 déclenchées, 2 nouvelles |
+| Absence de doublon | seconde évaluation | 2 déclenchées, 0 nouvelle |
+| Fermeture automatique | après retour de la donnée | 1 résolue, horodatée |
+| Remontée par Airflow | DAG `gamelens_supervision` | 2 tâches en succès, avertissement signalé |
+| Tableau de bord Grafana | `verifier_tableau_bord.py` | 7 panneaux sur 7 |
+| Qualité et tests | `ruff` et `pytest` | tout vert, 27 tests |
+
+## Mise en route complète, version courte
+
+Poste propre, Docker Desktop démarré :
+
+```powershell
+docker compose up -d postgres kafka grafana
+Copy-Item .env.example .env
+python -m pip install -r requirements.txt
+
+python ingestion/create_topics.py
+python ingestion/seed_game_mapping.py
+python ingestion/steam_producer.py --once
+python ingestion/kafka_to_postgres.py --timeout 30 --depuis-le-debut
+python supervision/regles_alertes.py
+
+docker compose build airflow-init
+docker compose up airflow-init
+docker compose up -d airflow-apiserver airflow-scheduler airflow-dag-processor airflow-triggerer
+
+# Airflow  : http://localhost:8080  (admin / admin)
+# Grafana  : http://localhost:3000  (admin / admin)
+```

@@ -1,0 +1,33 @@
+# ============================================================================
+# Source de donnees Grafana, provisionnee comme code (C4.3.1, configuration
+# des outils de supervision).
+#
+# Aucune etape manuelle dans l'interface : la source est declaree ici et
+# recreee a l'identique a chaque demarrage du conteneur. Une configuration
+# saisie a la main dans une interface web n'est ni versionnee, ni rejouable,
+# ni relisible en revue.
+#
+# Point de securite : Grafana se connecte avec le role `analyst`, en lecture
+# seule, et non avec le proprietaire de la base. Un outil de visualisation n'a
+# aucune raison de pouvoir ecrire. Le cloisonnement teste dans
+# tests/test_securite_roles.py garantit que ce role ne peut pas ecrire meme si
+# une requete de tableau de bord tentait de le faire.
+# ============================================================================
+apiVersion: 1
+
+datasources:
+  - name: GameLens PostgreSQL
+    uid: gamelens-pg
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: gamelens
+    user: analyst
+    isDefault: true
+    editable: false
+    secureJsonData:
+      password: devlocal_analyst
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false

@@ -46,10 +46,10 @@ jobs:
         run: python -m pip install --upgrade pip ruff==0.6.9
 
       - name: Lint
-        run: ruff check ingestion dags tests
+        run: ruff check ingestion dags tests supervision
 
       - name: Format
-        run: ruff format --check ingestion dags tests
+        run: ruff format --check ingestion dags tests supervision
 
   tests:
     name: Tests unitaires
@@ -144,6 +144,15 @@ jobs:
           [ "${tables}" = "4" ] || { echo "attendu 4 tables, observe ${tables}"; exit 1; }
           [ "${vues}" = "1" ] || { echo "attendu 1 vue, observe ${vues}"; exit 1; }
 
+      - name: Tests de securite sur les roles
+        # Ces tests ont besoin d'une base : l'etage `tests` les ignore
+        # automatiquement, cet etage-ci les execute. Ils verifient les
+        # REFUS autant que les autorisations.
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5433"
+        run: python -m pytest tests/test_securite_roles.py -v
+
       - name: Executer le pipeline temps reel de bout en bout
         env:
           POSTGRES_HOST: localhost
@@ -177,6 +186,19 @@ jobs:
           echo "avant rejeu : ${avant}, apres rejeu : ${apres}"
           [ "${avant}" = "${apres}" ] || { echo "REGRESSION : le rejeu a duplique des lignes"; exit 1; }
           echo "idempotence verifiee"
+
+      - name: Verifier le moteur d'alertes
+        # Controle de fumee : le moteur doit evaluer ses six regles et
+        # alimenter speed.alertes sans erreur, quel que soit l'etat de la
+        # plateforme. Des alertes declenchees sont un resultat valide.
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5433"
+        run: |
+          python supervision/regles_alertes.py
+          traces=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc "SELECT count(*) FROM speed.pipeline_runs WHERE component = 'moteur_alertes'")
+          echo "executions du moteur tracees : ${traces}"
+          [ "${traces}" -ge 1 ] || { echo "le moteur d alertes ne s est pas trace (cf. INC-007)"; exit 1; }
 
       - name: Journaux en cas d'echec
         if: failure()

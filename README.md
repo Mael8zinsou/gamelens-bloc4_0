@@ -69,11 +69,37 @@ n'est necessaire.
 | `sql/schema_gold_snowflake.sql` | Couche Gold, cible Snowflake |
 | `sql/schema_gold.sql` | Prototype PostgreSQL du Gold, conserve comme reference |
 | `sql/verify_snowflake_constraints.sql` | Verification empirique des contraintes Snowflake |
-| `dags/` | DAG Airflow |
+| `dags/` | DAG Airflow : promotion vers Gold, supervision |
+| `supervision/` | Moteur d'alertes et verification du tableau de bord |
+| `sql/schema_supervision.sql` | Indicateurs de supervision et journal d'alertes |
+| `docker/grafana/` | Source de donnees et tableau de bord provisionnes comme code |
 | `docs/journal_incidents.md` | Journal d'incidents, format impose par la grille C4.4.2 |
+| `docs/cahier_recettes.md` | Cahier de recettes et de tests (C4.4.1) |
 | `docs/observations.md` | Observations de session : surprises, fausses pistes, arbitrages |
 | `docs/commandes_successives.md` | Trace chronologique des commandes reellement executees |
 | `tests/` | Tests automatises, executes par la CI |
+
+## Supervision
+
+Les indicateurs sont definis en SQL dans `sql/schema_supervision.sql` : fraicheur
+de la donnee, completude de la collecte, latence du pipeline, fiabilite par
+composant, fraicheur de l'entrepot. Grafana les affiche, il ne les calcule pas,
+ce qui les garde interrogeables par n'importe quel client meme si l'outil est
+arrete.
+
+Le moteur d'alertes (`supervision/regles_alertes.py`) evalue six regles, ouvre
+une alerte au plus par regle, et la referme automatiquement quand la condition
+disparait. Le DAG `gamelens_supervision` l'execute toutes les 15 minutes et fait
+echouer son run en presence d'une alerte critique.
+
+```powershell
+docker compose up -d grafana
+python supervision/regles_alertes.py           # evaluation ponctuelle
+python supervision/verifier_tableau_bord.py    # controle des 7 panneaux
+```
+
+Interfaces : Airflow sur http://localhost:8080, Grafana sur http://localhost:3000,
+compte `admin` / `admin` pour les deux.
 
 ## Integration continue
 

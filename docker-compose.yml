@@ -51,7 +51,7 @@ x-airflow-commun: &airflow-commun
     POSTGRES_USER: gamelens_app
     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devlocal_app}
     KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    PYTHONPATH: /opt/gamelens/ingestion
+    PYTHONPATH: /opt/gamelens/ingestion:/opt/gamelens/supervision
     GAMELENS_ROOT: /opt/gamelens
   volumes:
     - ./dags:/opt/airflow/dags
@@ -61,6 +61,7 @@ x-airflow-commun: &airflow-commun
     # Le code du projet est monte en lecture seule : les taches reutilisent les
     # memes modules que le pipeline temps reel, sans duplication.
     - ./ingestion:/opt/gamelens/ingestion:ro
+    - ./supervision:/opt/gamelens/supervision:ro
     - ./config:/opt/gamelens/config:ro
     - ./sql:/opt/gamelens/sql:ro
   user: "${AIRFLOW_UID:-50000}:0"
@@ -91,7 +92,14 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Les scripts d'initialisation s'executent dans l'ordre alphabetique, au
+      # tout premier demarrage du conteneur uniquement. Les trois couches sont
+      # ainsi montees sur une machine vierge sans aucune etape manuelle, ce dont
+      # l'etage d'integration de la CI depend.
+      - ./sql/00_create_airflow_db.sql:/docker-entrypoint-initdb.d/00_create_airflow_db.sql:ro
       - ./sql/schema_silver_speed.sql:/docker-entrypoint-initdb.d/10_schema_silver_speed.sql:ro
+      - ./sql/schema_gold.sql:/docker-entrypoint-initdb.d/20_schema_gold.sql:ro
+      - ./sql/schema_supervision.sql:/docker-entrypoint-initdb.d/30_schema_supervision.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gamelens_app -d gamelens"]
       interval: 10s
@@ -253,6 +261,49 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # --------------------------------------------------------------------------
+  # Grafana : visualisation des indicateurs de supervision (C4.3.1).
+  #
+  # Choix de l'outil, a assumer face a la question « pourquoi pas Prometheus ? ».
+  # Prometheus excelle sur des metriques systeme collectees par des exporteurs.
+  # Ici, les indicateurs surveilles sont metier et deja calcules dans une base
+  # relationnelle : fraicheur, completude, latence de bout en bout, fiabilite
+  # par composant. Les reexporter vers Prometheus ajouterait un composant et un
+  # format de stockage sans ajouter la moindre information, et rendrait les
+  # indicateurs dependants d'un outil au lieu de rester interrogeables en SQL
+  # par n'importe quel client.
+  #
+  # Source de donnees et tableau de bord sont provisionnes depuis le depot :
+  # aucune configuration n'est saisie a la main dans l'interface, tout est
+  # versionne et rejouable.
+  # --------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: gamelens-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   kafka_data:
+  grafana_data:
