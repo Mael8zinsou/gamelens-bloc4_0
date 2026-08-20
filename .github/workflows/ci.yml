@@ -133,16 +133,20 @@ jobs:
           done
           echo "le socle n a pas demarre a temps"; docker compose logs --tail 50; exit 1
 
-      - name: Verifier l'initialisation du schema Silver speed
-        # information_schema.tables compte aussi les vues : sans le filtre sur
-        # table_type, le controle attendait 4 et en trouvait 5. Tables et vue
-        # sont verifiees separement, ce qui rend le diagnostic immediat.
+      - name: Verifier l'initialisation des schemas
+        # Ce controle comptait auparavant les objets du schema speed, et a
+        # casse des que la supervision en a legitimement ajoute : une
+        # assertion par comptage se brise a chaque evolution normale, ce qui
+        # pousse a l'affaiblir plutot qu'a la lire. Les objets attendus sont
+        # donc NOMMES. to_regclass renvoie NULL pour un objet absent, ce qui
+        # donne directement la liste de ce qui manque au lieu d'un ecart de
+        # comptage a interpreter.
         run: |
-          tables=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='speed' AND table_type='BASE TABLE'")
-          vues=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc "SELECT count(*) FROM information_schema.views WHERE table_schema='speed'")
-          echo "schema speed : ${tables} table(s), ${vues} vue(s)"
-          [ "${tables}" = "4" ] || { echo "attendu 4 tables, observe ${tables}"; exit 1; }
-          [ "${vues}" = "1" ] || { echo "attendu 1 vue, observe ${vues}"; exit 1; }
+          manquants=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc "SELECT coalesce(string_agg(o, ', '), '') FROM (VALUES ('speed.game_mapping'), ('speed.player_count_events'), ('speed.price_snapshots'), ('speed.pipeline_runs'), ('speed.alertes'), ('speed.v_daily_player_stats'), ('speed.v_indicateur_fraicheur'), ('speed.v_indicateur_completude'), ('speed.v_indicateur_latence'), ('speed.v_indicateur_fiabilite'), ('speed.v_indicateur_gold'), ('speed.v_supervision_synthese'), ('mart.dim_games'), ('mart.dim_stores'), ('mart.fact_prices'), ('mart.fact_popularity_history'), ('mart.v_popularity_dashboard')) AS attendus(o) WHERE to_regclass(o) IS NULL")
+          if [ -n "${manquants}" ]; then
+            echo "objets absents apres initialisation : ${manquants}"; exit 1
+          fi
+          echo "les 17 objets attendus des schemas speed et mart sont presents"
 
       - name: Tests de securite sur les roles
         # Ces tests ont besoin d'une base : l'etage `tests` les ignore

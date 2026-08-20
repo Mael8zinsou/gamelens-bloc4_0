@@ -609,3 +609,33 @@ Même raison pour laquelle la tâche de remontée n'écrit pas dans
 `speed.pipeline_runs` : son échec décrit l'état de la plateforme, pas une
 défaillance de composant. Les confondre fausserait la règle `echecs_composants`,
 qui compterait la supervision elle-même parmi les pannes qu'elle surveille.
+
+## OBS-32. Une assertion par comptage se brise à chaque évolution normale
+
+Deuxième échec de la CI sur le même contrôle, pour une raison différente et
+plus instructive que la première.
+
+En session 2, le contrôle du schéma attendait 4 tables et en trouvait 5, parce
+que `information_schema.tables` inclut les vues (OBS-22). Corrigé en séparant
+les deux comptages. En session 3, le même contrôle a de nouveau échoué :
+`schema speed : 5 table(s), 7 vue(s)`. Cette fois l'écart était **légitime**,
+la supervision ayant ajouté la table `alertes` et six vues d'indicateurs.
+
+Le défaut n'était donc pas le filtre, c'était la nature même de l'assertion.
+Un contrôle par comptage échoue à chaque évolution normale du schéma, ce qui
+pousse celui qui le maintient à l'affaiblir mécaniquement plutôt qu'à le lire.
+Un contrôle qu'on ajuste sans réfléchir a cessé de tester quoi que ce soit.
+
+Remplacé par une vérification des objets **nommés** : les 17 tables et vues
+attendues des schémas `speed` et `mart` sont listées explicitement, et
+`to_regclass` renvoie `NULL` pour celles qui manquent. Le contrôle donne
+directement la liste de ce qui est absent, au lieu d'un écart de comptage à
+interpréter, et ne bronche pas quand une table légitime s'ajoute.
+
+Contrepartie assumée : cette version ne détecte plus un objet **inattendu**.
+C'est un compromis conscient. Un objet manquant casse le pipeline, un objet en
+trop ne casse rien, et une revue de code voit passer un `CREATE TABLE` bien
+mieux qu'un compteur ne le fera jamais.
+
+Formulation retenue : **une assertion qu'on ajuste à chaque évolution ne teste
+plus rien, elle enregistre.**
