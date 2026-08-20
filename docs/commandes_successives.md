@@ -862,3 +862,208 @@ docker compose up -d airflow-apiserver airflow-scheduler airflow-dag-processor a
 # Airflow  : http://localhost:8080  (admin / admin)
 # Grafana  : http://localhost:3000  (admin / admin)
 ```
+
+---
+
+# Session 4, 20 août 2026
+
+## Phase 1. Levée d'un risque avant d'engager le compte
+
+```bash
+# [BASH] (diagnostic) Snowpark est-il disponible pour Python 3.12 ?
+#        Incertitude ouverte depuis la session 1, levée AVANT que le compte
+#        ne soit créé.
+python -m pip index versions snowflake-snowpark-python
+# -> 1.54.0 disponible, résolution possible sur 3.12
+
+# [BASH] L'installation a modifié l'environnement global. Constat de ce qui a
+#        RÉELLEMENT changé, par date de modification, plutôt que de croire la
+#        liste de conflits affichée par pip.
+find "$SITE_PACKAGES" -maxdepth 1 -name "*.dist-info" -mmin -15 -printf "%TH:%TM  %f\n"
+# -> snowflake-connector-python 4.7.2, requests 2.34.2, cryptography, pyopenssl
+#    pydantic / starlette / uvicorn NON touchés : ces conflits préexistaient.
+
+# [BASH] Restauration des versions épinglées
+python -m pip uninstall -y snowflake-snowpark-python
+python -m pip install "snowflake-connector-python==3.9.1" "requests==2.32.3"
+python -m pytest tests -q            # -> 27 passed, projet intact
+```
+
+## Phase 2. Isolation de l'outillage Snowflake
+
+```bash
+# [BASH] (diagnostic) Tentative d'environnement virtuel : impossible.
+python -m venv .venv-snowflake
+# -> No module named venv.__main__
+python -c "import venv; print(venv.__path__)"
+ls "C:/Users/maelz/AppData/Local/Programs/Python/Python312/Lib/venv"
+# -> le répertoire ne contient qu'un requirements.txt égaré, daté d'août 2024.
+#    Le module venv de cette installation est vide. Voir OBS-34.
+```
+
+```powershell
+# [PS] (diagnostic) Résolution des versions dans un conteneur jetable, pour ne
+#      rien installer sur le poste.
+docker run --rm python:3.12-slim sh -c "pip install snowflake-snowpark-python dbt-snowflake; pip list"
+# -> dbt-core 1.12.2, dbt-snowflake 1.12.0, snowpark 1.54.0, connecteur 4.7.2
+
+# [PS] (procédure) Construction de l'image d'outillage
+docker compose --profile outillage build snowflake-cli
+```
+
+Deux conflits rencontrés à la construction, corrigés par lecture du message
+plutôt que par tâtonnement : `pandas==2.2.3` trop ancien pour l'extra pandas du
+connecteur, et `python-dotenv==1.0.1` recopié de `requirements.txt` alors que
+dbt-core 1.12 exige `>=1.2`.
+
+## Phase 3. Amorçage du compte et première connexion
+
+Côté Maël, dans Snowsight : `sql/bootstrap_snowflake_service.sql`, puis
+`python entrepot/generer_cle.py` et la commande `ALTER USER ... SET RSA_PUBLIC_KEY`
+qu'il affiche.
+
+```powershell
+# [PS] (procédure) Contrôle préalable, avant tout script de schéma
+docker compose run --rm snowflake-cli python entrepot/verifier_connexion.py
+# -> CONNEXION ETABLIE
+#    version 10.29.101 | compte TF82164 | région AWS_EU_WEST_3
+#    role ACCOUNTADMIN | entrepôt, base et schéma : aucun (à créer)
+```
+
+Le repli sans contexte s'est avéré nécessaire : la base `gamelens` n'existant pas
+encore, une connexion la réclamant échoue avec un message qui laisse croire à un
+problème d'authentification.
+
+## Phase 4. Application du schéma Gold
+
+```powershell
+# [PS] (procédure)
+docker compose run --rm snowflake-cli python entrepot/executer_sql.py sql/schema_gold_snowflake.sql --sans-contexte
+# -> 27 réussies, 0 en erreur
+```
+
+Premier passage : une 28e instruction en erreur, le découpeur traitant un bloc de
+commentaires de fin de fichier comme une instruction. Défaut de l'exécuteur,
+corrigé par un filtre sur les instructions ne contenant que des commentaires.
+
+## Phase 5. Vérification empirique des contraintes Snowflake
+
+```powershell
+# [PS] Mode poursuite sur erreur : certaines instructions DOIVENT échouer.
+docker compose run --rm snowflake-cli python entrepot/executer_sql.py sql/verify_snowflake_constraints.sql --continuer
+```
+
+Première exécution, 2 erreurs :
+
+```
+[10] ERREUR  INSERT INTO dim_games (game_id, unified_name) VALUES (..., NULL)
+     -> 100072 (22000): NULL result in a non-nullable column        <- ATTENDU
+[12] ERREUR  INSERT INTO fact_prices ... game_id inexistant
+     -> 100078 (22000): String 'inexistant-0000-...' is too long    <- PAS attendu
+```
+
+La seconde erreur ne portait pas sur la clé étrangère mais sur la **longueur** :
+38 caractères pour une colonne `VARCHAR(36)`. Le test n'avait jamais mis la
+contrainte à l'épreuve. Identifiant raccourci à 35 caractères, réexécution :
+
+```
+[12] OK      INSERT INTO fact_prices ... game_id inexistant
+```
+
+**Matrice établie** : `NOT NULL` et les contraintes de type sont appliquées,
+`CHECK`, `FOREIGN KEY` et `PRIMARY KEY` ne le sont pas. Résultats consignés dans
+le script lui-même. Voir OBS-36 et TS-08.
+
+## Phase 6. Calcul distribué Snowpark
+
+```powershell
+# [PS] (procédure)
+docker compose run --rm snowflake-cli python entrepot/snowpark_promotion.py
+docker compose run --rm snowflake-cli python entrepot/snowpark_promotion.py --expliquer
+```
+
+Trois échecs successifs avant que le script ne tourne, et la méthode qui a fini
+par marcher :
+
+```powershell
+# 1. information_schema.warehouses() n'existe pas -> requête simplifiée
+# 2. invalid identifier 'DAY' -> la fenêtre ordonnait sur DAY alors que la
+#    colonne s'appelle JOUR après renommage. Snowpark diffère la résolution
+#    des noms : l'erreur ne survient qu'à l'exécution.
+# 3. invalid identifier 'PARTITIONS_SCANNED' -> AU LIEU de tenter un troisième
+#    nom plausible, lister les colonnes réellement exposées :
+docker compose run --rm snowflake-cli python -c "...cur.description..."
+# -> pas de PARTITIONS_SCANNED, mais CLUSTER_NUMBER, WAREHOUSE_SIZE,
+#    BYTES_SCANNED, ROWS_PRODUCED. Requête réécrite, correcte du premier coup.
+```
+
+Résultat, avec la preuve du caractère distribué :
+
+```
+4. Calcul analytique distribue : fenetre glissante et classement
+  jeu                  genre            joueurs   moy. 7j  rang  part %
+  Stardew Valley       Simulation      59864.50  74212.75     1    61.8
+  Terraria             Sandbox         33532.50  35230.25     1   100.0
+  Slay the Spire       Deckbuilder      7216.00   8270.50     1    54.4
+  ...
+
+5. Preuve que le calcul a bien eu lieu dans l'entrepot
+  type     entrepot       taille    cluster  octets lus   lignes  exec ms
+  SELECT   GAMELENS_WH    X-Small         1        4608       15       26
+  MERGE    GAMELENS_WH    X-Small         1        6144       30      229
+  MERGE    GAMELENS_WH    X-Small         1        4096       15      314
+```
+
+SQL généré, extrait, montrant que les fenêtres sont poussées côté serveur :
+
+```sql
+rank() OVER (PARTITION BY "GENRE" ORDER BY ...)
+round(avg("JOUEURS_MOYENS") OVER (PARTITION BY "GAME_ID" ORDER BY "JOUR" ASC
+      NULLS FIRST ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2)
+```
+
+## Phase 7. Contrôles de la couche Gold Snowflake
+
+```powershell
+# [PS] (procédure) 8 contrôles d'intégrité, chacun cherchant les violations
+docker compose run --rm snowflake-cli python entrepot/verifier_gold.py
+# -> 15 dim_games, 1 dim_stores, 30 fact_popularity_history, 75 fact_prices
+# -> 8 contrôles au vert
+```
+
+## Récapitulatif des états vérifiés en fin de session 4
+
+| Vérification | Commande | Résultat observé |
+|---|---|---|
+| Connexion Snowflake | `verifier_connexion.py` | établie, paire de clés RSA |
+| Schéma Gold appliqué | `executer_sql.py schema_gold_snowflake.sql` | 27 réussies, 0 erreur |
+| Contraintes réellement appliquées | `executer_sql.py verify_... --continuer` | matrice établie, TS-08 |
+| Promotion Snowpark | `snowpark_promotion.py` | 15 + 30 + 75 lignes promues |
+| Idempotence Snowpark | 3 exécutions | 0 insertion, que des mises à jour |
+| Calcul distribué prouvé | `--expliquer` et historique de session | fenêtres dans le SQL, `GAMELENS_WH` |
+| Intégrité Gold Snowflake | `verifier_gold.py` | 8 contrôles au vert |
+| Environnement du poste | `pytest` après restauration | 27 tests, intact |
+
+## Mise en route complète, version courte
+
+```powershell
+docker compose up -d postgres kafka grafana
+python -m pip install -r requirements.txt
+python ingestion/create_topics.py
+python ingestion/seed_game_mapping.py
+python ingestion/steam_producer.py --once
+python ingestion/kafka_to_postgres.py --timeout 30 --depuis-le-debut
+python supervision/regles_alertes.py
+
+docker compose build airflow-init
+docker compose up airflow-init
+docker compose up -d airflow-apiserver airflow-scheduler airflow-dag-processor airflow-triggerer
+
+docker compose --profile outillage build snowflake-cli
+docker compose run --rm snowflake-cli python entrepot/verifier_connexion.py
+docker compose run --rm snowflake-cli python entrepot/executer_sql.py sql/schema_gold_snowflake.sql --sans-contexte
+docker compose run --rm snowflake-cli python entrepot/snowpark_promotion.py
+docker compose run --rm snowflake-cli python entrepot/verifier_gold.py
+
+# Airflow : http://localhost:8080   Grafana : http://localhost:3000   (admin / admin)
+```
