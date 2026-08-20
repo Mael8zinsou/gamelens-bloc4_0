@@ -315,3 +315,264 @@ python ingestion/seed_game_mapping.py
 python ingestion/steam_producer.py --once
 python ingestion/kafka_to_postgres.py --timeout 30 --depuis-le-debut
 ```
+
+---
+
+# Session 2, 20 août 2026
+
+## Phase 1. Reprise de l'environnement
+
+```powershell
+# [PS] Le moteur Docker s'etait arrete entre les deux sessions.
+Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+
+# [PS] (diagnostic) Verification des ressources avant d'ajouter 4 conteneurs
+docker info --format "CPU={{.NCPU}} / RAM_octets={{.MemTotal}}"
+# -> 8 CPU, 15,5 Go alloues a Docker : marge suffisante
+
+# [PS] (diagnostic) L'image existe-t-elle avant d'ecrire le compose ?
+#      Interroge le registre, ne necessite pas le moteur local.
+docker manifest inspect apache/airflow:3.1.8
+```
+
+## Phase 2. Recuperation de la configuration officielle Airflow 3
+
+Les noms de variables ont beaucoup change entre Airflow 2 et 3. Ils ont ete
+releves sur le fichier officiel de la version exacte plutot que reconstitues.
+
+```
+Source : https://airflow.apache.org/docs/apache-airflow/3.1.8/docker-compose.yaml
+Variables retenues, inexistantes en Airflow 2 :
+  AIRFLOW__API_AUTH__JWT_SECRET
+  AIRFLOW__CORE__EXECUTION_API_SERVER_URL
+Services : api-server (ex webserver), scheduler, dag-processor, triggerer, init
+```
+
+## Phase 3. Base de metadonnees Airflow
+
+```powershell
+# [PS] (diagnostic) Le script d'init ne rejoue pas sur un volume existant :
+#      la base est creee a la main, et le script sql/00_create_airflow_db.sql
+#      est ajoute au depot pour la reproductibilite depuis zero.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -v ON_ERROR_STOP=1 `
+  -c "CREATE ROLE airflow WITH LOGIN PASSWORD 'devlocal_airflow';" `
+  -c "CREATE DATABASE airflow OWNER airflow;"
+```
+
+## Phase 4. Construction et demarrage d'Airflow
+
+Fichiers crees : `docker/airflow/Dockerfile`, bloc `x-airflow-commun` et cinq
+services ajoutes a `docker-compose.yml`.
+
+```powershell
+# [PS] (procédure) Image etendue : le provider PostgreSQL n'est pas dans
+#      l'image officielle.
+docker compose build airflow-init
+
+# [PS] (procédure) Migration du schema et creation du compte admin
+docker compose up airflow-init
+# -> "Database migrating done!", "User admin created with role Admin", code 0
+
+# [PS] (procédure) Demarrage des quatre composants
+docker compose up -d airflow-apiserver airflow-scheduler airflow-dag-processor airflow-triggerer
+
+# [PS] (procédure) Application du schema Gold sur PostgreSQL
+docker cp "sql/schema_gold.sql" gamelens-postgres:/tmp/schema_gold.sql
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -v ON_ERROR_STOP=1 -f /tmp/schema_gold.sql
+
+# [PS] (diagnostic) Verification des chemins d'import reels avant d'ecrire le DAG
+docker exec gamelens-airflow-scheduler python -c "from airflow.sdk import dag, task"
+docker exec gamelens-airflow-scheduler python -c "from airflow.providers.postgres.hooks.postgres import PostgresHook"
+docker exec gamelens-airflow-scheduler python -c "import sys; sys.path.insert(0,'/opt/gamelens/ingestion'); import common; print(common.config())"
+# -> resout postgres:5432 depuis le conteneur : la frontiere de configuration fonctionne
+```
+
+## Phase 5. Contraintes d'unicite manquantes (INC-005)
+
+```sql
+-- [SQL] Sans ces deux contraintes, aucun ON CONFLICT n'etait ancrable et un
+-- rejeu du DAG aurait duplique les lignes en silence.
+ALTER TABLE mart.dim_games   ADD CONSTRAINT uq_dim_games_steam_appid UNIQUE (steam_appid);
+ALTER TABLE mart.fact_prices ADD CONSTRAINT uq_fact_prices_grain     UNIQUE (game_id, store_id, collected_at);
+
+-- [SQL] Amorcage de la boutique Steam
+INSERT INTO mart.dim_stores (name, base_url, source_type)
+VALUES ('Steam', 'https://store.steampowered.com', 'api')
+ON CONFLICT (name) DO NOTHING;
+```
+
+## Phase 6. Enregistrement et execution du DAG
+
+Fichier cree : `dags/gamelens_promotion_gold.py`.
+
+```powershell
+# [PS] (diagnostic) Le DAG n'apparaissait pas apres 5 minutes. Ni erreur
+#      d'import, ni fichier manquant : l'analyseur rescanne le dossier toutes
+#      les 5 minutes par defaut.
+docker exec gamelens-airflow-dag-processor ls -la /opt/airflow/dags
+docker exec gamelens-airflow-scheduler airflow dags list-import-errors
+
+# [PS] (procédure) Force l'analyse immediate, utile apres chaque modification
+docker exec gamelens-airflow-scheduler airflow dags reserialize
+docker exec gamelens-airflow-scheduler airflow dags list
+```
+
+### Test negatif de la porte de fraicheur (recette C4.4.1)
+
+```sql
+-- [SQL] Etat de depart : aucune donnee pour la journee en cours
+SELECT (collected_at AT TIME ZONE 'UTC')::date AS jour, count(*)
+FROM speed.player_count_events GROUP BY 1 ORDER BY 1;
+-- Observe : uniquement 2026-08-19, rien pour 2026-08-20
+```
+
+```powershell
+# [PS] Le run planifie de 02h30 s'est declenche seul. Resultat attendu : echec.
+docker exec gamelens-airflow-scheduler airflow tasks states-for-dag-run `
+    gamelens_promotion_gold "scheduled__2026-08-20T02:30:00+00:00"
+```
+
+```bash
+# [BASH] Verification que l'echec est bien celui voulu, et non un plantage
+grep -iE "ValueError|Aucun evenement" docker/airflow/logs/dag_id=*/run_id=scheduled*/task_id=verifier_fraicheur_silver/attempt=1.log
+# -> ValueError: "Aucun evenement de frequentation pour le 2026-08-20.
+#    Le pipeline temps reel a-t-il tourne ? Promotion interrompue."
+# PASS : la porte bloque la promotion avec un message actionnable.
+```
+
+### Reprise automatique (observee, non provoquee)
+
+```bash
+# [BASH] Alimentation de la journee en cours
+python ingestion/steam_producer.py --once
+python ingestion/kafka_to_postgres.py --timeout 12
+# -> 30 messages inseres (15 du jour, 15 restes dans Kafka depuis la session 1)
+```
+
+```powershell
+# [PS] La seconde tentative, declenchee seule 5 minutes apres l'echec, passe.
+docker exec gamelens-airflow-scheduler airflow tasks states-for-dag-run `
+    gamelens_promotion_gold "scheduled__2026-08-20T02:30:00+00:00"
+# -> les 6 taches en success. Echec a 07:52:17, succes a 07:57:17, sans intervention.
+```
+
+### Blocage des runs manuels, explique et non contourne
+
+```powershell
+# [PS] (diagnostic) Deux runs manuels restaient en "queued" sans demarrer.
+docker exec gamelens-airflow-scheduler airflow dags list-runs gamelens_promotion_gold
+# -> le run planifie est "running", les deux manuels "queued" :
+#    max_active_runs=1 les fait attendre. Comportement voulu, pas une panne.
+#    Ils se sont executes seuls, et en succes, des la place liberee.
+```
+
+## Phase 7. Verification de la couche Gold
+
+```sql
+-- [SQL] Contenu de l'entrepot apres promotion
+SELECT (SELECT count(*) FROM mart.dim_games)               AS dim_games,
+       (SELECT count(*) FROM mart.dim_stores)              AS dim_stores,
+       (SELECT count(*) FROM mart.fact_popularity_history) AS faits_popularite,
+       (SELECT count(*) FROM mart.fact_prices)             AS faits_prix;
+-- Observe : 15, 1, 15, 45 (trois releves tarifaires horodates distincts)
+
+-- [SQL] Le drapeau de promotion est reellement exerce par une remise reelle
+SELECT g.unified_name, p.price, p.promotion_flag
+FROM mart.fact_prices p JOIN mart.dim_games g USING (game_id)
+WHERE p.promotion_flag;
+-- Observe : Cult of the Lamb a 9,19 EUR, remise de 60 %
+```
+
+## Phase 8. Angle mort de la supervision (INC-007)
+
+```sql
+-- [SQL] Recoupement de deux comptages qui auraient du concorder.
+--       C'est cet ecart qui a revele le defaut, aucune alerte ne l'a signale.
+SELECT collected_at, count(*) FROM speed.price_snapshots GROUP BY 1 ORDER BY 1;
+-- Observe : 4 collectes distinctes
+
+SELECT component, status, records_in, records_written, started_at
+FROM speed.pipeline_runs WHERE component='steam_prices' ORDER BY run_id;
+-- Observe : 1 seule ligne. Les collectes orchestrees n'etaient pas tracees.
+```
+
+Correction : point d'entree `collecter_et_tracer()` distinct de `collecter()`,
+appel corrige dans le DAG, puis nouveau run de verification.
+
+```sql
+-- [SQL] Apres correction : la collecte orchestree apparait bien
+SELECT component, started_at FROM speed.pipeline_runs WHERE component='steam_prices';
+-- Observe : 2 lignes, dont celle du run orchestre de 08:00:12. PASS.
+```
+
+## Phase 9. Pipeline CI/CD
+
+Fichiers crees : `.github/workflows/ci.yml`, `ruff.toml`, `tests/conftest.py`,
+`tests/test_watchlist.py`, `tests/test_steam_prices.py`.
+
+```bash
+# [BASH] (procédure) Etage qualite, memes commandes qu'en CI
+python -m ruff check ingestion dags tests
+python -m ruff format --check ingestion dags tests
+# 11 anomalies relevees puis corrigees (--fix), aucune n'etait un bug
+
+# [BASH] (procédure) Etage tests unitaires, sans reseau ni base
+python -m pytest tests -q
+# -> 14 passed
+```
+
+```powershell
+# [PS] (diagnostic puis procédure) Etage d'integrite du DAG, teste localement
+#      avant d'etre inscrit dans le workflow.
+docker build -t gamelens/airflow:ci ./docker/airflow
+$ws = (Get-Location).Path
+docker run --rm -v "${ws}/dags:/opt/airflow/dags:ro" `
+    -e AIRFLOW__CORE__LOAD_EXAMPLES=false gamelens/airflow:ci `
+    bash -c "airflow db migrate && airflow dags list-import-errors && airflow dags list | grep gamelens_promotion_gold"
+# -> ECHEC au premier essai : "Aucune erreur d import" mais DAG absent de la liste.
+#    Cause : en Airflow 3, "dags list" lit la base de metadonnees, pas le dossier.
+#    Correction : ajout de "airflow dags reserialize" avant la liste.
+# -> PASS apres correction, sur les deux controles.
+```
+
+```bash
+# [BASH] Validation du workflow avant commit
+python -c "import yaml; print(list(yaml.safe_load(open('.github/workflows/ci.yml'))['jobs']))"
+# -> ['qualite', 'tests', 'dag', 'integration', 'publication']
+```
+
+## Recapitulatif des etats verifies en fin de session 2
+
+| Verification | Commande | Resultat observe |
+|---|---|---|
+| Pile complete demarree | `docker compose ps` | 6 conteneurs *Up*, tous *healthy* |
+| DAG enregistre | `airflow dags list` | `gamelens_promotion_gold`, actif |
+| Porte de fraicheur bloque une journee vide | run planifie sans donnee | `ValueError` avec message actionnable |
+| Reprise automatique | 2e tentative apres 5 min | run complet en succes, sans intervention |
+| Promotion vers Gold | `SELECT count(*)` sur `mart.*` | 15 dimensions, 15 faits popularite, 45 faits prix |
+| Controles de qualite Gold | tache `controler_qualite_gold` | 6 controles au vert |
+| Idempotence du DAG | 3 runs sur la meme journee | `dim_games` et `fact_popularity_history` stables a 15 |
+| Supervision des collectes | `speed.pipeline_runs` | defaut trouve puis corrige et verifie |
+| Etage qualite de la CI | `ruff check` et `format --check` | tout passe |
+| Etage tests de la CI | `pytest tests` | 14 tests verts |
+| Etage integrite DAG de la CI | conteneur jetable | 2 controles PASS |
+| Etages integration et publication | non executes | **necessitent un depot distant** |
+
+## Mise en route complete, version courte
+
+Poste propre, Docker Desktop demarre :
+
+```powershell
+docker compose up -d postgres kafka
+Copy-Item .env.example .env
+python -m pip install -r requirements.txt
+python ingestion/create_topics.py
+python ingestion/seed_game_mapping.py
+python ingestion/steam_producer.py --once
+python ingestion/kafka_to_postgres.py --timeout 30 --depuis-le-debut
+
+docker compose build airflow-init
+docker compose up airflow-init
+docker compose up -d airflow-apiserver airflow-scheduler airflow-dag-processor airflow-triggerer
+# Interface : http://localhost:8080 (admin / admin)
+```

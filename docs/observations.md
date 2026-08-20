@@ -226,3 +226,146 @@ Conséquence pratique retenue pour la suite : ne pas provisionner de ressource �
 durée de vie limitée avant d'en avoir l'usage immédiat. C'est le raisonnement
 appliqué au compte d'essai Snowflake, dont la recréation est volontairement
 différée.
+
+---
+
+# Session 2, 20 août 2026
+
+Objet : orchestrateur Airflow en conteneurs, DAG de promotion vers la couche
+Gold, pipeline CI/CD. Les deux compétences éliminatoires restantes.
+
+## OBS-13. Airflow 3 n'est pas Airflow 2 avec un numéro de plus
+
+Trois différences rencontrées en une seule session, toutes capables de faire
+perdre une heure à qui suit un tutoriel écrit pour Airflow 2 :
+
+- le composant `webserver` n'existe plus, il s'appelle `api-server` et sert à
+  la fois l'interface et l'API que les tâches utilisent pour s'exécuter ;
+- le `dag-processor` est un service séparé et obligatoire, alors qu'il était
+  intégré à l'ordonnanceur ;
+- `logical_date` est désormais nullable et vaut `None` pour un run manuel
+  (INC-006).
+
+Le réflexe qui a évité de deviner : récupérer le `docker-compose.yaml` officiel
+de la version exacte, 3.1.8, et en lire les noms de variables plutôt que les
+reconstituer de mémoire. Les variables `AIRFLOW__API_AUTH__JWT_SECRET` et
+`AIRFLOW__CORE__EXECUTION_API_SERVER_URL` n'existaient tout simplement pas
+avant Airflow 3.
+
+## OBS-14. Le compose officiel est surdimensionné pour ce projet
+
+Le fichier de référence d'Airflow retient `CeleryExecutor`, ce qui impose un
+Redis et des conteneurs worker, soit sept conteneurs. Repris tel quel, il
+aurait fait tourner un courtier de messages pour distribuer six tâches sur une
+seule machine.
+
+Retenu : `LocalExecutor`, qui exécute les tâches en sous-processus parallèles.
+Quatre conteneurs Airflow au lieu de sept, aucune fonctionnalité perdue à cette
+échelle.
+
+C'est un argument à préparer, parce que le jury peut le prendre dans les deux
+sens. La réponse honnête n'est pas « Celery était trop lourd » mais « Celery
+répond à un besoin de montée en charge horizontale que ce projet n'a pas ». Un
+dimensionnement se justifie par le besoin, pas par le confort.
+
+## OBS-15. Le pire échec d'un pipeline est celui qui réussit
+
+La tâche `verifier_fraicheur_silver` refuse de promouvoir une journée sans
+données. Elle a l'air superflue : sans elle, le DAG aurait tourné, écrit zéro
+ligne, et se serait terminé en succès.
+
+C'est exactement le problème. La supervision aurait affiché un run vert, alors
+que la collecte temps réel était à l'arrêt. Le tableau de bord serait resté
+figé sur la veille sans que rien ne l'annonce.
+
+Formulation retenue pour l'oral : **un pipeline qui réussit à ne rien faire est
+un pipeline qui ment.** Une porte d'entrée qui échoue franchement vaut mieux
+qu'un succès vide.
+
+Le test négatif a été fait avant le test positif : DAG déclenché sur une
+journée sans données, échec obtenu avec le message attendu, `Aucun evenement de
+frequentation pour le 2026-08-20`. Une porte qu'on n'a jamais vue se fermer
+n'est pas une porte.
+
+## OBS-16. Le run s'est réparé tout seul, et ce n'était pas prévu
+
+Enchaînement non scénarisé, et le plus démonstratif de la session.
+
+Le run planifié de 02h30 a échoué sur la porte de fraîcheur à 07:52:17, faute
+de données pour la journée. Les données ont été produites à 07:54. La seconde
+tentative, déclenchée automatiquement cinq minutes après l'échec par la
+politique de reprise, est passée à 07:57:17, et le run complet s'est terminé en
+succès à 07:57:36.
+
+Personne n'est intervenu entre les deux. C'est la démonstration concrète de ce
+à quoi servent `retries` et `retry_delay` face à une dépendance amont en
+retard, plutôt que la description théorique qu'on en donne d'habitude.
+
+## OBS-17. Un schéma valide ne dit rien de la stratégie de rechargement
+
+Détaillé en INC-005. Le schéma Gold avait été relu, exécuté et testé en
+session 1. Il était juste, au sens du modèle : bon grain, bons types, bonnes
+clés étrangères.
+
+Il était pourtant impossible d'y écrire de façon rejouable. `dim_games` et
+`fact_prices` n'avaient pour toute unicité que leur clé primaire UUID, générée
+à l'insertion, donc différente à chaque exécution. Un second run aurait
+dupliqué en silence.
+
+La faille n'apparaît pas en relisant un schéma, parce qu'elle n'est pas dans le
+schéma : elle est dans l'absence de réponse à une question qu'on ne pose qu'en
+écrivant le pipeline, « qu'est-ce qui, ici, ne doit exister qu'une fois ? ».
+`fact_popularity_history`, dont la clé primaire composite portait déjà le
+grain, n'avait aucun problème. La différence tient entièrement à cela.
+
+## OBS-18. La supervision avait un angle mort, découvert par recoupement
+
+Détaillé en INC-007. Quatre collectes tarifaires réellement effectuées, une
+seule ligne dans la table de supervision.
+
+Ce qui l'a révélé n'est pas une alerte, c'est un recoupement fait par curiosité
+entre deux comptages qui auraient dû concorder. Aucun mécanisme du système ne
+signalait l'écart, et rien n'était en erreur : les données étaient correctes,
+seule leur trace manquait.
+
+C'est le pendant exact d'INC-004 en session 1. Dans un cas un indicateur était
+au vert sur un service inatteignable, dans l'autre la supervision était muette
+sur un composant qui tournait. Les deux disent la même chose : **un système de
+supervision doit être testé sur ce qu'il rate, pas sur ce qu'il rapporte.**
+
+À reprendre tel quel dans le livrable C4.3.1, où ces deux cas donnent une
+matière concrète que peu de candidats auront.
+
+## OBS-19. Ce que le linter a réellement trouvé
+
+`ruff` a relevé 11 anomalies sur du code qui fonctionnait parfaitement :
+imports mal ordonnés, et surtout `datetime.timezone.utc` là où Python 3.12
+attend `datetime.UTC`.
+
+Aucune n'aurait causé de panne. C'est précisément l'intérêt de l'avoir dans la
+CI plutôt qu'en relecture humaine : ce sont des anomalies que personne ne voit
+et que personne ne signale, jusqu'à ce qu'un jour l'une d'elles compte.
+
+Le point de méthode qui compte pour la soutenance : la configuration `ruff.toml`
+est partagée par le poste de développement et la CI. Un contrôle qui passe en
+local et échoue en intégration, ou l'inverse, décrédibilise la chaîne entière.
+
+## OBS-20. La CI ne peut pas encore être présentée comme fonctionnelle
+
+Le fichier `.github/workflows/ci.yml` est écrit et ses cinq étages sont
+cohérents, mais **il n'a jamais été exécuté par GitHub Actions**, faute de
+dépôt distant : la décision 2b de la session 1 a retenu un dépôt git local.
+
+Ce qui a pu être vérifié localement, en exécutant les mêmes commandes que le
+workflow : l'étage qualité (`ruff check` et `ruff format --check` passent),
+l'étage tests (14 tests verts), et l'étage d'intégrité du DAG, testé dans le
+conteneur et corrigé à cette occasion, `airflow dags list` lisant la base de
+métadonnées et non le dossier, il fallait une sérialisation préalable.
+
+Ce qui reste non vérifié : l'exécution réelle par le runner, l'étage
+d'intégration sur infrastructure jetable, et la publication d'image sur
+`ghcr.io`.
+
+C4.2.3 étant éliminatoire, présenter un fichier YAML jamais exécuté serait
+exactement le travers que `CLAUDE.md` interdit. Il faut un dépôt distant et au
+moins un run vert avant la soutenance.

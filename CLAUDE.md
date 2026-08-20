@@ -78,23 +78,23 @@ un incident réel et sa méthode d'investigation (C4.4.2).
 
 ## État d'avancement
 
-Mis à jour le 19/08/2026 en fin de session 1.
+Mis à jour le 20/08/2026 en fin de session 2.
 
 | Élément | Statut |
 |---|---|
-| Dépôt git dédié, structure, .gitignore | ✅ Fait (dépôt initialisé sur place, décision 2b) |
-| Socle Docker (PostgreSQL 16 + Kafka 3.9 KRaft) | ✅ Construit, démarré, conteneurs *healthy* |
-| Schéma Silver speed PostgreSQL | ✅ Construit et initialisé automatiquement au démarrage du conteneur |
-| Pipeline temps réel (Steam Web API) | ✅ **Exécuté de bout en bout** : 15 titres collectés, publiés dans Kafka, écrits en base. Idempotence prouvée par rejeu (15 relus, 0 inséré). |
-| Schéma Gold PostgreSQL (prototype) | ✅ Construit et testé (contraintes + rôles vérifiés) |
-| Schéma Gold Snowflake (cible réelle) | 🔴 Bloqué : compte d'essai à recréer (INC-003) |
-| Orchestrateur (Airflow) | 🔴 À faire, en conteneur obligatoirement (INC-001) |
-| Calcul distribué (Snowpark, décidé le 19/08) | 🔴 Bloqué par la recréation du compte Snowflake |
-| Pipeline CI/CD | 🔴 À faire |
-| Supervision et alertes | 🟡 Amorcé : table `speed.pipeline_runs` alimentée par tous les composants |
-| Documentation technique / feuille de route | 🟡 Amorcé : `README.md`. Le reste une fois le reste construit. |
-| Cahier de recettes complet | 🟡 Premiers résultats réels disponibles (idempotence, résolution des 15 appid) |
-| Incident réel documenté | ✅ **INC-004 retenu** : collision de ports masquée par une erreur d'encodage. Incident réellement vécu, investigué et résolu en session 1. L'incident GOG du Bloc 3 reste en filet de sécurité. |
+| Dépôt git dédié, structure, .gitignore | ✅ Fait (dépôt local, décision 2b) |
+| Socle Docker (PostgreSQL 16 + Kafka 3.9 KRaft) | ✅ 6 conteneurs, tous *healthy* |
+| Schéma Silver speed PostgreSQL | ✅ Construit, initialisé automatiquement |
+| **C4.2.2 méthode 1, pipeline temps réel** | ✅ **Exécuté** : Steam vers Kafka vers PostgreSQL. Idempotence prouvée par rejeu. |
+| **C4.2.2 méthode 2, orchestrateur** | ✅ **Exécuté** : Airflow 3.1.8 en conteneurs, DAG `gamelens_promotion_gold`, 6 tâches, 3 runs réels en succès. Test négatif de la porte de fraîcheur réussi, reprise automatique observée. |
+| **C4.2.2 méthode 3, calcul distribué** | 🔴 Bloqué par la recréation du compte Snowflake (Snowpark) |
+| Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté** : 15 dim_games, 15 faits popularité, 45 faits prix |
+| Schéma Gold Snowflake (cible finale) | 🔴 Bloqué : compte d'essai à recréer (INC-003) |
+| **C4.2.3 pipeline CI/CD** | 🟡 **Écrit, partiellement vérifié.** 5 étages. Qualité, tests et intégrité du DAG rejoués localement avec succès. Intégration et publication **jamais exécutées faute de dépôt distant**. Voir OBS-20. |
+| Supervision et alertes | 🟡 `speed.pipeline_runs` alimentée par tous les composants, angle mort trouvé et corrigé (INC-007). Reste : visualisation et alertes. |
+| Documentation technique / feuille de route | 🟡 `README.md` et les trois documents de suivi. Feuille de route d'exploitation à écrire. |
+| Cahier de recettes complet | 🟡 Résultats réels accumulés : idempotence, porte de fraîcheur, contrôles qualité Gold, intégrité du DAG |
+| Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-007 s'y ajoutent comme incidents secondaires. |
 
 ## Faits d'environnement à ne pas redécouvrir
 
@@ -108,6 +108,15 @@ Mis à jour le 19/08/2026 en fin de session 1.
   alternative allégée. L'autorisation de substituer Kafka n'a pas eu à être utilisée.
 - Le chemin de travail contient accents et espaces, et cela **ne pose pas** de problème
   à Docker Desktop : hypothèse testée et écartée (INC-002).
+- **Airflow 3 diffère nettement d'Airflow 2** : `api-server` remplace `webserver`,
+  `dag-processor` est un service séparé obligatoire, et `logical_date` vaut `None`
+  sur un run manuel (INC-006). Toujours partir du `docker-compose.yaml` officiel de
+  la version exacte plutôt que d'un tutoriel Airflow 2.
+- **Après toute modification d'un DAG**, lancer `airflow dags reserialize` : l'analyseur
+  ne rescanne le dossier que toutes les 5 minutes.
+- Interface Airflow sur **http://localhost:8080**, compte `admin` / `admin`.
+- La base de métadonnées Airflow est une base séparée sur la **même** instance
+  PostgreSQL que la couche Silver speed. Choix d'échelle de développement assumé.
 
 ## Décisions de session 1 (19/08/2026)
 
@@ -126,10 +135,16 @@ Mis à jour le 19/08/2026 en fin de session 1.
 
 ## Prochaine étape immédiate
 
-1. Recréer le compte d'essai Snowflake, puis exécuter `sql/schema_gold_snowflake.sql`
-   et `sql/verify_snowflake_constraints.sql` en consignant les résultats observés.
-2. Monter Airflow en conteneur et écrire le DAG de promotion Silver speed vers Gold.
-3. Écrire le pipeline CI/CD (GitHub Actions), C4.2.3 étant éliminatoire.
+1. **Créer un dépôt distant GitHub et pousser**, pour que la CI s'exécute réellement.
+   C4.2.3 est éliminatoire et un fichier de workflow jamais exécuté ne prouve rien.
+   Décision à prendre avec Maël : dépôt privé, et le dossier de certification
+   contient des documents personnels qui ne doivent pas y monter.
+2. Recréer le compte d'essai Snowflake au moment de brancher le calcul distribué,
+   puis exécuter `sql/schema_gold_snowflake.sql` et `sql/verify_snowflake_constraints.sql`
+   en consignant les résultats observés.
+3. Écrire le calcul distribué Snowpark, dernière des trois méthodes de C4.2.2.
+4. Compléter la supervision : visualisation des indicateurs et système d'alertes
+   (C4.3.1), au-delà de la table `speed.pipeline_runs` déjà alimentée.
 
 ## Conventions de travail
 

@@ -216,3 +216,96 @@ elle a ete perdue dans sa traduction. La lecon operationnelle est de se mefier
 d'une erreur technique de bas niveau (encodage, serialisation, parsing) surgie
 au milieu d'une operation d'infrastructure : elle est souvent le linceul d'une
 erreur fonctionnelle plus haute, pas le probleme lui-meme.
+
+---
+
+# Session 2, 20 août 2026
+
+## INC-005 Le DAG dupliquait ses propres lignes au rejeu
+
+- **Date de detection** : 20/08/2026, ecriture du DAG de promotion.
+- **Detecte par / comment** : non pas par un plantage, mais en cherchant a
+  ecrire un `ON CONFLICT` et en constatant qu'aucune contrainte ne pouvait
+  l'ancrer.
+- **Severite** : bloquant pour la rejouabilite, silencieux pour tout le reste.
+- **Nature du probleme** : `mart.dim_games` et `mart.fact_prices` ne portaient
+  pour toute unicite que leur cle primaire UUID, generee a l'insertion. Deux
+  executions du DAG sur la meme journee auraient donc cree deux jeux de lignes
+  identiques a l'UUID pres, sans qu'aucune contrainte ne s'y oppose et sans
+  message d'erreur. Le schema Gold avait ete concu avant l'existence du
+  pipeline : rien n'y designait la cle naturelle d'un jeu ni le grain reel d'un
+  releve tarifaire.
+- **Investigation menee** : lecture du schema en partant de la question
+  « qu'est-ce qui, dans cette table, ne doit exister qu'une fois ? ». Pour
+  `dim_games`, c'est `steam_appid`. Pour `fact_prices`, c'est le triplet
+  (jeu, boutique, instant de collecte). `fact_popularity_history` etait deja
+  correcte, sa cle primaire composite portant deja le grain.
+- **Scenarios envisages et action retenue** : dedupliquer apres coup dans le
+  DAG (ecarte : deplace le probleme d'integrite vers du code applicatif que
+  rien ne garantit), ou declarer les contraintes manquantes. Retenu : deux
+  contraintes `UNIQUE`, ajoutees au schema PostgreSQL et declarees en miroir
+  dans le schema Snowflake, ou elles ne seront pas appliquees et devront donc
+  etre relayees par des tests dbt.
+- **Communication aux parties prenantes** : aucune, l'anomalie n'a jamais
+  atteint de donnee reelle. En revanche, l'enseignement est consigne : un
+  schema d'entrepot valide un modele, il ne valide pas une strategie de
+  rechargement. Les deux se relisent separement.
+- **Resultat obtenu et verification** : le DAG a ete execute trois fois de
+  suite sur la meme journee. `mart.dim_games` est reste a 15 lignes et
+  `mart.fact_popularity_history` a 15 lignes.
+
+## INC-006 logical_date nul sur un run manuel en Airflow 3
+
+- **Date de detection** : 20/08/2026, premier declenchement manuel du DAG.
+- **Severite** : bloquant pour tout declenchement manuel, donc pour la
+  demonstration en soutenance.
+- **Nature du probleme** : Airflow 3 rend `logical_date` nullable et le laisse
+  a `None` pour un run declenche a la main, alors qu'Airflow 2 en fournissait
+  toujours un. Le code `context["logical_date"].date()` leve donc un
+  `AttributeError` sur un run manuel, alors qu'il fonctionne parfaitement sur
+  un run planifie. Le piege tient a cette asymetrie : la voie nominale marche,
+  seule la voie utilisee pour tester echoue.
+- **Investigation menee** : la sortie de `airflow dags trigger` affiche
+  explicitement une colonne `logical_date` vide, ce qui a suffi a identifier la
+  cause avant meme que la tache ne s'execute.
+- **Action retenue** : repli en trois temps dans la tache, du plus explicite au
+  plus general : parametre `jour` fourni par l'operateur, sinon `logical_date`
+  si elle existe, sinon la date du jour en UTC. Le parametre `jour` a ete
+  ajoute au DAG dans la foulee : il permet de rejouer une journee precise
+  depuis l'interface, sans modifier le code ni desactiver `catchup`.
+- **Communication aux parties prenantes** : point de migration a signaler a
+  toute equipe passant d'Airflow 2 a Airflow 3, car il ne se manifeste pas en
+  fonctionnement nominal.
+- **Resultat obtenu et verification** : trois runs manuels declenches ensuite,
+  tous en succes.
+
+## INC-007 Quatre collectes reelles, une seule ligne de journal
+
+- **Date de detection** : 20/08/2026, controle du contenu de la base apres les
+  premiers runs orchestres.
+- **Severite** : mineur en apparence, structurant pour la supervision.
+- **Nature du probleme** : `speed.price_snapshots` contenait quatre horodatages
+  de collecte distincts, alors que `speed.pipeline_runs`, la table qui sert de
+  socle a la supervision (C4.3.1), n'en tracait qu'un seul. La tache Airflow
+  appelait `collecter()`, qui ecrit les donnees, plutot que le point d'entree
+  qui enregistre aussi l'execution. Les collectes lancees par l'orchestrateur
+  etaient donc invisibles pour la supervision, alors meme qu'elles
+  reussissaient.
+- **Investigation menee** : rapprochement de deux comptages qui auraient du
+  concorder, `SELECT collected_at, count(*) FROM speed.price_snapshots
+  GROUP BY 1` d'un cote, contenu de `speed.pipeline_runs` de l'autre. L'ecart
+  entre les deux est ce qui a revele le trou.
+- **Action retenue** : introduction d'un point d'entree `collecter_et_tracer()`
+  distinct de `collecter()`, et correction de l'appel dans le DAG. La
+  distinction est documentee dans le code pour qu'elle ne soit pas defaite par
+  une simplification ulterieure.
+- **Communication aux parties prenantes** : a signaler a l'equipe
+  d'exploitation, car le symptome d'un tel defaut est trompeur : la supervision
+  ne montre pas une erreur, elle montre une absence, ce qui se confond avec un
+  composant a l'arret.
+- **Resultat obtenu et verification** : nouveau run declenche apres correction,
+  la ligne correspondante apparait bien dans `speed.pipeline_runs`.
+- **Enseignement** : ce defaut est le pendant exact de INC-004. Dans les deux
+  cas, un indicateur au vert, ou muet, ne disait rien de la realite. Un
+  systeme de supervision doit etre teste sur ce qu'il rate, pas seulement sur
+  ce qu'il rapporte.
