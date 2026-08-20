@@ -166,12 +166,103 @@ Exécutés à chaque run par la tâche `controler_qualite_gold`, en PASS/FAIL.
 
 - **Objet** : établir ce que Snowflake applique réellement à l'écriture, plutôt
   que de le supposer d'après la documentation.
-- **Méthode** : `sql/verify_snowflake_constraints.sql`.
-- **Attendu** : seul `NOT NULL` rejette ; `CHECK`, `FOREIGN KEY` et `PRIMARY KEY`
-  sont déclaratifs et laissent passer.
-- **Observé** : **non exécuté**, compte d'essai à recréer (INC-003).
-- **Verdict** : **EN ATTENTE**. Ce résultat conditionne l'argumentaire sur le
-  report de l'intégrité vers des tests dbt.
+- **Méthode** : `sql/verify_snowflake_constraints.sql`, exécuté en mode
+  poursuite sur erreur, certaines instructions devant échouer.
+- **Exécuté le 20/08/2026** sur le compte `RTZSXDV-PM63908`, région
+  `AWS_EU_WEST_3`, Snowflake 10.29.101.
+
+| Contrainte déclarée | Appliquée à l'écriture ? | Preuve |
+|---|---|---|
+| `NOT NULL` | **OUI** | TEST 2 rejeté, erreur 100072 |
+| Type et longueur, `VARCHAR(36)` | **OUI** | découvert par accident, voir ci-dessous |
+| `CHECK (price > 0)` | NON | TEST 3 accepte un prix de -5,00 |
+| `FOREIGN KEY` | NON | TEST 4 accepte un `game_id` absent de `dim_games` |
+| `PRIMARY KEY (game_id, day)` | NON | TEST 5 insère deux fois le même couple |
+
+- **Verdict** : **PASS**.
+
+### Le test était lui-même défectueux
+
+Première exécution : le TEST 4 **échoue**, ce qui semblait prouver que la clé
+étrangère est appliquée. Le message disait pourtant
+`String 'inexistant-0000-...' is too long`, et non une violation référentielle :
+l'identifiant de test faisait 38 caractères pour une colonne `VARCHAR(36)` et
+était rejeté sur la **longueur**, avant que la contrainte ne soit évaluée.
+Raccourci à 35 caractères, le TEST 4 réussit. Voir OBS-36.
+
+L'échec a livré une information non anticipée, portée au tableau ci-dessus :
+Snowflake applique aussi les contraintes de type.
+
+### Conséquence, démontrée et non supposée
+
+Le TEST 6 interroge la vue de restitution après l'insertion volontaire du
+doublon. Elle retourne **2 lignes**. Deux mesures contradictoires pour le même
+jeu et le même jour atteignent donc le tableau de bord sans qu'aucune alerte ne
+se déclenche. C'est ce qui justifie de reporter l'intégrité sur des contrôles
+exécutés à chaque run, rôle tenu par `entrepot/verifier_gold.py` et, côté
+PostgreSQL, par la tâche `controler_qualite_gold` du DAG.
+
+### Reformulation induite
+
+`CLAUDE.md` écrivait que « seul `NOT NULL` est réellement appliqué ». Formulation
+exacte tirée des observations : **les contraintes portées par la colonne
+elle-même sont appliquées** (NOT NULL, type, longueur), **celles qui portent sur
+une relation entre lignes ou entre tables ne le sont pas**.
+
+## TS-09. Application du schéma Gold sur Snowflake
+
+- **Méthode** : `entrepot/executer_sql.py sql/schema_gold_snowflake.sql`.
+- **Attendu** : toutes les instructions passent, entrepôt virtuel, base, schéma,
+  4 tables, 1 vue, 3 rôles et leurs droits.
+- **Observé (20/08/2026)** : **27 instructions réussies, 0 en erreur**.
+- **Verdict** : **PASS**. Un premier passage avait signalé une 28e instruction en
+  erreur : le découpeur traitait un bloc de commentaires de fin de fichier comme
+  une instruction. Défaut de l'exécuteur, corrigé, pas du schéma.
+
+## TS-10. Promotion distribuée Snowpark
+
+- **Méthode** : `entrepot/snowpark_promotion.py`.
+- **Attendu** : extraction Silver, transit, MERGE vers Gold, calcul analytique.
+- **Observé (20/08/2026)** : 15 + 30 + 75 lignes extraites et téléversées,
+  puis **15 dimensions, 30 faits de popularité, 75 faits tarifaires** promus.
+- **Verdict** : **PASS**.
+
+## TS-11. Idempotence de la promotion Snowpark
+
+- **Objet** : Snowflake n'appliquant aucune contrainte d'unicité, la
+  rejouabilité repose entièrement sur les clauses `MERGE`. Sans elles, rien
+  n'empêcherait la duplication.
+- **Méthode** : trois exécutions successives du même script.
+- **Attendu** : 0 insertion aux passages suivants, uniquement des mises à jour.
+- **Observé (20/08/2026)** : `dim_games : 0 insertion, 15 mises à jour`,
+  `fact_popularity_history : 0 insertion, 30 mises à jour`,
+  `fact_prices : 0 insertion, 75 mises à jour`.
+- **Verdict** : **PASS**.
+
+## TS-12. Le calcul a bien lieu dans l'entrepôt, pas en local
+
+- **Objet** : répondre à « en quoi est-ce distribué ? » par une preuve.
+- **Méthode** : affichage du SQL généré par Snowpark, puis interrogation de
+  `information_schema.query_history_by_session()`.
+- **Attendu** : les fenêtres analytiques apparaissent dans le SQL envoyé, et
+  l'historique montre les requêtes exécutées par l'entrepôt virtuel.
+- **Observé (20/08/2026)** : le SQL contient
+  `rank() OVER (PARTITION BY "GENRE" ORDER BY ...)` et
+  `avg(...) OVER (PARTITION BY "GAME_ID" ORDER BY "JOUR" ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)`.
+  L'historique liste des requêtes `SELECT` et `MERGE` sur `GAMELENS_WH`, taille
+  `X-Small`, cluster 1, de 4 096 à 6 144 octets parcourus, 17 à 314 ms
+  d'exécution.
+- **Verdict** : **PASS**. Le processus Python n'a envoyé qu'un plan et reçu un
+  résultat.
+
+## TS-13. Contrôles d'intégrité de la couche Gold Snowflake
+
+- **Méthode** : `entrepot/verifier_gold.py`, 8 contrôles, chacun cherchant les
+  violations et attendant 0.
+- **Observé (20/08/2026)** : **8 contrôles au vert**, sur une couche contenant
+  15 dimensions jeu, 1 boutique, 30 faits de popularité, 75 faits tarifaires.
+- **Verdict** : **PASS**. Ces contrôles ne doublent pas le moteur ici, ils le
+  remplacent : voir TS-08.
 
 ---
 
@@ -372,8 +463,6 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 
 | Fonctionnalité | État | Blocage |
 |---|---|---|
-| Calcul distribué (Snowpark) | Non construit | Compte d'essai Snowflake à recréer |
-| Couche Gold sur Snowflake | Non exécutée | Idem |
 | Popularité diffusée (Twitch) | Non branchée | Colonnes présentes mais nulles |
 | Catalogue RAWG | Non branché | `dim_games` alimentée depuis la watchlist |
 | Alertes vers un canal externe | Non construit | Les alertes sont persistées et remontées par Airflow, mais aucune notification par courriel ou messagerie n'est configurée |
@@ -385,16 +474,36 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 | Catégorie | PASS | PARTIEL | EN ATTENTE |
 |---|---|---|---|
 | Fonctionnels | 5 | 0 | 0 |
-| Structurels | 7 | 0 | 1 |
+| Structurels | 13 | 0 | 0 |
 | Sécurité | 3 | 0 | 0 |
 | Supervision | 5 | 0 | 0 |
-| **Total** | **20** | **0** | **1** |
+| **Total** | **26** | **0** | **0** |
 
 Les tests de sécurité comptent pour 3 cas au niveau du cahier, mais 13 cas
 paramétrés au niveau de l'exécution.
 
-Trois de ces tests ont échoué avant de passer, et c'est ce qui leur donne de la
-valeur : TS-02 a révélé des contraintes d'unicité manquantes, TS-03 a été conçu
-pour échouer et l'a fait, TS-06 et TS-07 ont chacun mis au jour un défaut de
-l'assertion elle-même. Un test qui n'a jamais rien attrapé n'a pas encore
-prouvé qu'il testait quelque chose.
+Cinq de ces tests ont échoué avant de passer, et c'est ce qui leur donne de la
+valeur :
+
+- **TS-02** a révélé des contraintes d'unicité manquantes dans le schéma Gold ;
+- **TS-03** a été conçu pour échouer, et l'a fait ;
+- **TS-06** et **TS-07** ont chacun mis au jour un défaut de l'assertion elle-même ;
+- **TS-08** a échoué en semblant démontrer le contraire de la réalité, parce que
+  l'identifiant de test était rejeté sur sa longueur avant que la contrainte
+  visée ne soit évaluée.
+
+Un test qui n'a jamais rien attrapé n'a pas encore prouvé qu'il testait quelque
+chose. Et un test qui échoue ne désigne pas nécessairement le système testé :
+dans trois cas sur cinq ici, le défaut était dans le test.
+
+## Couverture par compétence
+
+| Compétence | Tests correspondants |
+|---|---|
+| C4.2.1 schéma de données | TS-08, TS-09, TS-13, TF-04, TF-05 |
+| C4.2.2 temps réel | TF-01, TF-02, TS-01 |
+| C4.2.2 orchestrateur | TS-02, TS-03, TS-04, TS-05, TS-06 |
+| C4.2.2 calcul distribué | TS-10, TS-11, TS-12 |
+| C4.2.3 CI/CD | section 5 complète |
+| C4.3.1 supervision | TSUP-01 à TSUP-05 |
+| Sécurité transverse | TSEC-01 à TSEC-03 |

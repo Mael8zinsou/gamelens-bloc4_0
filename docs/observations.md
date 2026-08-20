@@ -639,3 +639,160 @@ mieux qu'un compteur ne le fera jamais.
 
 Formulation retenue : **une assertion qu'on ajuste à chaque évolution ne teste
 plus rien, elle enregistre.**
+
+---
+
+# Session 4, 20 août 2026
+
+Objet : bascule réelle vers Snowflake et calcul distribué Snowpark, dernière
+brique éliminatoire.
+
+## OBS-33. Le compte est étudiant, pas d'essai : 120 jours au lieu de 30
+
+Maël a créé un compte étudiant, 120 jours et 400 dollars de crédits, là où le
+raisonnement de la session 2 portait sur un essai de 30 jours.
+
+Toute l'argumentation calendaire qui justifiait de différer la création tombe
+donc d'elle-même. Elle reste néanmoins juste dans son principe, et mérite d'être
+racontée à l'oral pour ce qu'elle montre : ne pas provisionner une ressource à
+durée de vie limitée avant d'en avoir l'usage. Le fait que la contrainte se soit
+avérée plus souple ne rend pas la précaution inutile, elle la rend seulement
+sans conséquence cette fois-ci.
+
+## OBS-34. Vérifier une dépendance a cassé l'environnement, et c'est instructif
+
+Avant de laisser Maël lancer le compte à rebours, j'ai voulu lever un risque
+identifié en session 1 : Snowpark est-il disponible pour Python 3.12 ? Réponse
+oui, version 1.54.
+
+Mais l'installation a modifié l'environnement global : `snowflake-connector-python`
+est passé en 4.x, que `dbt-snowflake 1.8` refuse, et `requests` a été remonté
+alors qu'il est épinglé dans `requirements.txt` et utilisé par l'ingestion.
+
+Deux réflexes ont limité les dégâts. D'abord vérifier **ce que j'avais réellement
+changé**, par les dates de modification des distributions, plutôt que de croire
+la liste de conflits affichée par pip : celle-ci mentionnait aussi `pydantic`,
+`starlette` et `uvicorn`, dont les conflits **préexistaient** et n'avaient rien à
+voir. Ensuite restaurer les versions épinglées et revérifier que les 27 tests
+passaient.
+
+La conclusion n'est pas « faire attention » mais structurelle : **l'outillage
+Snowflake vit désormais dans son propre conteneur**, pour exactement la même
+raison qu'Airflow. Un jeu de dépendances qui entre en conflit avec le reste ne
+s'arbitre pas, il s'isole.
+
+Effet de bord découvert au passage : le module `venv` de l'installation Python
+du poste est vide, il n'y reste qu'un `requirements.txt` égaré daté d'août 2024.
+`python -m venv` ne fonctionne donc pas, ce qui a écarté l'option de
+l'environnement virtuel et rendu le conteneur d'autant plus naturel.
+
+## OBS-35. Le mur d'authentification que peu anticipent
+
+Snowflake impose désormais l'authentification multifacteur aux utilisateurs
+humains sur les comptes récents. Un pipeline ne peut pas valider une
+notification sur téléphone : l'accès par mot de passe est donc structurellement
+inutilisable pour un accès programmatique.
+
+Le piège est que l'erreur obtenue parle d'identifiants incorrects, ce qui envoie
+chercher une faute de frappe pendant que la cause est une politique de sécurité.
+
+Traité en amont plutôt que subi : utilisateur de service `GAMELENS_SERVICE` créé
+en `TYPE = SERVICE`, exempté de MFA et restreint à l'authentification par paire
+de clés RSA. Ce n'est pas un contournement, c'est la pratique attendue en
+production, et cela a une conséquence pratique appréciable : **aucun secret n'a
+transité par la conversation**, la clé privée restant sur le disque et `.env` ne
+faisant que la désigner.
+
+## OBS-36. Le test qui prouvait le contraire de ce qu'il croyait prouver
+
+Le meilleur épisode de la session, et probablement l'un des meilleurs du projet.
+
+`sql/verify_snowflake_constraints.sql` cherche à établir empiriquement quelles
+contraintes Snowflake applique vraiment. Le TEST 4 devait montrer qu'une clé
+étrangère vers une ligne inexistante passe sans résistance. Première exécution :
+il **échoue**, ce qui semblait prouver que Snowflake applique bien les clés
+étrangères.
+
+Sauf que le message disait `String 'inexistant-0000-...' is too long`, et non une
+violation de contrainte référentielle. L'identifiant de test faisait 38
+caractères pour une colonne `VARCHAR(36)` : l'insertion était rejetée sur la
+**longueur**, avant que la clé étrangère ne soit seulement évaluée. Le test
+n'avait jamais mis la contrainte à l'épreuve.
+
+Identifiant raccourci à 35 caractères, réexécution : l'insertion **réussit**. La
+clé étrangère n'est effectivement pas appliquée.
+
+Deux enseignements. Un test qui échoue peut échouer pour une raison qui n'a rien
+à voir avec ce qu'il teste, et **lire le message plutôt que le statut** est ce
+qui fait la différence. Et l'échec a livré une information non anticipée :
+Snowflake applique les contraintes de **type**, longueur comprise.
+
+## OBS-37. La formulation de CLAUDE.md était trop approximative
+
+Conséquence directe de l'observation précédente. `CLAUDE.md` écrivait que sur
+Snowflake « seul NOT NULL est réellement appliqué ». La vérification empirique
+montre que c'est mal découpé.
+
+Formulation exacte, tirée des résultats observés : **les contraintes portées par
+la colonne elle-même sont appliquées** (NOT NULL, type, longueur), **celles qui
+portent sur une relation entre lignes ou entre tables ne le sont pas** (CHECK,
+FOREIGN KEY, PRIMARY KEY, UNIQUE).
+
+C'est plus juste, plus mémorable, et cela explique le mécanisme au lieu de
+lister des exceptions : Snowflake peut valider une valeur à l'écriture d'une
+ligne, mais pas interroger le reste de la table sans coût, sur un moteur conçu
+pour l'analytique.
+
+## OBS-38. Le TEST 6 donne la démonstration la plus parlante
+
+Le script insère volontairement deux lignes en doublon sur ce qui est déclaré
+comme clé primaire, puis interroge la vue de restitution servie aux tableaux de
+bord. Elle en retourne **deux**.
+
+Un analyste verrait donc deux mesures contradictoires pour le même jeu et le
+même jour, sans qu'aucune alerte ne se déclenche et sans que rien dans le schéma
+ne s'y soit opposé. C'est l'argument concret qui justifie de reporter
+l'intégrité sur des tests exécutés à chaque run, plutôt qu'un raisonnement
+abstrait sur des contraintes déclaratives.
+
+## OBS-39. « En quoi est-ce distribué ? », et comment y répondre sans bluffer
+
+La question que le jury posera sur Snowpark. Répondre « c'est Snowflake, donc
+c'est distribué » ne vaut rien.
+
+Le script le prouve au lieu de l'affirmer, de deux façons.
+
+Il affiche le **SQL réellement généré** par l'API DataFrame, où l'on lit
+`rank() OVER (PARTITION BY "GENRE" ORDER BY ...)` et
+`avg(...) OVER (PARTITION BY "GAME_ID" ORDER BY "JOUR" ROWS BETWEEN 6 PRECEDING
+AND CURRENT ROW)`. Les fenêtres analytiques ne sont donc pas calculées en pandas
+sur le poste, elles sont poussées dans la requête.
+
+Il interroge ensuite l'**historique de session**, qui montre chaque requête avec
+l'entrepôt virtuel qui l'a servie, sa taille, le numéro de cluster, les octets
+parcourus et le temps de compilation. Le processus Python n'a fait qu'envoyer un
+plan et recevoir un résultat.
+
+C'est exactement la différence avec le PySpark local écarté le 19/08 : celui-ci
+se serait exécuté sur la même machine que le script qui le pilote.
+
+## OBS-40. Trois erreurs d'API, et la méthode qui a fini par marcher
+
+Le script Snowpark a échoué trois fois avant de tourner.
+
+- `information_schema.warehouses()` n'existe pas comme fonction de table.
+  Requête simplifiée plutôt que remplacée par une autre supposition.
+- `invalid identifier 'DAY'` : la fenêtre glissante ordonnait sur `DAY` alors
+  que la colonne s'appelait `JOUR` après renommage. Snowpark diffère la
+  résolution des noms, l'erreur ne survient donc qu'à l'exécution, pas à
+  l'écriture du code.
+- `invalid identifier 'PARTITIONS_SCANNED'` : cette colonne existe dans
+  `account_usage.query_history` mais pas dans la fonction de table
+  `query_history_by_session`.
+
+La troisième fois est celle qui compte. Après deux corrections faites à
+l'estime, j'ai **listé les colonnes réellement exposées** par la fonction avant
+de réécrire, au lieu de tenter un troisième nom plausible. C'est ce qui a
+fonctionné du premier coup, et c'est la même méthode que celle qui avait servi
+à trancher INC-004 : interroger le système sur ce qu'il est, plutôt que lui
+supposer une forme.

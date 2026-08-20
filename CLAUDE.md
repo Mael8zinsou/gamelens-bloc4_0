@@ -32,8 +32,11 @@ un incident réel et sa méthode d'investigation (C4.4.2).
   réellement distribué sur le compute Snowflake plutôt qu'en mode local sur une seule machine,
   plus défendable face au jury sur "en quoi est-ce distribué ?").
 - ETL : Python/pandas, dbt, table `game_mapping` pour la résolution d'identifiants cross-plateformes.
-  **Point d'architecture Snowflake important** : les contraintes PK/FK/CHECK sont déclarées dans le
-  schéma mais ne sont pas appliquées à l'écriture par Snowflake (seul NOT NULL l'est réellement).
+  **Point d'architecture Snowflake, vérifié empiriquement le 20/08/2026** : les contraintes
+  portées par la colonne elle-même sont appliquées (NOT NULL, type, longueur) ; celles qui
+  portent sur une relation entre lignes ou entre tables ne le sont pas (CHECK, FOREIGN KEY,
+  PRIMARY KEY, UNIQUE). La formulation antérieure, « seul NOT NULL est appliqué », était
+  inexacte : voir les résultats consignés dans `sql/verify_snowflake_constraints.sql`.
   L'intégrité réelle est donc reportée sur des tests dbt (`not_null`, `unique`, `relationships`,
   `expression_is_true`), qui font échouer le run du pipeline en cas de violation. C'est un choix
   d'architecture à assumer explicitement à l'oral, pas un oubli — voir
@@ -87,13 +90,13 @@ Mis à jour le 20/08/2026 en fin de session 2.
 | Schéma Silver speed PostgreSQL | ✅ Construit, initialisé automatiquement |
 | **C4.2.2 méthode 1, pipeline temps réel** | ✅ **Exécuté** : Steam vers Kafka vers PostgreSQL. Idempotence prouvée par rejeu. |
 | **C4.2.2 méthode 2, orchestrateur** | ✅ **Exécuté** : Airflow 3.1.8 en conteneurs, DAG `gamelens_promotion_gold`, 6 tâches, 3 runs réels en succès. Test négatif de la porte de fraîcheur réussi, reprise automatique observée. |
-| **C4.2.2 méthode 3, calcul distribué** | 🔴 Bloqué par la recréation du compte Snowflake (Snowpark) |
+| **C4.2.2 méthode 3, calcul distribué** | ✅ **Exécuté** : Snowpark, MERGE idempotents et calcul analytique (fenêtre glissante 7 j, classement par genre). Nature distribuée prouvée par le SQL généré et l'historique de session. |
 | Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté** : 15 dim_games, 15 faits popularité, 45 faits prix |
-| Schéma Gold Snowflake (cible finale) | 🔴 Bloqué : compte d'essai à recréer (INC-003) |
+| Schéma Gold Snowflake (cible finale) | ✅ **Exécuté** sur `RTZSXDV-PM63908` (AWS_EU_WEST_3) : 27 instructions, 0 erreur. Couche alimentée, 8 contrôles d'intégrité au vert. |
 | **C4.2.3 pipeline CI/CD** | ✅ **Exécuté, 5 étages verts** sur `Mael8zinsou/gamelens-bloc4_0` (privé). Qualité, tests, intégrité du DAG, intégration sur infrastructure jetable, publication d'image sur `ghcr.io` avec double étiquetage `latest` et SHA. Le premier run avait échoué : défaut dans l'assertion, pas dans l'infra (OBS-22). |
 | **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. |
 | Documentation technique / feuille de route | 🟡 `README.md`, les trois documents de suivi et le cahier de recettes. **Feuille de route d'exploitation (C4.3.2) reste à écrire.** |
-| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **20 PASS, 0 partiel, 1 en attente** (contraintes Snowflake). Tests fonctionnels, structurels, de sécurité, de supervision et de non-régression. |
+| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **26 PASS, 0 partiel, 0 en attente**. |
 | Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-007 s'y ajoutent comme incidents secondaires. |
 
 ## Faits d'environnement à ne pas redécouvrir
@@ -124,6 +127,18 @@ Mis à jour le 20/08/2026 en fin de session 2.
   pas dans Grafana : l'outil affiche les indicateurs, il ne les définit pas.
 - Les logs Airflow contiennent des `:` dans les noms de dossier, **illisibles par un
   client Windows**. Les lire via `docker exec ... cat`, pas depuis l'hôte.
+- **Compte Snowflake étudiant** `RTZSXDV-PM63908`, région `AWS_EU_WEST_3`, 120 jours
+  et 400 dollars de crédits (et non un essai de 30 jours). Utilisateur de service
+  `GAMELENS_SERVICE` en `TYPE = SERVICE`, authentifié par **paire de clés RSA** :
+  Snowflake impose la MFA aux utilisateurs humains, ce qu'un pipeline ne peut pas
+  satisfaire. Clé privée dans `secrets/`, ignorée par git.
+- **L'outillage Snowflake (dbt, Snowpark) vit dans son propre conteneur**, jamais dans
+  l'environnement Python du poste : Snowpark impose `snowflake-connector-python` 4.x,
+  incompatible avec `dbt-snowflake` 1.8, et remonte `requests` épinglé pour l'ingestion.
+  L'invoquer par `docker compose run --rm snowflake-cli ...`.
+- **`python -m venv` ne fonctionne pas sur ce poste** : le module `venv` de
+  l'installation Python est vide. Ne pas perdre de temps à chercher pourquoi, passer
+  par un conteneur.
 - La base de métadonnées Airflow est une base séparée sur la **même** instance
   PostgreSQL que la couche Silver speed. Choix d'échelle de développement assumé.
 
@@ -144,15 +159,19 @@ Mis à jour le 20/08/2026 en fin de session 2.
 
 ## Prochaine étape immédiate
 
-1. Recréer le compte d'essai Snowflake au moment de brancher le calcul distribué,
-   puis exécuter `sql/schema_gold_snowflake.sql` et `sql/verify_snowflake_constraints.sql`
-   en consignant les résultats observés.
-2. Écrire le calcul distribué Snowpark, dernière des trois méthodes de C4.2.2.
-3. Écrire la feuille de route d'exploitation (C4.3.2) : tâches, échéances,
+**Les trois compétences éliminatoires sont couvertes par des briques réellement
+exécutées.** Ce qui reste n'est plus éliminatoire.
+
+1. Écrire la feuille de route d'exploitation (C4.3.2) : tâches, échéances,
    planification de la maintenance, points de vigilance. Le journal d'alertes et
-   sa colonne `resolue_le` fournissent déjà la matière sur les durées d'incident.
-4. Consolider la documentation technique (C4.3.3) et préparer le support de
-   soutenance (30 min de présentation).
+   sa colonne `resolue_le` fournissent déjà la matière sur les durées d'incident,
+   et l'expiration du compte Snowflake (120 jours) est un point de vigilance tout
+   trouvé.
+2. Consolider la documentation technique (C4.3.3) à partir du `README.md` et des
+   documents de suivi.
+3. Brancher dbt sur Snowflake pour porter les contrôles d'intégrité de
+   `entrepot/verifier_gold.py` en tests dbt, ce que le Bloc 1 annonçait.
+4. Préparer le support de soutenance (30 min de présentation).
 
 ## Conventions de travail
 
