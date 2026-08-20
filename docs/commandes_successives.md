@@ -576,3 +576,82 @@ docker compose up airflow-init
 docker compose up -d airflow-apiserver airflow-scheduler airflow-dag-processor airflow-triggerer
 # Interface : http://localhost:8080 (admin / admin)
 ```
+
+## Phase 10. Dépôt distant et exécution réelle de la CI
+
+```bash
+# [BASH] (diagnostic) Verification prealable : aucun secret ne doit partir.
+git ls-files | grep -E "^\.env$" || echo "non suivi, correct"
+git ls-files | wc -l          # 29 fichiers, uniquement le projet
+
+# [BASH] (diagnostic) Le compte dispose-t-il du scope workflow, indispensable
+#        pour pousser un fichier .github/workflows/ ?
+gh auth status
+# -> compte Mael8zinsou, scopes 'gist', 'read:org', 'repo', 'workflow'
+
+# [BASH] (procédure) Creation du depot prive et premier push
+gh repo create gamelens-bloc4_0 --private --source=. --remote=origin --push
+# -> https://github.com/Mael8zinsou/gamelens-bloc4_0
+```
+
+### Premiere execution du workflow : echec attendu de l'etage non testable en local
+
+```bash
+# [BASH] Suivi du run
+gh run list --limit 3 --workflow=CI
+gh run view <id> --json conclusion,jobs
+
+# Resultat : qualite, tests, dag en success ; integration en failure ;
+# publication ignoree par dependance.
+
+# [BASH] Lecture ciblee de l'echec
+gh run view <id> --log-failed
+# -> echec sur "Verifier l'initialisation du schema Silver speed"
+```
+
+```sql
+-- [SQL] Contre-verification locale AVANT de corriger quoi que ce soit :
+-- l'infrastructure est-elle en cause, ou l'assertion ?
+SELECT table_type, count(*) FROM information_schema.tables
+WHERE table_schema='speed' GROUP BY 1;
+-- Observe : BASE TABLE = 4, VIEW = 1.
+-- L'attendu de 4 sur un comptage non filtre etait faux. Le defaut etait dans
+-- le test, pas dans le systeme teste. Voir OBS-22.
+```
+
+Deux corrections dans le même commit : filtrage sur `table_type` avec
+vérification séparée de la vue, et normalisation en minuscules du nom d'image
+pour l'étage de publication, défaut repéré par relecture avant qu'il ne se
+manifeste (OBS-23).
+
+### Seconde execution : cinq etages verts
+
+```bash
+# [BASH] Attente de la fin du run, sans interrogation repetee inutile
+until [ "$(gh run view <id> --json status --jq .status)" = "completed" ]; do sleep 20; done
+gh run view <id> --json conclusion,jobs
+
+# CONCLUSION: success
+#   success  Qualite du code
+#   success  Tests unitaires
+#   success  Integrite du DAG Airflow
+#   success  Integration sur infrastructure reelle
+#   success  Publication de l'image
+
+# [BASH] Verification que l'image existe reellement, plutot que de se fier au
+#        seul statut du job
+gh run view <id> --log | grep -iE "pushing manifest|naming to ghcr"
+# -> ghcr.io/mael8zinsou/gamelens-bloc4_0/airflow:latest
+# -> ghcr.io/mael8zinsou/gamelens-bloc4_0/airflow:95065aa3ac0c...
+```
+
+### Detail des etapes de l'etage d'integration, toutes en succes
+
+| Etape | Ce qu'elle prouve |
+|---|---|
+| Demarrer le socle PostgreSQL et Kafka | Le `docker-compose.yml` fonctionne sur une machine vierge |
+| Attendre que le socle soit sain | Les healthchecks repondent dans le delai imparti |
+| Verifier l'initialisation du schema Silver | 4 tables et 1 vue creees automatiquement |
+| Executer le pipeline temps reel | Steam, Kafka et PostgreSQL de bout en bout depuis un runner |
+| Verifier le resultat en base | Le pipeline a reellement ecrit des lignes |
+| Verifier l'idempotence du puits | Le rejeu des offsets ne duplique rien, test de la session 1 automatise |

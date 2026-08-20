@@ -90,10 +90,10 @@ Mis à jour le 20/08/2026 en fin de session 2.
 | **C4.2.2 méthode 3, calcul distribué** | 🔴 Bloqué par la recréation du compte Snowflake (Snowpark) |
 | Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté** : 15 dim_games, 15 faits popularité, 45 faits prix |
 | Schéma Gold Snowflake (cible finale) | 🔴 Bloqué : compte d'essai à recréer (INC-003) |
-| **C4.2.3 pipeline CI/CD** | 🟡 **Écrit, partiellement vérifié.** 5 étages. Qualité, tests et intégrité du DAG rejoués localement avec succès. Intégration et publication **jamais exécutées faute de dépôt distant**. Voir OBS-20. |
+| **C4.2.3 pipeline CI/CD** | ✅ **Exécuté, 5 étages verts** sur `Mael8zinsou/gamelens-bloc4_0` (privé). Qualité, tests, intégrité du DAG, intégration sur infrastructure jetable, publication d'image sur `ghcr.io` avec double étiquetage `latest` et SHA. Le premier run avait échoué : défaut dans l'assertion, pas dans l'infra (OBS-22). |
 | Supervision et alertes | 🟡 `speed.pipeline_runs` alimentée par tous les composants, angle mort trouvé et corrigé (INC-007). Reste : visualisation et alertes. |
 | Documentation technique / feuille de route | 🟡 `README.md` et les trois documents de suivi. Feuille de route d'exploitation à écrire. |
-| Cahier de recettes complet | 🟡 Résultats réels accumulés : idempotence, porte de fraîcheur, contrôles qualité Gold, intégrité du DAG |
+| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : 13 PASS, 1 partiel, 1 en attente. Chaque cas oppose un attendu explicite à un observé daté. |
 | Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-007 s'y ajoutent comme incidents secondaires. |
 
 ## Faits d'environnement à ne pas redécouvrir
@@ -135,15 +135,11 @@ Mis à jour le 20/08/2026 en fin de session 2.
 
 ## Prochaine étape immédiate
 
-1. **Créer un dépôt distant GitHub et pousser**, pour que la CI s'exécute réellement.
-   C4.2.3 est éliminatoire et un fichier de workflow jamais exécuté ne prouve rien.
-   Décision à prendre avec Maël : dépôt privé, et le dossier de certification
-   contient des documents personnels qui ne doivent pas y monter.
-2. Recréer le compte d'essai Snowflake au moment de brancher le calcul distribué,
+1. Recréer le compte d'essai Snowflake au moment de brancher le calcul distribué,
    puis exécuter `sql/schema_gold_snowflake.sql` et `sql/verify_snowflake_constraints.sql`
    en consignant les résultats observés.
-3. Écrire le calcul distribué Snowpark, dernière des trois méthodes de C4.2.2.
-4. Compléter la supervision : visualisation des indicateurs et système d'alertes
+2. Écrire le calcul distribué Snowpark, dernière des trois méthodes de C4.2.2.
+3. Compléter la supervision : visualisation des indicateurs et système d'alertes
    (C4.3.1), au-delà de la table `speed.pipeline_runs` déjà alimentée.
 
 ## Conventions de travail

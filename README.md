@@ -75,6 +75,17 @@ n'est necessaire.
 | `docs/commandes_successives.md` | Trace chronologique des commandes reellement executees |
 | `tests/` | Tests automatises, executes par la CI |
 
+## Integration continue
+
+Depot : `Mael8zinsou/gamelens-bloc4_0` (prive). Le workflow `.github/workflows/ci.yml`
+s'execute a chaque push et chaque pull request, en cinq etages : qualite du code,
+tests unitaires, integrite du DAG Airflow, integration sur infrastructure jetable,
+puis publication de l'image Airflow sur `ghcr.io` depuis la branche principale
+uniquement.
+
+Image publiee : `ghcr.io/mael8zinsou/gamelens-bloc4_0/airflow`, etiquetee `latest`
+et par le SHA du commit.
+
 ## Etat d'avancement
 
 Voir le tableau de suivi dans `CLAUDE.md`.

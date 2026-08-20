@@ -369,3 +369,74 @@ d'intégration sur infrastructure jetable, et la publication d'image sur
 C4.2.3 étant éliminatoire, présenter un fichier YAML jamais exécuté serait
 exactement le travers que `CLAUDE.md` interdit. Il faut un dépôt distant et au
 moins un run vert avant la soutenance.
+
+> **Résolu le 20/08/2026, dans la même session.** Dépôt privé créé et poussé,
+> deux exécutions réelles du workflow, la seconde verte sur les cinq étages.
+> Voir OBS-21 à OBS-23. Cette observation est conservée telle quelle parce que
+> le raisonnement qu'elle porte reste valable : ce qui n'a jamais été exécuté
+> ne se présente pas comme fonctionnel.
+
+## OBS-21. La CI a échoué à sa première exécution réelle, et c'est le résultat utile
+
+Le dépôt distant privé `Mael8zinsou/gamelens-bloc4_0` a été créé et poussé le
+20/08/2026, ce qui a déclenché la première exécution réelle du workflow.
+
+Résultat : **trois étages verts du premier coup** (qualité, tests unitaires,
+intégrité du DAG), **un étage en échec** (intégration), le cinquième ignoré par
+dépendance.
+
+Ce n'est pas un hasard. Les trois étages verts avaient été rejoués localement
+avec exactement les mêmes commandes. L'étage qui a cassé est précisément celui
+que je ne pouvais pas rejouer en local, faute d'environnement jetable : il
+démarre le socle Docker de zéro, sur une machine où rien ne préexiste.
+
+Formulation retenue pour l'oral : **une CI qui passe au vert du premier coup sur
+cinq étages n'a en général rien vérifié.** Ce qui compte n'est pas qu'elle soit
+verte, c'est qu'elle ait été rouge pour une bonne raison au moins une fois.
+
+## OBS-22. Le défaut était dans le test, pas dans l'infrastructure
+
+La cause de l'échec ci-dessus mérite d'être détaillée, parce qu'elle est
+contre-intuitive.
+
+Le contrôle vérifiait que le schéma `speed` contient bien 4 tables après
+initialisation automatique du conteneur, par
+`SELECT count(*) FROM information_schema.tables WHERE table_schema='speed'`.
+
+En local, `\dt speed.*` affiche bien 4 tables, ce qui semblait confirmer
+l'attendu. Mais `information_schema.tables` **inclut les vues** : le schéma
+contient 4 tables de base plus la vue `v_daily_player_stats`, soit 5 lignes.
+L'infrastructure était parfaitement conforme, c'est l'assertion qui était fausse.
+
+Deux enseignements :
+
+- un test qui échoue ne désigne pas nécessairement le système testé. Avant de
+  corriger le code, il faut vérifier que l'attendu était juste ;
+- deux commandes qui semblent poser la même question, `\dt` et
+  `information_schema.tables`, n'y répondent pas de la même façon. Le raccourci
+  interactif d'un client et la vue système normalisée ne recensent pas les
+  mêmes objets.
+
+Le contrôle vérifie désormais séparément les 4 tables et la vue, ce qui rend
+aussi le diagnostic immédiat au lieu d'un simple `grep` qui ne dit rien.
+
+## OBS-23. Le défaut prédit avant qu'il ne survienne
+
+L'étage de publication n'a pas eu l'occasion d'échouer, l'intégration l'ayant
+précédé, mais il aurait planté.
+
+Il construisait le nom d'image depuis `${{ github.repository }}`, qui vaut
+`Mael8zinsou/gamelens-bloc4_0` en conservant la majuscule du compte, alors qu'un
+nom d'image Docker doit être **entièrement en minuscules**. L'erreur aurait été
+`invalid reference format`, qui ne dit rien de la casse et envoie chercher
+ailleurs.
+
+Repéré en relisant le workflow pendant que le premier run tournait, et corrigé
+dans le même commit que l'assertion de schéma. La seconde exécution est passée
+au vert sur les cinq étages, et l'image a bien été publiée sous
+`ghcr.io/mael8zinsou/gamelens-bloc4_0/airflow`, avec deux étiquettes : `latest`
+et le SHA complet du commit.
+
+Le double étiquetage n'est pas décoratif. Sans l'étiquette par SHA, revenir à
+une version antérieure consisterait à espérer que `latest` pointe encore sur la
+bonne image, ce qui n'est pas une procédure de retour arrière mais un pari.
