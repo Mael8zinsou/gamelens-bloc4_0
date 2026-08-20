@@ -17,10 +17,9 @@ from __future__ import annotations
 
 import sys
 
+from common import config, configurer_logs
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import TopicAlreadyExistsError
-
-from common import config, configurer_logs
 
 logger = configurer_logs("create_topics")
 
@@ -46,12 +45,17 @@ def main() -> int:
         for topic in TOPICS:
             try:
                 admin.create_topics([topic])
-                logger.info("topic %s cree (%s partition(s), retention 7 jours)",
-                            topic.name, topic.num_partitions)
+                logger.info(
+                    "topic %s cree (%s partition(s), retention 7 jours)",
+                    topic.name,
+                    topic.num_partitions,
+                )
             except TopicAlreadyExistsError:
                 logger.info("topic %s deja present, rien a faire", topic.name)
-        logger.info("topics du cluster : %s",
-                    sorted(t for t in admin.list_topics() if not t.startswith("__")))
+        logger.info(
+            "topics du cluster : %s",
+            sorted(t for t in admin.list_topics() if not t.startswith("__")),
+        )
     finally:
         admin.close()
     return 0

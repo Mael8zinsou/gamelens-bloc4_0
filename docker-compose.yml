@@ -11,6 +11,63 @@
 
 name: gamelens
 
+# ============================================================================
+# Bloc commun aux composants Airflow (C4.2.2, orchestrateur).
+#
+# Executeur : LocalExecutor, pas CeleryExecutor. Le compose officiel d'Airflow
+# retient Celery, ce qui impose un broker Redis et des conteneurs worker
+# supplementaires. Cet appareillage sert la montee en charge horizontale, dont
+# un DAG de cinq taches sur un poste unique n'a aucun usage. LocalExecutor
+# execute les taches en sous-processus paralleles, ce qui suffit ici et divise
+# par deux le nombre de conteneurs. Choix assume, a defendre comme un
+# dimensionnement et non comme une simplification.
+#
+# Les connexions sont declarees par variable d'environnement
+# (AIRFLOW_CONN_*) et non creees a la main dans l'interface : l'orchestrateur
+# se reconstruit entierement depuis le depot, sans etape manuelle.
+# ============================================================================
+x-airflow-commun: &airflow-commun
+  build:
+    context: ./docker/airflow
+  image: gamelens/airflow:3.1.8
+  environment: &airflow-commun-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:devlocal_airflow@postgres:5432/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:-gamelens_jwt_dev_secret}
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # Connexion vers la couche Silver speed, consommee par les taches du DAG.
+    AIRFLOW_CONN_GAMELENS_POSTGRES: postgresql://gamelens_app:devlocal_app@postgres:5432/gamelens
+    # Frontiere de configuration : depuis un conteneur, la base se joint par
+    # postgres:5432, pas par localhost:5433. Le code d'ingestion est identique
+    # dans les deux cas, seule la configuration change.
+    POSTGRES_HOST: postgres
+    POSTGRES_PORT: '5432'
+    POSTGRES_DB: gamelens
+    POSTGRES_USER: gamelens_app
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devlocal_app}
+    KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    PYTHONPATH: /opt/gamelens/ingestion
+    GAMELENS_ROOT: /opt/gamelens
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./docker/airflow/logs:/opt/airflow/logs
+    - ./docker/airflow/config:/opt/airflow/config
+    - ./docker/airflow/plugins:/opt/airflow/plugins
+    # Le code du projet est monte en lecture seule : les taches reutilisent les
+    # memes modules que le pipeline temps reel, sans duplication.
+    - ./ingestion:/opt/gamelens/ingestion:ro
+    - ./config:/opt/gamelens/config:ro
+    - ./sql:/opt/gamelens/sql:ro
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    postgres:
+      condition: service_healthy
+
 services:
 
   # --------------------------------------------------------------------------
@@ -83,6 +140,117 @@ services:
       timeout: 10s
       retries: 10
       start_period: 30s
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Airflow, initialisation. Conteneur ephemere : il migre le schema de la base
+  # de metadonnees, cree le compte d'administration, puis sort. Les autres
+  # composants attendent sa sortie en succes avant de demarrer.
+  # --------------------------------------------------------------------------
+  airflow-init:
+    <<: *airflow-commun
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins /opt/airflow/config
+        chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow
+        exec /entrypoint airflow version
+    environment:
+      <<: *airflow-commun-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+    user: "0:0"
+    restart: "no"
+
+  # --------------------------------------------------------------------------
+  # Airflow, serveur d'API et interface web. En Airflow 3, le composant
+  # "webserver" d'Airflow 2 est remplace par api-server, qui sert a la fois
+  # l'interface et l'API d'execution utilisee par les taches.
+  # --------------------------------------------------------------------------
+  airflow-apiserver:
+    <<: *airflow-commun
+    container_name: gamelens-airflow-apiserver
+    command: api-server
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Airflow, ordonnanceur. Decide quelles taches sont eligibles et les lance.
+  # --------------------------------------------------------------------------
+  airflow-scheduler:
+    <<: *airflow-commun
+    container_name: gamelens-airflow-scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Airflow, analyseur de DAG. Composant distinct et obligatoire depuis
+  # Airflow 3 : l'analyse des fichiers de DAG est isolee de l'ordonnanceur,
+  # de sorte qu'un fichier de DAG defectueux ne puisse plus le desstabiliser.
+  # --------------------------------------------------------------------------
+  airflow-dag-processor:
+    <<: *airflow-commun
+    container_name: gamelens-airflow-dag-processor
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Airflow, declencheur asynchrone. Necessaire des qu'une tache est deferrable
+  # (certains capteurs le sont par defaut en Airflow 3) : sans lui, la tache
+  # resterait suspendue indefiniment sans message d'erreur explicite.
+  # --------------------------------------------------------------------------
+  airflow-triggerer:
+    <<: *airflow-commun
+    container_name: gamelens-airflow-triggerer
+    command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:

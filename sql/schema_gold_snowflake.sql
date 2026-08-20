@@ -60,7 +60,8 @@ CREATE OR REPLACE TABLE gamelens.mart.dim_games (
     twitch_game_id    VARCHAR,
     gog_slug          VARCHAR,
     rawg_id           NUMBER(10, 0),
-    gold_loaded_at    TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP()
+    gold_loaded_at    TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+    CONSTRAINT uq_dim_games_steam_appid UNIQUE (steam_appid)
 )
 COMMENT = 'Referentiel unifie des jeux suivis (portefeuille Kestrel Interactive + panel concurrent). Grain : un enregistrement par jeu.';
 
@@ -85,7 +86,8 @@ CREATE OR REPLACE TABLE gamelens.mart.fact_prices (
     price           NUMBER(10, 2) NOT NULL COMMENT 'Doit rester > 0 ; verifie par test dbt expression_is_true.',
     currency        CHAR(3) NOT NULL DEFAULT 'EUR',
     promotion_flag  BOOLEAN NOT NULL DEFAULT FALSE,
-    collected_at    TIMESTAMP_NTZ NOT NULL
+    collected_at    TIMESTAMP_NTZ NOT NULL,
+    CONSTRAINT uq_fact_prices_grain UNIQUE (game_id, store_id, collected_at)
 )
 COMMENT = 'Tarifs collectes par jeu et par boutique. Alimentee par le scraping GOG et les API de tarification (Bloc 1).';
 

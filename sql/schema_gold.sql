@@ -49,7 +49,12 @@ CREATE TABLE IF NOT EXISTS mart.dim_games (
     twitch_game_id    TEXT,
     gog_slug          TEXT,
     rawg_id           INTEGER,
-    gold_loaded_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    gold_loaded_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Cle naturelle d'unicite, ajoutee lors de la construction du DAG de
+    -- promotion : sans elle, un rejeu du DAG dupliquerait les dimensions.
+    -- La cle primaire reste l'UUID interne, conformement aux conventions du
+    -- Bloc 2 ; cette contrainte ne sert qu'a ancrer le ON CONFLICT.
+    CONSTRAINT uq_dim_games_steam_appid UNIQUE (steam_appid)
 );
 
 COMMENT ON TABLE mart.dim_games IS
@@ -80,7 +85,10 @@ CREATE TABLE IF NOT EXISTS mart.fact_prices (
     price           NUMERIC(10, 2) NOT NULL CHECK (price > 0),
     currency        CHAR(3) NOT NULL DEFAULT 'EUR',
     promotion_flag  BOOLEAN NOT NULL DEFAULT FALSE,
-    collected_at    TIMESTAMPTZ NOT NULL
+    collected_at    TIMESTAMPTZ NOT NULL,
+    -- Meme raison que pour dim_games : ancre du ON CONFLICT rendant la
+    -- promotion des prix rejouable sans duplication.
+    CONSTRAINT uq_fact_prices_grain UNIQUE (game_id, store_id, collected_at)
 );
 
 COMMENT ON TABLE mart.fact_prices IS

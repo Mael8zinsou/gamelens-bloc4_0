@@ -102,8 +102,12 @@ def execution(composant: str, logger: logging.Logger):
                       SET status = 'failed', ended_at = now(),
                           records_in = %s, records_written = %s, error_message = %s
                     WHERE run_id = %s""",
-                (compteurs["records_in"], compteurs["records_written"],
-                 f"{type(exc).__name__}: {exc}"[:2000], run_id),
+                (
+                    compteurs["records_in"],
+                    compteurs["records_written"],
+                    f"{type(exc).__name__}: {exc}"[:2000],
+                    run_id,
+                ),
             )
         logger.error("execution %s en echec : %s: %s", composant, type(exc).__name__, exc)
         raise
@@ -118,7 +122,9 @@ def execution(composant: str, logger: logging.Logger):
             )
         logger.info(
             "execution %s terminee (lus=%s, ecrits=%s)",
-            composant, compteurs["records_in"], compteurs["records_written"],
+            composant,
+            compteurs["records_in"],
+            compteurs["records_written"],
         )
     finally:
         conn.close()

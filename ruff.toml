@@ -1,0 +1,26 @@
+# Configuration de qualite du code, appliquee a l'identique en local et par la
+# CI (etage "qualite" de .github/workflows/ci.yml).
+
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = [
+    "E",    # erreurs de style pycodestyle
+    "F",    # erreurs logiques pyflakes (imports inutilises, variables non definies)
+    "I",    # tri des imports
+    "UP",   # constructions obsoletes au regard de la version de Python ciblee
+    "B",    # pieges courants (bugbear)
+    "C4",   # comprehensions inutilement verbeuses
+]
+ignore = [
+    "E501",  # longueur de ligne : deja bornee par line-length, doublon bruyant
+]
+
+[lint.per-file-ignores]
+# Un DAG Airflow se termine par l'appel de la fonction decoree, dont la valeur
+# de retour n'est pas utilisee : c'est la forme attendue, pas un oubli.
+"dags/*.py" = ["B008"]
+
+[format]
+quote-style = "double"

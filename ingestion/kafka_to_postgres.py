@@ -31,9 +31,8 @@ import argparse
 import json
 import sys
 
-from kafka import KafkaConsumer
-
 from common import config, configurer_logs, connexion_pg, execution
+from kafka import KafkaConsumer
 
 logger = configurer_logs("kafka_to_pg")
 
@@ -74,10 +73,17 @@ def traiter_lot(conn, messages: list, compteurs: dict) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parseur = argparse.ArgumentParser(description="Consumer Kafka vers PostgreSQL")
-    parseur.add_argument("--timeout", type=int, default=0,
-                         help="arret apres N secondes sans nouveau message (0 = jamais)")
-    parseur.add_argument("--depuis-le-debut", action="store_true",
-                         help="repartir du debut du topic plutot que du dernier offset valide")
+    parseur.add_argument(
+        "--timeout",
+        type=int,
+        default=0,
+        help="arret apres N secondes sans nouveau message (0 = jamais)",
+    )
+    parseur.add_argument(
+        "--depuis-le-debut",
+        action="store_true",
+        help="repartir du debut du topic plutot que du dernier offset valide",
+    )
     args = parseur.parse_args(argv)
 
     cfg = config()
@@ -87,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
         group_id=GROUPE,
         value_deserializer=lambda v: json.loads(v.decode("utf-8")),
         auto_offset_reset="earliest" if args.depuis_le_debut else "latest",
-        enable_auto_commit=False,          # la validation suit l'ecriture en base
+        enable_auto_commit=False,  # la validation suit l'ecriture en base
         consumer_timeout_ms=args.timeout * 1000 if args.timeout else float("inf"),
         max_poll_records=200,
     )
@@ -104,14 +110,22 @@ def main(argv: list[str] | None = None) -> int:
                 if len(lot) >= 50:
                     inseres = traiter_lot(conn, lot, compteurs)
                     consommateur.commit()
-                    logger.info("lot de %s messages : %s inseres, %s doublons absorbes",
-                                len(lot), inseres, len(lot) - inseres)
+                    logger.info(
+                        "lot de %s messages : %s inseres, %s doublons absorbes",
+                        len(lot),
+                        inseres,
+                        len(lot) - inseres,
+                    )
                     lot = []
             if lot:
                 inseres = traiter_lot(conn, lot, compteurs)
                 consommateur.commit()
-                logger.info("lot final de %s messages : %s inseres, %s doublons absorbes",
-                            len(lot), inseres, len(lot) - inseres)
+                logger.info(
+                    "lot final de %s messages : %s inseres, %s doublons absorbes",
+                    len(lot),
+                    inseres,
+                    len(lot) - inseres,
+                )
     except KeyboardInterrupt:
         logger.info("arret demande par l'operateur")
     finally:

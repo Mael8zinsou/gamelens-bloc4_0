@@ -30,18 +30,17 @@ import argparse
 import json
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests
+from common import charger_watchlist, config, configurer_logs, execution
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
-
-from common import charger_watchlist, config, configurer_logs, execution
 
 logger = configurer_logs("steam_producer")
 
 URL_STEAM = "https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/"
-DELAI_ENTRE_APPELS = 0.4   # respect des limites de frequence de l'API Steam
+DELAI_ENTRE_APPELS = 0.4  # respect des limites de frequence de l'API Steam
 TIMEOUT_HTTP = 10
 
 
@@ -61,7 +60,7 @@ def cycle(producteur: KafkaProducer, topic: str, titres: list[dict], compteurs: 
     """Un passage complet sur la watchlist."""
     session = requests.Session()
     session.headers["User-Agent"] = "GameLens/1.0 (projet de certification RNCP39586)"
-    collecte_le = datetime.now(timezone.utc).replace(microsecond=0)
+    collecte_le = datetime.now(UTC).replace(microsecond=0)
 
     for titre in titres:
         appid = titre["steam_appid"]
@@ -69,8 +68,9 @@ def cycle(producteur: KafkaProducer, topic: str, titres: list[dict], compteurs: 
         try:
             joueurs = interroger_steam(session, appid)
         except requests.RequestException as exc:
-            logger.warning("appid=%s injoignable (%s), titre ignore pour ce cycle",
-                           appid, type(exc).__name__)
+            logger.warning(
+                "appid=%s injoignable (%s), titre ignore pour ce cycle", appid, type(exc).__name__
+            )
             continue
 
         if joueurs is None:
@@ -101,8 +101,13 @@ def main(argv: list[str] | None = None) -> int:
     titres = charger_watchlist()
     cycles_vises = 1 if args.once else args.cycles
 
-    logger.info("%s titres suivis, topic=%s, broker=%s, intervalle=%ss",
-                len(titres), cfg["topic_players"], cfg["kafka_servers"], cfg["poll_interval"])
+    logger.info(
+        "%s titres suivis, topic=%s, broker=%s, intervalle=%ss",
+        len(titres),
+        cfg["topic_players"],
+        cfg["kafka_servers"],
+        cfg["poll_interval"],
+    )
 
     producteur = KafkaProducer(
         bootstrap_servers=cfg["kafka_servers"].split(","),

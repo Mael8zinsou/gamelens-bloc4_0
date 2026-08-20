@@ -1,0 +1,224 @@
+# ============================================================================
+# GameLens - Integration continue et deploiement continu (C4.2.3)
+# ----------------------------------------------------------------------------
+# Le referentiel attend que le pipeline "automatise les taches d'integration et
+# de deploiement continu", et le reglement special ajoute la mention DevOps.
+# La chaine ne se limite donc pas a executer des tests : elle valide la qualite
+# du code, la logique metier, l'infrastructure elle-meme, puis publie une image
+# versionnee prete a etre deployee.
+#
+# Cinq etages, du moins couteux au plus couteux, pour que l'erreur la plus
+# frequente soit aussi la plus rapide a detecter :
+#
+#   1. qualite      : lint et format, quelques secondes
+#   2. tests        : tests unitaires sans infrastructure, quelques secondes
+#   3. dag          : construction de l'image Airflow et analyse reelle du DAG
+#   4. integration  : socle Docker demarre, pipeline execute de bout en bout
+#   5. publication  : image poussee sur le registre, uniquement sur la branche
+#                     principale et si tout ce qui precede est vert
+# ============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+
+  qualite:
+    name: Qualite du code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Installer les outils de qualite
+        run: python -m pip install --upgrade pip ruff==0.6.9
+
+      - name: Lint
+        run: ruff check ingestion dags tests
+
+      - name: Format
+        run: ruff format --check ingestion dags tests
+
+  tests:
+    name: Tests unitaires
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Installer les dependances
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Executer les tests
+        run: python -m pytest tests -v --junit-xml=rapport-tests.xml
+
+      - name: Conserver le rapport de tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-tests
+          path: rapport-tests.xml
+
+  dag:
+    name: Integrite du DAG Airflow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construire l'image Airflow du projet
+        run: docker build -t gamelens/airflow:ci ./docker/airflow
+
+      - name: Verifier que le DAG s'analyse sans erreur
+        # Analyse le dossier dags avec le vrai moteur Airflow, base de
+        # metadonnees SQLite ephemere. Un DAG qui ne s'importe pas, une
+        # dependance circulaire ou un provider manquant echouent ici, avant
+        # d'atteindre l'ordonnanceur.
+        #
+        # L'etape reserialize n'est pas decorative : en Airflow 3, `dags list`
+        # lit la base de metadonnees et non le dossier. Sans elle, la commande
+        # renvoie une liste vide sur une base neuve, et le controle passerait
+        # a cote d'un DAG absent.
+        run: |
+          docker run --rm             -v "${{ github.workspace }}/dags:/opt/airflow/dags:ro"             -e AIRFLOW__CORE__LOAD_EXAMPLES=false             -e AIRFLOW__CORE__EXECUTOR=LocalExecutor             gamelens/airflow:ci             bash -c "airflow db migrate >/dev/null 2>&1 &&                      airflow dags reserialize >/dev/null 2>&1 &&                      airflow dags list-import-errors 2>/dev/null | tee /tmp/erreurs.txt &&                      grep -q 'No data found' /tmp/erreurs.txt &&                      echo 'PASS: aucune erreur d import' &&                      airflow dags list 2>/dev/null | grep -q gamelens_promotion_gold &&                      echo 'PASS: le DAG gamelens_promotion_gold est enregistre'"
+
+  integration:
+    name: Integration sur infrastructure reelle
+    runs-on: ubuntu-latest
+    needs: [qualite, tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Installer les dependances
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Demarrer le socle PostgreSQL et Kafka
+        # Le meme docker-compose.yml que sur le poste de developpement : c'est
+        # l'infrastructure elle-meme qui est testee, pas une approximation.
+        run: docker compose up -d postgres kafka
+
+      - name: Attendre que le socle soit sain
+        run: |
+          for i in $(seq 1 60); do
+            etat=$(docker inspect -f '{{.State.Health.Status}}' gamelens-postgres 2>/dev/null || echo absent)
+            etat_kafka=$(docker inspect -f '{{.State.Health.Status}}' gamelens-kafka 2>/dev/null || echo absent)
+            if [ "$etat" = "healthy" ] && [ "$etat_kafka" = "healthy" ]; then
+              echo "socle sain apres ${i} tentative(s)"; exit 0
+            fi
+            sleep 5
+          done
+          echo "le socle n a pas demarre a temps"; docker compose logs --tail 50; exit 1
+
+      - name: Verifier l'initialisation du schema Silver speed
+        run: |
+          docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema='speed'" | grep -q '^4$'
+          echo "4 tables presentes dans le schema speed"
+
+      - name: Executer le pipeline temps reel de bout en bout
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5433"
+          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+        run: |
+          python ingestion/create_topics.py
+          python ingestion/seed_game_mapping.py
+          python ingestion/steam_producer.py --once
+          python ingestion/kafka_to_postgres.py --timeout 20 --depuis-le-debut
+
+      - name: Verifier le resultat en base
+        run: |
+          lignes=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc \
+                   "SELECT count(*) FROM speed.player_count_events")
+          echo "lignes ecrites : ${lignes}"
+          [ "${lignes}" -gt 0 ] || { echo "aucune ligne ecrite"; exit 1; }
+
+      - name: Verifier l'idempotence du puits
+        # Rejoue les memes messages depuis le debut du topic : la table ne doit
+        # pas grossir. C'est le test de recette de la session 1, automatise.
+        run: |
+          avant=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc \
+                  "SELECT count(*) FROM speed.player_count_events")
+          docker exec gamelens-kafka /opt/kafka/bin/kafka-consumer-groups.sh \
+            --bootstrap-server localhost:9092 --group gamelens-silver-speed \
+            --reset-offsets --to-earliest --topic gamelens.steam.player_count --execute
+          POSTGRES_PORT=5433 python ingestion/kafka_to_postgres.py --timeout 20
+          apres=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc \
+                  "SELECT count(*) FROM speed.player_count_events")
+          echo "avant rejeu : ${avant}, apres rejeu : ${apres}"
+          [ "${avant}" = "${apres}" ] || { echo "REGRESSION : le rejeu a duplique des lignes"; exit 1; }
+          echo "idempotence verifiee"
+
+      - name: Journaux en cas d'echec
+        if: failure()
+        run: docker compose logs --tail 100
+
+      - name: Arreter le socle
+        if: always()
+        run: docker compose down -v
+
+  publication:
+    name: Publication de l'image
+    runs-on: ubuntu-latest
+    needs: [dag, integration]
+    # Volet deploiement continu : seule la branche principale publie, et
+    # seulement si les quatre etages precedents sont verts. Une branche de
+    # travail est integree en continu mais n'est jamais deployee.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: S'authentifier aupres du registre GitHub
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construire et publier l'image Airflow
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/airflow
+          push: true
+          # Deux etiquettes : latest pour l'usage courant, et le SHA du commit
+          # pour qu'un deploiement soit toujours rattachable a une revision
+          # precise du depot. Sans la seconde, un retour arriere consisterait a
+          # esperer que latest pointe encore sur la bonne image.
+          tags: |
+            ghcr.io/${{ github.repository }}/airflow:latest
+            ghcr.io/${{ github.repository }}/airflow:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Recapitulatif
+        run: |
+          echo "### Image publiee" >> $GITHUB_STEP_SUMMARY
+          echo "- ghcr.io/${{ github.repository }}/airflow:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
