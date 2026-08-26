@@ -7,15 +7,23 @@
 # du code, la logique metier, l'infrastructure elle-meme, puis publie une image
 # versionnee prete a etre deployee.
 #
-# Cinq etages, du moins couteux au plus couteux, pour que l'erreur la plus
+# Six etages, du moins couteux au plus couteux, pour que l'erreur la plus
 # frequente soit aussi la plus rapide a detecter :
 #
 #   1. qualite      : lint et format, quelques secondes
 #   2. tests        : tests unitaires sans infrastructure, quelques secondes
 #   3. dag          : construction de l'image Airflow et analyse reelle du DAG
 #   4. integration  : socle Docker demarre, pipeline execute de bout en bout
-#   5. publication  : image poussee sur le registre, uniquement sur la branche
+#   5. entrepot     : base Snowflake jetable, schema applique, calcul distribue
+#                     verifie, integrite eprouvee en positif et en negatif
+#   6. publication  : image poussee sur le registre, uniquement sur la branche
 #                     principale et si tout ce qui precede est vert
+#
+# Les etages 4 et 5 partagent un principe : eprouver le code sur une
+# infrastructure reelle creee pour le run et detruite apres, plutot que sur des
+# simulacres. Un test qui ne touche jamais le moteur ne dit rien de ce que le
+# moteur fait, et Snowflake en est la demonstration : il accepte des donnees
+# que son propre schema declare interdites.
 # ============================================================================
 
 name: CI
@@ -212,10 +220,87 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  entrepot:
+    name: Recette de l'entrepot Snowflake
+    runs-on: ubuntu-latest
+    needs: [qualite, tests]
+    # L'etage d'integration precedent eprouve la couche Silver speed sur une
+    # infrastructure Docker jetable. Celui-ci applique le meme principe a
+    # l'entrepot : une base Snowflake est creee pour la duree du run, eprouvee,
+    # puis supprimee. La couche de demonstration gamelens n'est jamais visee,
+    # et recette_ci.py refuse de demarrer si elle l'etait.
+    #
+    # Il comble le seul angle mort de la chaine : entrepot/ passait au controle
+    # de qualite mais rien ne l'executait, faute d'identifiants sur le runner.
+    # C'etait la partie la moins couverte alors qu'elle est la plus exposee,
+    # Snowflake n'appliquant pas les contraintes relationnelles.
+    #
+    # Cout : quelques dizaines de secondes d'entrepot virtuel XS par run, soit
+    # de l'ordre de 0,02 credit. Negligeable devant les 400 dollars du compte,
+    # mais non nul : c'est la raison du dimensionnement XS et de l'auto-suspend.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Verifier la presence des identifiants
+        # Message explicite plutot qu'un echec obscur du connecteur trois
+        # minutes plus tard, apres l'installation des dependances.
+        env:
+          COMPTE: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          CLE: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+        run: |
+          manquants=""
+          [ -n "${COMPTE}" ] || manquants="${manquants} SNOWFLAKE_ACCOUNT"
+          [ -n "${CLE}" ] || manquants="${manquants} SNOWFLAKE_PRIVATE_KEY"
+          if [ -n "${manquants}" ]; then
+            echo "Secrets absents du depot :${manquants}"
+            echo "Deposer la cle avec : gh secret set SNOWFLAKE_PRIVATE_KEY < secrets/snowflake_key.p8"
+            exit 1
+          fi
+          echo "identifiants presents"
+
+      - name: Installer l'outillage Snowflake
+        # Installe le fichier de dependances reel, dbt compris, et non un
+        # sous-ensemble commode. La resolution conjointe de Snowpark et de dbt
+        # avait echoue a plusieurs reprises le 20/08/2026 : la refaire a chaque
+        # run est en soi un test de non-regression sur l'epinglage.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-snowflake.txt
+
+      - name: Executer la recette sur une base jetable
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+          SNOWFLAKE_ROLE: ACCOUNTADMIN
+          SNOWFLAKE_WAREHOUSE: gamelens_wh
+          PYTHONPATH: entrepot
+        run: python entrepot/recette_ci.py
+
+      - name: Supprimer la base jetable restee en place
+        # recette_ci.py supprime deja la base dans son bloc finally. Ce filet ne
+        # sert qu'au cas ou le run est annule ou depasse son delai, cas ou le
+        # finally n'est jamais atteint et ou la base survivrait au run.
+        if: always()
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+          SNOWFLAKE_ROLE: ACCOUNTADMIN
+          SNOWFLAKE_WAREHOUSE: gamelens_wh
+          PYTHONPATH: entrepot
+        continue-on-error: true
+        run: python entrepot/recette_ci.py --supprimer-seulement
+
   publication:
     name: Publication de l'image
     runs-on: ubuntu-latest
-    needs: [dag, integration]
+    needs: [dag, integration, entrepot]
     # Volet deploiement continu : seule la branche principale publie, et
     # seulement si les quatre etages precedents sont verts. Une branche de
     # travail est integree en continu mais n'est jamais deployee.

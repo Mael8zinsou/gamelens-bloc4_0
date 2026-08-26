@@ -44,12 +44,17 @@ class ConfigurationManquante(RuntimeError):
     """
 
 
-def _charger_cle_privee(chemin: str, phrase: str | None):
-    """Charge une cle privee RSA au format attendu par le connecteur."""
+def _charger_cle_privee(donnees: bytes, phrase: str | None):
+    """Convertit une cle privee RSA au format DER attendu par le connecteur.
+
+    La cle arrive soit d'un fichier (usage local), soit directement du contenu
+    PEM (usage en integration continue). Le second cas evite d'ecrire la cle
+    sur le disque du runner : elle ne vit que dans la memoire du processus,
+    le temps de la connexion.
+    """
     from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives import serialization
 
-    donnees = Path(chemin).read_bytes()
     cle = serialization.load_pem_private_key(
         donnees,
         password=phrase.encode() if phrase else None,
@@ -93,25 +98,38 @@ def parametres(avec_contexte: bool = True) -> dict:
         params["schema"] = os.getenv("SNOWFLAKE_SCHEMA", "mart")
 
     chemin_cle = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
+    contenu_cle = os.getenv("SNOWFLAKE_PRIVATE_KEY")
     mot_de_passe = os.getenv("SNOWFLAKE_PASSWORD")
+    phrase = os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE") or None
 
     if chemin_cle:
+        params["private_key"] = _charger_cle_privee(Path(chemin_cle).read_bytes(), phrase)
+    elif contenu_cle:
+        # Voie de l'integration continue : le secret du dispositif de CI est une
+        # chaine, pas un fichier. Les gestionnaires de secrets restituent parfois
+        # les sauts de ligne echappes, ce qui casse le decodage PEM avec un
+        # message trompeur sur le format de la cle ; on les retablit.
         params["private_key"] = _charger_cle_privee(
-            chemin_cle, os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE") or None
+            contenu_cle.replace("\\n", "\n").encode(), phrase
         )
     elif mot_de_passe:
         params["password"] = mot_de_passe
     else:
         raise ConfigurationManquante(
             "Aucun moyen d'authentification : definir SNOWFLAKE_PRIVATE_KEY_PATH "
-            "(recommande) ou SNOWFLAKE_PASSWORD dans .env."
+            "(local, recommande), SNOWFLAKE_PRIVATE_KEY (contenu PEM, integration "
+            "continue) ou SNOWFLAKE_PASSWORD."
         )
 
     return params
 
 
 def mode_authentification() -> str:
-    return "paire de cles RSA" if os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH") else "mot de passe"
+    if os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH"):
+        return "paire de cles RSA (fichier)"
+    if os.getenv("SNOWFLAKE_PRIVATE_KEY"):
+        return "paire de cles RSA (contenu en environnement)"
+    return "mot de passe"
 
 
 def connexion(avec_contexte: bool = True):

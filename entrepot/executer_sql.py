@@ -24,10 +24,27 @@ from __future__ import annotations
 
 import argparse
 import io
+import re
 import sys
 from pathlib import Path
 
 from connexion import connexion
+
+# Les scripts de schema nomment la base en dur (gamelens.mart.dim_games), et
+# ils contiennent des CREATE OR REPLACE TABLE. Les rejouer tels quels sur le
+# compte, par exemple depuis l'integration continue, detruirait la couche de
+# demonstration. --base redirige le script vers une base jetable.
+#
+# La limite de mot est essentielle : elle atteint "gamelens.mart" et
+# "DATABASE gamelens" sans toucher a "gamelens_wh" ni aux roles
+# "gamelens_etl_service", qui restent des objets de compte partages.
+MOTIF_BASE = re.compile(r"(?<![A-Za-z0-9_])gamelens(?![A-Za-z0-9_])")
+
+
+def rediriger_base(contenu: str, base: str) -> tuple[str, int]:
+    """Reecrit le script pour viser une autre base que gamelens."""
+    contenu, nombre = MOTIF_BASE.subn(base, contenu)
+    return contenu, nombre
 
 
 def est_significative(instruction: str) -> bool:
@@ -61,6 +78,13 @@ def main(argv: list[str] | None = None) -> int:
         "--continuer", action="store_true", help="poursuivre malgre les erreurs et les recenser"
     )
     parseur.add_argument(
+        "--base",
+        help=(
+            "rediriger le script vers une autre base que gamelens "
+            "(base jetable de recette, integration continue)"
+        ),
+    )
+    parseur.add_argument(
         "--sans-contexte",
         action="store_true",
         help="ne pas se positionner sur l'entrepot et la base au moment de la connexion",
@@ -70,12 +94,19 @@ def main(argv: list[str] | None = None) -> int:
     from snowflake.connector.util_text import split_statements
 
     contenu = Path(args.fichier).read_text(encoding="utf-8")
+
+    redirections = 0
+    if args.base:
+        contenu, redirections = rediriger_base(contenu, args.base)
+
     instructions = [i for i, _ in split_statements(io.StringIO(contenu)) if est_significative(i)]
 
     print(f"Script   : {args.fichier}")
     print(
         f"Mode     : {'poursuite sur erreur' if args.continuer else 'arret a la premiere erreur'}"
     )
+    if args.base:
+        print(f"Base     : {args.base} ({redirections} mention(s) redirigee(s) depuis gamelens)")
     print(f"Contenu  : {len(instructions)} instruction(s)\n")
 
     conn = connexion(avec_contexte=not args.sans_contexte)
