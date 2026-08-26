@@ -227,6 +227,24 @@ rétrospectivement en fin de projet.
 En fin de session, les quatre fichiers de suivi sont mis à jour ensemble :
 ces trois-là plus le tableau d'avancement de `CLAUDE.md`.
 
+### Le sous-dossier de vulgarisation, à une cadence différente
+
+`docs/vulgarisation/` n'est pas un livrable de la certification. Il contient
+deux documents qui expliquent le projet à deux lecteurs distincts :
+`pour-un-junior.md` (a le vocabulaire, pas l'expérience de la production) et
+`explique-simplement.md` (aucun vocabulaire de la donnée, méthode Feynman).
+
+Il ne se met pas à jour à chaque session, contrairement aux trois précédents,
+parce qu'il décrit des intentions et pas des fichiers. Règle retenue : il est
+relu et corrigé **à chaque session qui ajoute ou retire une brique, ou qui
+invalide une explication qui s'y trouve**. Une correction de détail ne le
+justifie pas.
+
+Un document de vulgarisation faux est pire qu'absent : il enseigne quelque
+chose d'inexact avec assurance. Deux affirmations y sont aujourd'hui datées et
+deviendront fausses dès qu'elles seront traitées : l'ingestion temps réel n'est
+planifiée par rien, et `GAMELENS_SERVICE` tourne en `ACCOUNTADMIN`.
+
 ### Note de calendrier sur le compte d'essai Snowflake
 
 Un compte d'essai Snowflake a une durée de vie limitée (30 jours, crédits

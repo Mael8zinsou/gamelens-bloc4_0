@@ -1,0 +1,67 @@
+# Vulgarisation
+
+Ce sous-dossier n'est pas un livrable de la certification. Il existe pour une
+raison plus simple : pouvoir expliquer ce projet à quelqu'un d'autre, et se
+rendre compte, en essayant, de ce que l'on ne comprend pas encore soi-même.
+
+Le reste de `docs/` est écrit pour un jury et pour un futur mainteneur. Il est
+précis, mais il suppose acquis à peu près tout le vocabulaire du métier. Ces
+documents-ci font l'inverse : ils partent du lecteur.
+
+## Deux versions, deux lecteurs
+
+| Document | Pour qui | Ce à quoi il répond | Durée |
+|---|---|---|---|
+| [`pour-un-junior.md`](pour-un-junior.md) | Un data engineer fraîchement diplômé. Il a le vocabulaire, il n'a pas encore l'expérience de la production. | « Pourquoi as-tu fait ça comme ça, et pas autrement ? » | ~25 min |
+| [`explique-simplement.md`](explique-simplement.md) | Quelqu'un qui sait ce qu'est un programme, une base de données, une API, mais pour qui « pipeline », « idempotence » ou « couche Gold » ne veulent rien dire. | « C'est quoi, ton truc ? » | ~12 min |
+
+La ligne de partage est volontairement franche, sinon les deux documents
+seraient le même à quelques mots près.
+
+La version junior **assume le jargon** et se concentre sur les décisions et
+leurs contreparties. Elle n'explique pas ce qu'est une clé étrangère, elle
+explique pourquoi il n'y en a pas.
+
+La version simple **n'assume aucun vocabulaire de la donnée**. Elle avance par
+analogies, et elle se termine par une section que l'on ne trouve nulle part
+ailleurs dans ce dépôt : la liste des endroits où l'explication ne tient pas
+encore. C'est le coeur de la méthode Feynman, et c'est aussi la meilleure liste
+de révision disponible avant une session de questions.
+
+## Par où commencer
+
+Si vous ne connaissez pas le projet, commencez par `explique-simplement.md`,
+même si vous êtes technique. Il donne la carte. `pour-un-junior.md` donne
+ensuite le détail des choix.
+
+## Ce que ces documents ne sont pas
+
+Ils ne remplacent rien. Quand ils simplifient, ils le disent et renvoient à la
+source :
+
+- `docs/journal_incidents.md` pour les incidents au format complet ;
+- `docs/observations.md` pour les surprises et les fausses pistes ;
+- `docs/cahier_recettes.md` pour les tests et leurs résultats réels ;
+- `docs/commandes_successives.md` pour ce qui a été tapé, dans l'ordre ;
+- `CLAUDE.md` pour l'état d'avancement et les contraintes d'environnement.
+
+## Entretien
+
+Ces documents **vieillissent plus vite que le code**, parce qu'ils décrivent
+des intentions et pas des fichiers. Une brique ajoutée sans mise à jour d'ici
+les rend faux, et un document de vulgarisation faux est pire qu'absent : il
+enseigne quelque chose d'inexact avec assurance.
+
+Règle retenue : à chaque session qui **ajoute ou retire une brique**, ou qui
+**invalide une explication donnée ici**, les deux documents sont relus et mis à
+jour dans la même session. Une correction de détail ne le justifie pas.
+
+Points connus à revoir en priorité lors de la prochaine mise à jour :
+
+- l'ingestion temps réel n'est aujourd'hui planifiée par rien, ce que les deux
+  documents disent explicitement. Le jour où un DAG s'en charge, les sections
+  « ce qui ne marche pas encore » deviennent fausses ;
+- l'utilisateur de service Snowflake tourne en `ACCOUNTADMIN`, ce qui est
+  signalé comme une incohérence assumée. Idem le jour où elle sera corrigée.
+
+Dernière mise à jour : 26/08/2026, fin de session 5.
