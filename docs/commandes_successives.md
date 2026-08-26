@@ -1067,3 +1067,182 @@ docker compose run --rm snowflake-cli python entrepot/verifier_gold.py
 
 # Airflow : http://localhost:8080   Grafana : http://localhost:3000   (admin / admin)
 ```
+
+---
+
+# Session 5, 26 août 2026
+
+Objectif unique : combler le seul angle mort de la chaîne d'intégration
+continue. `entrepot/` passait au contrôle de qualité mais rien ne l'exécutait,
+faute d'identifiants Snowflake sur le runner.
+
+## Phase 1. État des lieux avant d'engager quoi que ce soit
+
+```bash
+# [BASH] (diagnostic) volumétrie réelle du dépôt, par domaine
+find ./sql ./ingestion ./dags ./entrepot ./supervision ./tests ./docs \
+  -name "*.py" -o -name "*.sql" -o -name "*.md" | wc -l
+# -> 7 737 lignes au total, dont 2 687 de documentation
+
+# [BASH] (diagnostic) qui planifie réellement le pipeline temps réel ?
+grep -rn "steam_producer\|kafka_to_postgres" --include=*.py --include=*.yml .
+# -> appelé par la CI et à la main, par AUCUN DAG. Trou identifié, hors périmètre
+#    de cette session, reporté à la feuille de route.
+
+# [BASH] (diagnostic) état de la supervision, plateforme laissée tourner
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens \
+  -c "SELECT * FROM speed.v_supervision_synthese;"
+# -> 5 alertes ouvertes, fraîcheur 8 505 min, Gold en retard de 6 jours.
+#    La supervision détecte correctement son propre abandon : c'est un
+#    résultat valide, pas une panne.
+```
+
+## Phase 2. Levée d'un risque avant de brancher la CI sur l'entrepôt
+
+```bash
+# [BASH] (diagnostic) DÉCISIF : que contient réellement le script de schéma ?
+grep -nE "^(CREATE|USE|ALTER|GRANT|DROP)" sql/schema_gold_snowflake.sql
+# -> CREATE OR REPLACE TABLE gamelens.mart.dim_games, et la base nommée en dur.
+#    Un étage de CI qui l'aurait rejoué aurait DÉTRUIT la couche de
+#    démonstration à chaque push, sans message d'erreur.
+
+# [BASH] (diagnostic) les scripts Python sont-ils, eux, redirigeables ?
+grep -n "mart\." entrepot/verifier_gold.py entrepot/snowpark_promotion.py
+# -> ils écrivent mart.x sans préfixer la base : ils suivent CURRENT_DATABASE().
+#    Seuls les deux .sql figent gamelens. La frontière de configuration paie.
+```
+
+## Phase 3. Redirection de base, éprouvée hors ligne d'abord
+
+```bash
+# [BASH] (procédure) vérifier la substitution AVANT tout appel à Snowflake
+python -c "
+import re
+from pathlib import Path
+MOTIF = re.compile(r'(?<![A-Za-z0-9_])gamelens(?![A-Za-z0-9_])')
+src = Path('sql/schema_gold_snowflake.sql').read_text(encoding='utf-8')
+out, n = MOTIF.subn('gamelens_ci_42', src)
+print(n, 'redirections')
+print(set(re.findall(r'gamelens[A-Za-z0-9_]*', out)))
+"
+# -> 24 redirections ; gamelens_wh, gamelens_analyst, gamelens_etl_service et
+#    gamelens_dashboard_viewer INTACTS. L'entrepôt virtuel et les rôles sont
+#    des objets de compte, pas des objets de base : les rediriger serait faux.
+```
+
+## Phase 4. Recette exécutée pour de vrai
+
+```powershell
+# [PS] (procédure) recette complète sur base jetable, sept étapes
+docker compose --profile outillage run --rm snowflake-cli `
+  python entrepot/recette_ci.py
+# -> base gamelens_ci_local_37058 créée
+# -> 27 instructions de schéma, 0 erreur
+# -> 8 contrôles d'intégrité au vert sur données saines
+# -> 3 lignes de classement conformes aux valeurs calculées à la main
+# -> 2 contraintes appliquées par le moteur, 4 laissées à l'applicatif
+# -> 4 violations rattrapées par le filet applicatif
+# -> base supprimée. 36 secondes.
+
+# [PS] (procédure) CONTRÔLE DE SÛRETÉ : la couche de démonstration est-elle intacte ?
+docker compose --profile outillage run --rm snowflake-cli `
+  python entrepot/verifier_gold.py
+# -> 15 dim_games, 75 fact_prices, 8 contrôles au vert. Intacte.
+```
+
+## Phase 5. Le test négatif qui a démasqué un garde-fou mort
+
+```powershell
+# [PS] (procédure) TEST NÉGATIF : viser explicitement la base de démonstration
+docker compose --profile outillage run --rm `
+  -e SNOWFLAKE_DATABASE=gamelens snowflake-cli python entrepot/recette_ci.py
+# -> PREMIER PASSAGE : "Recette Snowflake au vert en 41 s", code 0.
+#    Le refus n'a JAMAIS eu lieu. nom_base() écartait discrètement les noms
+#    protégés en retombant sur un nom généré : garde_fou() ne recevait jamais
+#    de nom protégé et ne pouvait donc jamais refuser. Voir OBS-42.
+
+# [PS] (procédure) après correction, le même test
+docker compose --profile outillage run --rm `
+  -e SNOWFLAKE_DATABASE=gamelens snowflake-cli python entrepot/recette_ci.py
+# -> REFUS : la recette vise la base 'gamelens', qui est protegee.
+# -> code de sortie 1, avant toute instruction envoyée à Snowflake.
+```
+
+## Phase 6. Authentification de la CI, éprouvée en local d'abord
+
+```bash
+# [BASH] (procédure) simuler exactement les conditions du runner : la clef
+# arrive comme CONTENU PEM en environnement, pas comme chemin de fichier.
+# La clef passe par une variable, jamais par la ligne de commande.
+export SNOWFLAKE_PRIVATE_KEY="$(cat secrets/snowflake_key.p8)"
+docker compose --profile outillage run --rm \
+  -e SNOWFLAKE_PRIVATE_KEY -e SNOWFLAKE_PRIVATE_KEY_PATH= \
+  snowflake-cli python entrepot/verifier_connexion.py
+# -> authentification : paire de cles RSA (contenu en environnement)
+# -> CONNEXION ETABLIE, Snowflake 10.30.101, AWS_EU_WEST_3
+# -> credits consommes (30 j) : 0.60 sur 400 dollars d'enveloppe
+```
+
+```bash
+# [BASH] (procédure) dépôt des secrets. La clef est lue DEPUIS LE FICHIER par
+# redirection : elle ne transite ni par l'historique du shell ni par argv.
+gh secret set SNOWFLAKE_ACCOUNT --body "RTZSXDV-PM63908"
+gh secret set SNOWFLAKE_USER --body "GAMELENS_SERVICE"
+gh secret set SNOWFLAKE_PRIVATE_KEY < secrets/snowflake_key.p8
+gh secret list
+# -> les trois secrets déposés sur le dépôt privé Mael8zinsou/gamelens-bloc4_0
+```
+
+## Phase 7. Sixième étage de CI, exécuté sur le runner
+
+```bash
+# [BASH] (procédure) valider le YAML avant de pousser
+python -c "
+import yaml, pathlib
+d = yaml.safe_load(pathlib.Path('.github/workflows/ci.yml').read_text(encoding='utf-8'))
+print(list(d['jobs']))
+print(d['jobs']['publication']['needs'])
+"
+# -> 6 étages ; publication dépend désormais de [dag, integration, entrepot]
+
+# [BASH] (procédure) pousser et suivre
+git push
+gh run watch 32954104664 --exit-status
+# -> CONCLUSION: success, six étages verts
+```
+
+Trace réelle de l'étage Snowflake sur le runner, run **32954104664** :
+
+```
+  base jetable   : gamelens_ci_11_1
+  authentification : paire de cles RSA (contenu en environnement)
+  Base     : gamelens_ci_11_1 (24 mention(s) redirigee(s) depuis gamelens)
+  27 reussie(s), 0 en erreur
+  -> 8 controles, 0 violation : conforme
+  -> 3 lignes conformes aux valeurs calculees a la main
+  -> 2 contrainte(s) appliquee(s) par le moteur, 4 laissee(s) a l'applicatif
+  -> 4 violation(s) detectee(s) par le filet applicatif : conforme
+  Recette Snowflake au vert en 41 s.
+  base jetable gamelens_ci_11_1 supprimee
+```
+
+Les trois secrets apparaissent masqués en `***` dans les journaux publics du
+run, y compris la clef privée.
+
+## Récapitulatif des états vérifiés en fin de session 5
+
+| Vérification | Commande | Résultat observé |
+|---|---|---|
+| Redirection de base, hors ligne | substitution par expression régulière | 24 redirections, entrepôt et rôles intacts |
+| Recette complète, en local | `recette_ci.py` | 7 étapes au vert, 36 s |
+| Couche de démonstration intacte | `verifier_gold.py` | 75 tarifs, 8 contrôles au vert |
+| Garde-fou sur base protégée | `-e SNOWFLAKE_DATABASE=gamelens` | refus, code 1 |
+| Authentification par contenu PEM | `verifier_connexion.py` | connexion établie |
+| Tests unitaires | `pytest tests` | 27 passés |
+| Qualité du code | `ruff check` et `format --check` | 21 fichiers conformes |
+| Chaîne complète | run 32954104664 | 6 étages verts, image publiée |
+
+Note d'environnement : `pytest` lancé à la racine du dépôt échoue à la
+collecte, sur un lien symbolique `docker/airflow/logs/dag_processor/latest`
+illisible par Windows. Le répertoire est ignoré par git et la CI lance
+`pytest tests`. Cibler le répertoire `tests` en local, pas la racine.

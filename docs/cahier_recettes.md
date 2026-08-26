@@ -264,6 +264,133 @@ une relation entre lignes ou entre tables ne le sont pas**.
 - **Verdict** : **PASS**. Ces contrôles ne doublent pas le moteur ici, ils le
   remplacent : voir TS-08.
 
+## TS-14. Recette automatisée de l'entrepôt sur base jetable
+
+- **Objet** : couvrir par la CI la seule partie de la plateforme qui ne l'était
+  pas. `entrepot/` passait au contrôle de qualité, mais rien ne l'exécutait,
+  faute d'identifiants sur le runner.
+- **Méthode** : `entrepot/recette_ci.py`. Une base Snowflake est créée pour la
+  durée du run, éprouvée en sept étapes, puis supprimée. Le schéma appliqué est
+  le script **livré**, redirigé vers la base jetable, et non une copie
+  simplifiée : une erreur de DDL introduite dans le livrable est donc vue.
+- **Attendu** : 27 instructions de schéma sans erreur, 8 contrôles d'intégrité
+  au vert sur données saines, puis les résultats détaillés en TS-15 et TS-16.
+- **Observé (26/08/2026)** : **27 réussies, 0 en erreur** ; **8 contrôles au
+  vert** sur 3 jeux, 1 boutique, 24 faits de popularité et 3 tarifs ; durée
+  totale **36 secondes**.
+- **Verdict** : **PASS**.
+- **Vérification collatérale** : la couche de démonstration `gamelens` a été
+  recontrôlée après coup. 75 faits tarifaires, 8 contrôles au vert, intacte.
+
+## TS-15. Le calcul distribué rend les valeurs calculées à la main
+
+- **Objet** : le calcul Snowpark de C4.2.2 était prouvé par une exécution
+  manuelle et par le SQL généré. Il manquait la vérification du **résultat**.
+- **Méthode** : jeu de données déterministe conçu pour que les agrégats soient
+  calculables de tête. Trois jeux sur huit jours, deux genres. Alpha croît de
+  100 en 100, Beta et Gamma restent plats.
+- **Attendu**, calculé à la main avant exécution :
+
+  | Jeu | Moyenne glissante 7 j | Rang dans le genre | Part du genre |
+  |---|---|---|---|
+  | Recette Alpha | (200+...+800) / 7 = 500,0 | 1 | 800 / 850 = 94,1 % |
+  | Recette Beta | 50,0 | 2 | 50 / 850 = 5,9 % |
+  | Recette Gamma | 10,0 | 1 | 100,0 % |
+
+- **Observé (26/08/2026)** : les trois lignes conformes, au chiffre près.
+- **Verdict** : **PASS**. La fenêtre glissante, le classement par partition et
+  la part du total sont vérifiés sur leur résultat, pas sur leur absence
+  d'erreur.
+
+## TS-16. Non-régression sur le comportement des contraintes Snowflake
+
+- **Objet** : TS-08 avait établi empiriquement, le 20/08/2026, ce que Snowflake
+  applique réellement. Ce constat porte une décision d'architecture lourde,
+  reporter l'intégrité sur des tests applicatifs, et il n'était vrai que ce
+  jour-là. Ce cas le transforme en test rejoué à chaque push.
+- **Méthode** : six insertions, chacune assortie d'un verdict attendu.
+- **Attendu et observé (26/08/2026)** :
+
+  | Contrainte éprouvée | Attendu | Observé |
+  |---|---|---|
+  | NOT NULL sur `unified_name` | rejet | **rejetée** |
+  | Longueur `VARCHAR(36)` dépassée | rejet | **rejetée** |
+  | CHECK implicite, prix négatif | acceptation | **acceptée** |
+  | Clef étrangère, `game_id` inexistant | acceptation | **acceptée** |
+  | Clef primaire, `(game_id, day)` en doublon | acceptation | **acceptée** |
+  | Contrainte UNIQUE sur `steam_appid` | acceptation | **acceptée** |
+
+- **Verdict** : **PASS**. 2 contraintes appliquées par le moteur, 4 laissées à
+  la charge de l'applicatif.
+- **Portée** : si Snowflake se mettait à appliquer les clefs étrangères, ce cas
+  virerait au rouge avec un message désignant explicitement la décision
+  d'architecture à réexaminer. C'est la réponse à « et si le fournisseur change
+  de comportement ? ».
+
+## TS-17. Les contrôles d'intégrité savent échouer
+
+- **Objet** : un contrôle qui ne sait pas échouer ne prouve rien quand il
+  réussit. TS-13 et TS-14 les montrent au vert ; ce cas les met en échec.
+- **Méthode** : les insertions de TS-16 qui **réussissent** laissent
+  volontairement des données invalides derrière elles. Les 8 contrôles sont
+  rejoués sur cette couche corrompue, et le run échoue si les contrôles passent
+  au vert.
+- **Attendu** : 4 violations détectées, une par contrainte non appliquée.
+- **Observé (26/08/2026)** :
+
+  ```
+  [FAIL] dim_games en doublon sur steam_appid           1
+  [FAIL] fact_prices avec un prix negatif ou nul        1
+  [FAIL] fact_prices orpheline de dim_games             1
+  [FAIL] doublons sur le grain (game_id, day)           1
+  -> 4 violation(s) detectee(s) par le filet applicatif : conforme
+  ```
+
+- **Verdict** : **PASS**. Quatre contraintes ignorées par le moteur, quatre
+  violations rattrapées par le filet applicatif. La correspondance est exacte.
+
+## TS-18. Le garde-fou refuse les bases protégées
+
+- **Objet** : `sql/schema_gold_snowflake.sql` contient des
+  `CREATE OR REPLACE TABLE`. Une recette mal dirigée détruirait la couche de
+  démonstration sans le moindre message d'erreur.
+- **Méthode** : lancer la recette en la pointant explicitement sur `gamelens`.
+- **Attendu** : refus immédiat, avant toute instruction, code de sortie non nul.
+- **Observé (26/08/2026)** :
+
+  ```
+  REFUS : la recette vise la base 'gamelens', qui est protegee.
+  Le script de schema contient des CREATE OR REPLACE TABLE : l'executer ici
+  detruirait la couche de demonstration.
+  code de sortie : 1
+  ```
+
+- **Verdict** : **PASS**.
+- **Défaut corrigé à cette occasion** : au premier passage, ce test **a réussi
+  sans rien prouver**. La fonction de nommage écartait discrètement les noms
+  protégés en retombant sur un nom généré, si bien que le garde-fou ne recevait
+  jamais de nom protégé et ne pouvait jamais refuser. Le comportement était sûr
+  mais mensonger. Voir OBS-42.
+
+## TS-19. Authentification par contenu PEM, voie de l'intégration continue
+
+- **Objet** : un dispositif de CI stocke des chaînes, pas des fichiers. La clef
+  privée ne doit pas être écrite sur le disque du runner.
+- **Méthode** : connexion avec `SNOWFLAKE_PRIVATE_KEY` porteur du contenu PEM
+  et `SNOWFLAKE_PRIVATE_KEY_PATH` vidé, dans les conditions exactes de la CI.
+- **Attendu** : connexion établie, mode d'authentification annoncé comme tel.
+- **Observé (26/08/2026)** :
+
+  ```
+  authentification    paire de cles RSA (contenu en environnement)
+  CONNEXION ETABLIE
+  version Snowflake   10.30.101
+  region              AWS_EU_WEST_3
+  ```
+
+- **Verdict** : **PASS**. Éprouvé en local avant d'être poussé, pour ne pas
+  découvrir un défaut d'authentification sur le runner.
+
 ---
 
 # 3. Tests de sécurité
@@ -474,15 +601,15 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 | Catégorie | PASS | PARTIEL | EN ATTENTE |
 |---|---|---|---|
 | Fonctionnels | 5 | 0 | 0 |
-| Structurels | 13 | 0 | 0 |
+| Structurels | 19 | 0 | 0 |
 | Sécurité | 3 | 0 | 0 |
 | Supervision | 5 | 0 | 0 |
-| **Total** | **26** | **0** | **0** |
+| **Total** | **32** | **0** | **0** |
 
 Les tests de sécurité comptent pour 3 cas au niveau du cahier, mais 13 cas
 paramétrés au niveau de l'exécution.
 
-Cinq de ces tests ont échoué avant de passer, et c'est ce qui leur donne de la
+Six de ces tests ont échoué avant de passer, et c'est ce qui leur donne de la
 valeur :
 
 - **TS-02** a révélé des contraintes d'unicité manquantes dans le schéma Gold ;
@@ -490,7 +617,10 @@ valeur :
 - **TS-06** et **TS-07** ont chacun mis au jour un défaut de l'assertion elle-même ;
 - **TS-08** a échoué en semblant démontrer le contraire de la réalité, parce que
   l'identifiant de test était rejeté sur sa longueur avant que la contrainte
-  visée ne soit évaluée.
+  visée ne soit évaluée ;
+- **TS-18** a d'abord **réussi sans rien prouver**, cas plus insidieux qu'un
+  échec : le garde-fou qu'il vérifiait était rendu inatteignable par la fonction
+  de nommage, et le vert obtenu ne mesurait rien.
 
 Un test qui n'a jamais rien attrapé n'a pas encore prouvé qu'il testait quelque
 chose. Et un test qui échoue ne désigne pas nécessairement le système testé :
@@ -503,7 +633,8 @@ dans trois cas sur cinq ici, le défaut était dans le test.
 | C4.2.1 schéma de données | TS-08, TS-09, TS-13, TF-04, TF-05 |
 | C4.2.2 temps réel | TF-01, TF-02, TS-01 |
 | C4.2.2 orchestrateur | TS-02, TS-03, TS-04, TS-05, TS-06 |
-| C4.2.2 calcul distribué | TS-10, TS-11, TS-12 |
-| C4.2.3 CI/CD | section 5 complète |
+| C4.2.2 calcul distribué | TS-10, TS-11, TS-12, TS-15 |
+| C4.2.3 CI/CD | section 5 complète, TS-14, TS-19 |
+| C4.2.1 intégrité applicative | TS-16, TS-17, TS-18 |
 | C4.3.1 supervision | TSUP-01 à TSUP-05 |
 | Sécurité transverse | TSEC-01 à TSEC-03 |

@@ -796,3 +796,152 @@ de réécrire, au lieu de tenter un troisième nom plausible. C'est ce qui a
 fonctionné du premier coup, et c'est la même méthode que celle qui avait servi
 à trancher INC-004 : interroger le système sur ce qu'il est, plutôt que lui
 supposer une forme.
+
+---
+
+# Session 5, 26 août 2026
+
+## OBS-41. Le script de schéma était une arme chargée pointée sur la démonstration
+
+Brancher la CI sur Snowflake paraissait mécanique : ajouter un étage, déposer
+des secrets, appeler les scripts existants. Le premier coup d'oeil au script de
+schéma a arrêté net cette mécanique. `sql/schema_gold_snowflake.sql` contient
+des `CREATE OR REPLACE TABLE gamelens.mart.dim_games`, et la base y est nommée
+en dur, vingt-quatre fois. Un étage de CI qui l'aurait rejoué à chaque push
+aurait vidé la couche Gold à chaque push, c'est à dire détruit les données de
+soutenance sans le moindre message d'erreur, puisque `CREATE OR REPLACE`
+réussit parfaitement.
+
+La correction ne consiste pas à écrire un script de schéma distinct pour la
+recette. Ce serait perdre l'essentiel : c'est le script **livré** qui doit être
+mis à l'épreuve, sinon la CI valide une copie et pas le livrable. La redirection
+se fait donc à l'exécution, par une option `--base` de `executer_sql.py`, avec
+une substitution qui distingue la base des autres objets :
+
+```python
+MOTIF_BASE = re.compile(r"(?<![A-Za-z0-9_])gamelens(?![A-Za-z0-9_])")
+```
+
+La limite de mot n'est pas de la coquetterie. `gamelens.mart` et
+`DATABASE gamelens` doivent être redirigés ; `gamelens_wh`, `gamelens_analyst`
+et `gamelens_etl_service` ne doivent pas l'être, car l'entrepôt virtuel et les
+rôles sont des objets de compte partagés, pas des objets de base. Vérifié sur
+le fichier réel avant tout appel à Snowflake : 24 redirections, entrepôt et
+rôles intacts.
+
+**Ce qu'il faut en retenir à l'oral** : la question « pourquoi votre CI ne
+touche pas à Snowflake ? » a une meilleure réponse que « je n'y avais pas
+pensé ». La vraie réponse est qu'une CI branchée naïvement sur un entrepôt est
+plus dangereuse que pas de CI du tout.
+
+## OBS-42. Le garde-fou que sa propre précaution rendait inatteignable
+
+Par prudence, la recette refuse de viser une base protégée. Le refus a été
+écrit d'emblée, et la fonction qui choisit le nom de base a été écrite dans le
+même mouvement :
+
+```python
+explicite = os.getenv("SNOWFLAKE_DATABASE")
+if explicite and explicite not in BASES_PROTEGEES:
+    return explicite
+```
+
+Deux précautions, chacune raisonnable. Ensemble, elles s'annulent : la fonction
+de nommage **écartait discrètement** les noms protégés en retombant sur un nom
+généré, si bien que `garde_fou()` ne recevait jamais de nom protégé et ne
+pouvait jamais refuser quoi que ce soit.
+
+Le test négatif l'a révélé, et seulement lui. Lancer la recette avec
+`SNOWFLAKE_DATABASE=gamelens` aurait dû produire un refus immédiat. Elle a
+tourné jusqu'au bout, sur une base jetable, et rendu 0. Un vert parfait, pour
+un garde-fou mort.
+
+Le comportement était sûr, mais il mentait. Substituer silencieusement une base
+à celle qu'on a demandée, c'est exactement le défaut nommé ailleurs dans ce
+journal : un composant qui réussit sans faire ce qu'on lui demande. Le nommage
+rend désormais ce qu'on lui demande, et le garde-fou tranche seul. Vérifié :
+refus immédiat, code de sortie 1.
+
+**Ce qu'il faut en retenir à l'oral** : un test négatif ne sert pas à cocher une
+case de méthode. Ici, il a mis au jour un dispositif de sécurité entièrement
+décoratif, que trois relectures du code n'auraient pas signalé puisque les deux
+morceaux sont corrects séparément.
+
+## OBS-43. Quatre contraintes ignorées, quatre violations rattrapées
+
+L'étape la plus parlante de la recette n'était pas prévue aussi nette. Les
+insertions qui éprouvent le comportement du moteur laissent volontairement des
+données invalides derrière elles. Il n'a donc pas fallu fabriquer de jeu de
+données corrompu pour le test négatif des contrôles d'intégrité : les
+violations sont exactement ce que le moteur vient de laisser entrer.
+
+```
+6. Mise a l'epreuve des contraintes du moteur
+   [PASS] NOT NULL sur unified_name                  rejetee par le moteur
+   [PASS] longueur VARCHAR(36) depassee              rejetee par le moteur
+   [PASS] CHECK implicite : prix negatif             acceptee par le moteur
+   [PASS] clef etrangere : game_id inexistant        acceptee par le moteur
+   [PASS] clef primaire : (game_id, day) en doublon  acceptee par le moteur
+   [PASS] contrainte UNIQUE : steam_appid en doublon acceptee par le moteur
+   -> 2 contrainte(s) appliquee(s) par le moteur, 4 laissee(s) a l'applicatif
+
+7. Controles d'integrite apres violations, attendus EN ECHEC
+   -> 4 violation(s) detectee(s) par le filet applicatif : conforme
+```
+
+Quatre laissées à l'applicatif, quatre rattrapées. La correspondance est exacte
+et se lit en dix lignes. C'est la démonstration la plus économique du choix
+d'architecture du Bloc 4 : sur Snowflake, les contrôles d'intégrité ne doublent
+pas le moteur, ils le remplacent.
+
+## OBS-44. Une hypothèse d'architecture vérifiée une seule fois est une hypothèse qui périme
+
+Le comportement des contraintes Snowflake avait été établi empiriquement le
+20/08/2026 (TS-08), après un test d'abord défectueux. Ce constat porte à lui
+seul une décision d'architecture lourde : reporter toute l'intégrité
+relationnelle sur des tests applicatifs et dbt.
+
+Or ce constat n'était vrai que le 20 août, sur la version du moteur de ce
+jour-là. Rien ne garantit qu'il le reste, et il est probable que Snowflake
+finisse par appliquer davantage. Le jour où cela arriverait, le raisonnement
+entier serait à revoir, et rien n'aurait prévenu.
+
+L'étape 6 de la recette transforme donc ce constat en test de non-régression.
+Si Snowflake se met à appliquer les clefs étrangères, la CI vire au rouge avec
+un message qui dit précisément quoi réexaminer :
+
+```
+Le comportement des contraintes Snowflake a change : ...
+Le choix de reporter l'integrite sur des tests applicatifs doit etre reexamine.
+```
+
+**Ce qu'il faut en retenir à l'oral** : c'est probablement la réponse la plus
+solide à « et si le fournisseur change de comportement ? ». La plupart des
+architectures documentent leurs hypothèses ; peu les surveillent.
+
+## OBS-45. Le coût de la recette, chiffré plutôt que supposé
+
+Brancher la CI sur un entrepôt facturé à l'usage soulève immédiatement la
+question du coût. Le chiffre réel, lu sur le compte : **0,60 crédit consommé en
+30 jours**, sur les 400 dollars de l'enveloppe étudiante, pour l'ensemble du
+travail de la session 4 et des sessions suivantes. Une exécution de recette
+dure 36 à 43 secondes sur un entrepôt XS, soit de l'ordre de 0,01 à 0,02
+crédit.
+
+Ce n'est pas nul, et c'est ce qui justifie deux choix pris plus tôt sans les
+chiffrer : le dimensionnement XS et l'auto-suspend à 60 secondes. Sans
+auto-suspend, l'entrepôt resterait allumé entre deux runs et la facture serait
+sans rapport avec le travail réellement effectué.
+
+## OBS-46. L'installation des dépendances comme test de non-régression
+
+L'étage Snowflake installe `requirements-snowflake.txt` en entier, dbt compris,
+alors que la recette n'utilise que Snowpark et le connecteur. C'est délibéré et
+ce n'est pas de la paresse : la résolution conjointe de Snowpark et de dbt
+avait échoué à plusieurs reprises le 20/08/2026, sur `pandas` puis sur
+`python-dotenv`. Refaire cette résolution à chaque run est en soi une
+vérification que l'épinglage tient toujours.
+
+Le coût est d'environ deux minutes par run, mis en cache par `actions/setup-python`.
+C'est un arbitrage assumé : deux minutes de CI contre la certitude que
+l'environnement d'outillage documenté est encore installable.

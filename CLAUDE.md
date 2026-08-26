@@ -81,7 +81,7 @@ un incident réel et sa méthode d'investigation (C4.4.2).
 
 ## État d'avancement
 
-Mis à jour le 20/08/2026 en fin de session 2.
+Mis à jour le 26/08/2026 en fin de session 5.
 
 | Élément | Statut |
 |---|---|
@@ -93,10 +93,11 @@ Mis à jour le 20/08/2026 en fin de session 2.
 | **C4.2.2 méthode 3, calcul distribué** | ✅ **Exécuté** : Snowpark, MERGE idempotents et calcul analytique (fenêtre glissante 7 j, classement par genre). Nature distribuée prouvée par le SQL généré et l'historique de session. |
 | Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté** : 15 dim_games, 15 faits popularité, 45 faits prix |
 | Schéma Gold Snowflake (cible finale) | ✅ **Exécuté** sur `RTZSXDV-PM63908` (AWS_EU_WEST_3) : 27 instructions, 0 erreur. Couche alimentée, 8 contrôles d'intégrité au vert. |
-| **C4.2.3 pipeline CI/CD** | ✅ **Exécuté, 5 étages verts** sur `Mael8zinsou/gamelens-bloc4_0` (privé). Qualité, tests, intégrité du DAG, intégration sur infrastructure jetable, publication d'image sur `ghcr.io` avec double étiquetage `latest` et SHA. Le premier run avait échoué : défaut dans l'assertion, pas dans l'infra (OBS-22). |
+| **C4.2.3 pipeline CI/CD** | ✅ **Exécuté, 6 étages verts** sur `Mael8zinsou/gamelens-bloc4_0` (privé). Qualité, tests, intégrité du DAG, intégration sur infrastructure jetable, **recette Snowflake sur base jetable**, publication d'image sur `ghcr.io` avec double étiquetage `latest` et SHA. Le premier run avait échoué : défaut dans l'assertion, pas dans l'infra (OBS-22). |
+| Recette automatisée de l'entrepôt | ✅ **Exécutée sur le runner** (run 32954104664, 41 s). Base Snowflake créée pour le run, schéma livré appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles d'intégrité vérifiés en positif **et en négatif**, base supprimée. |
 | **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. |
 | Documentation technique / feuille de route | 🟡 `README.md`, les trois documents de suivi et le cahier de recettes. **Feuille de route d'exploitation (C4.3.2) reste à écrire.** |
-| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **26 PASS, 0 partiel, 0 en attente**. |
+| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **32 PASS, 0 partiel, 0 en attente**. |
 | Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-007 s'y ajoutent comme incidents secondaires. |
 
 ## Faits d'environnement à ne pas redécouvrir
@@ -139,6 +140,24 @@ Mis à jour le 20/08/2026 en fin de session 2.
 - **`python -m venv` ne fonctionne pas sur ce poste** : le module `venv` de
   l'installation Python est vide. Ne pas perdre de temps à chercher pourquoi, passer
   par un conteneur.
+- **`sql/schema_gold_snowflake.sql` contient des `CREATE OR REPLACE TABLE`** et
+  nomme la base en dur, 24 fois. Ne jamais le rejouer sans redirection : il
+  détruirait la couche de démonstration sans message d'erreur. Utiliser
+  `executer_sql.py --base <autre>`, qui redirige la base **sans** toucher à
+  `gamelens_wh` ni aux rôles `gamelens_*`, qui sont des objets de compte.
+- **`entrepot/recette_ci.py` refuse les bases protégées** (`gamelens` en tête)
+  et sort en code 1. Laisser `SNOWFLAKE_DATABASE` vide pour obtenir une base
+  jetable nommée d'après le run. Ne pas contourner ce refus.
+- **La clef privée Snowflake s'utilise de deux façons** :
+  `SNOWFLAKE_PRIVATE_KEY_PATH` en local (chemin de fichier),
+  `SNOWFLAKE_PRIVATE_KEY` en CI (contenu PEM en environnement, jamais écrit
+  sur le disque du runner). Les trois secrets sont déposés sur le dépôt privé.
+- **`pytest` lancé à la racine échoue à la collecte**, sur le lien symbolique
+  `docker/airflow/logs/dag_processor/latest` qu'un client Windows ne sait pas
+  lire. Lancer `pytest tests`, comme le fait la CI. Ce n'est pas une régression.
+- **Les heredocs bash tronquent au-delà d'environ 8 Ko** et l'antislash y est
+  parfois avalé, ce qui casse les séquences d'échappement dans le Python
+  généré. Écrire par morceaux et construire les échappements par `chr(92)`.
 - La base de métadonnées Airflow est une base séparée sur la **même** instance
   PostgreSQL que la couche Silver speed. Choix d'échelle de développement assumé.
 
@@ -162,16 +181,27 @@ Mis à jour le 20/08/2026 en fin de session 2.
 **Les trois compétences éliminatoires sont couvertes par des briques réellement
 exécutées.** Ce qui reste n'est plus éliminatoire.
 
-1. Écrire la feuille de route d'exploitation (C4.3.2) : tâches, échéances,
+1. **Planifier l'ingestion temps réel.** Trou structurel constaté le 26/08/2026 :
+   `steam_producer.py` et `kafka_to_postgres.py` ne sont lancés que **à la main
+   ou par la CI**, aucun DAG ne les déclenche. La chaîne batch est orchestrée,
+   la chaîne temps réel ne l'est pas. Conséquence observée : la couche Gold
+   accusait 6 jours de retard et 5 alertes étaient ouvertes, le run planifié du
+   26/08 échouant sur la porte de fraîcheur. La supervision fait son travail,
+   mais la question « et qui lance le pipeline temps réel ? » n'a aujourd'hui
+   pour réponse que « moi, au clavier ». Un troisième DAG refermerait les
+   alertes de lui-même et rendrait la démonstration autonome le jour J.
+2. Écrire la feuille de route d'exploitation (C4.3.2) : tâches, échéances,
    planification de la maintenance, points de vigilance. Le journal d'alertes et
    sa colonne `resolue_le` fournissent déjà la matière sur les durées d'incident,
-   et l'expiration du compte Snowflake (120 jours) est un point de vigilance tout
-   trouvé.
-2. Consolider la documentation technique (C4.3.3) à partir du `README.md` et des
+   l'expiration du compte Snowflake (120 jours) est un point de vigilance tout
+   trouvé, et le point 1 ci-dessus en est un autre, constaté et chiffré.
+3. Consolider la documentation technique (C4.3.3) à partir du `README.md` et des
    documents de suivi.
-3. Brancher dbt sur Snowflake pour porter les contrôles d'intégrité de
-   `entrepot/verifier_gold.py` en tests dbt, ce que le Bloc 1 annonçait.
-4. Préparer le support de soutenance (30 min de présentation).
+4. Brancher dbt sur Snowflake pour porter les contrôles d'intégrité de
+   `entrepot/verifier_gold.py` en tests dbt, ce que le Bloc 1 annonçait. La
+   recette de CI en fournit désormais le banc d'essai : une base jetable où
+   faire tourner les tests dbt sans risque pour la couche de démonstration.
+5. Préparer le support de soutenance (30 min de présentation).
 
 ## Conventions de travail
 

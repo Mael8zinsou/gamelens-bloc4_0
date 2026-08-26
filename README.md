@@ -70,6 +70,7 @@ n'est necessaire.
 | `sql/schema_gold.sql` | Prototype PostgreSQL du Gold, conserve comme reference |
 | `sql/verify_snowflake_constraints.sql` | Verification empirique des contraintes Snowflake |
 | `dags/` | DAG Airflow : promotion vers Gold, supervision |
+| `entrepot/` | Connexion Snowflake, promotion Snowpark, controles et recette de CI |
 | `supervision/` | Moteur d'alertes et verification du tableau de bord |
 | `sql/schema_supervision.sql` | Indicateurs de supervision et journal d'alertes |
 | `docker/grafana/` | Source de donnees et tableau de bord provisionnes comme code |
@@ -104,10 +105,24 @@ compte `admin` / `admin` pour les deux.
 ## Integration continue
 
 Depot : `Mael8zinsou/gamelens-bloc4_0` (prive). Le workflow `.github/workflows/ci.yml`
-s'execute a chaque push et chaque pull request, en cinq etages : qualite du code,
+s'execute a chaque push et chaque pull request, en six etages : qualite du code,
 tests unitaires, integrite du DAG Airflow, integration sur infrastructure jetable,
-puis publication de l'image Airflow sur `ghcr.io` depuis la branche principale
-uniquement.
+recette de l'entrepot Snowflake, puis publication de l'image Airflow sur
+`ghcr.io` depuis la branche principale uniquement.
+
+L'etage Snowflake applique le meme principe que l'etage d'integration : une base
+est creee pour la duree du run, eprouvee, puis supprimee. Il verifie que le
+schema livre s'applique, que le calcul distribue rend les valeurs attendues, que
+le moteur applique toujours les memes contraintes et pas d'autres, et que les
+controles d'integrite savent echouer quand les donnees sont invalides. La couche
+de demonstration n'est jamais visee : `entrepot/recette_ci.py` refuse de demarrer
+si elle l'etait.
+
+Trois secrets sont attendus sur le depot : `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`
+et `SNOWFLAKE_PRIVATE_KEY`, ce dernier portant le contenu PEM de la clef plutot
+qu'un chemin, pour qu'elle ne soit jamais ecrite sur le disque du runner.
+
+    gh secret set SNOWFLAKE_PRIVATE_KEY < secrets/snowflake_key.p8
 
 Image publiee : `ghcr.io/mael8zinsou/gamelens-bloc4_0/airflow`, etiquetee `latest`
 et par le SHA du commit.
