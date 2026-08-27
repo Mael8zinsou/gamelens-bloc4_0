@@ -146,3 +146,49 @@ GRANT SELECT ON mart.v_popularity_dashboard TO dashboard_viewer;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA mart GRANT SELECT, INSERT, UPDATE ON TABLES TO etl_service;
 ALTER DEFAULT PRIVILEGES IN SCHEMA mart GRANT SELECT ON TABLES TO analyst;
+
+-- ============================================================================
+-- Dictionnaire de donnees : description de chaque colonne
+-- Source du dictionnaire genere par outils/generer_dictionnaire.py (C4.3.3).
+-- ============================================================================
+
+COMMENT ON COLUMN mart.dim_games.game_id IS
+    'Clef primaire interne UUID, independante des identifiants sources (convention Bloc 2).';
+COMMENT ON COLUMN mart.dim_games.unified_name IS 'Nom canonique, promu depuis speed.game_mapping.';
+COMMENT ON COLUMN mart.dim_games.genre IS 'Genre principal. Partition du classement distribue.';
+COMMENT ON COLUMN mart.dim_games.developer IS 'Studio de developpement.';
+COMMENT ON COLUMN mart.dim_games.release_date IS 'Date de sortie commerciale. Non alimentee a ce jour.';
+COMMENT ON COLUMN mart.dim_games.metacritic_score IS
+    'Note critique agregee, attendue entre 0 et 100. Bornes verifiees par controle applicatif.';
+COMMENT ON COLUMN mart.dim_games.critical_tier IS
+    'Acclaimed, Favorable ou Mixed. Derive de metacritic_score (Bloc 1, annexe 10).';
+COMMENT ON COLUMN mart.dim_games.steam_appid IS 'Identifiant Steam. Clef naturelle, contrainte UNIQUE.';
+COMMENT ON COLUMN mart.dim_games.twitch_game_id IS 'Identifiant Twitch. Source non branchee a ce jour.';
+COMMENT ON COLUMN mart.dim_games.gog_slug IS
+    'Identifiant GOG. Conserve bien que le suivi GOG soit hors perimetre depuis le Bloc 3.';
+COMMENT ON COLUMN mart.dim_games.rawg_id IS 'Identifiant RAWG, source catalogue.';
+COMMENT ON COLUMN mart.dim_games.gold_loaded_at IS 'Instant de promotion vers la couche Gold.';
+
+COMMENT ON COLUMN mart.dim_stores.store_id IS 'Clef primaire interne UUID.';
+COMMENT ON COLUMN mart.dim_stores.name IS 'Nom de la boutique. Unique.';
+COMMENT ON COLUMN mart.dim_stores.base_url IS 'Adresse racine de la boutique.';
+COMMENT ON COLUMN mart.dim_stores.source_type IS 'api ou scraping. Valeur controlee.';
+
+COMMENT ON COLUMN mart.fact_prices.price_id IS 'Clef primaire interne UUID.';
+COMMENT ON COLUMN mart.fact_prices.game_id IS 'Jeu concerne. Clef etrangere vers dim_games.';
+COMMENT ON COLUMN mart.fact_prices.store_id IS 'Boutique concernee. Clef etrangere vers dim_stores.';
+COMMENT ON COLUMN mart.fact_prices.price IS 'Prix effectivement paye, en devise currency. Doit rester strictement positif.';
+COMMENT ON COLUMN mart.fact_prices.currency IS 'Devise ISO 4217.';
+COMMENT ON COLUMN mart.fact_prices.promotion_flag IS 'Vrai si le releve correspond a une remise en cours.';
+COMMENT ON COLUMN mart.fact_prices.collected_at IS
+    'Instant du releve. Avec game_id et store_id, definit le grain (contrainte UNIQUE).';
+
+COMMENT ON COLUMN mart.fact_popularity_history.game_id IS 'Jeu concerne. Clef etrangere vers dim_games.';
+COMMENT ON COLUMN mart.fact_popularity_history.day IS
+    'Journee agregee. Avec game_id, forme la clef primaire et definit le grain journalier.';
+COMMENT ON COLUMN mart.fact_popularity_history.avg_player_count IS
+    'Moyenne des releves de frequentation de la journee. Colonne large, pas de modele EAV.';
+COMMENT ON COLUMN mart.fact_popularity_history.max_player_count IS 'Pic de frequentation de la journee.';
+COMMENT ON COLUMN mart.fact_popularity_history.avg_viewer_count IS
+    'Moyenne de l''audience diffusee. Nulle tant que la source Twitch n''est pas branchee.';
+COMMENT ON COLUMN mart.fact_popularity_history.max_viewer_count IS 'Pic d''audience diffusee. Non alimente.';

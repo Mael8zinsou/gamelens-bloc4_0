@@ -343,6 +343,12 @@ services:
       - ./ingestion:/projet/ingestion:ro
       - ./sql:/projet/sql:ro
       - ./dbt:/projet/dbt
+      # outils/ genere le dictionnaire de donnees depuis le catalogue Snowflake.
+      # docs/annexes/ est monte en ECRITURE, seul point du projet ou un
+      # conteneur ecrit dans le depot : le fichier genere doit atterrir sur le
+      # poste pour etre versionne.
+      - ./outils:/projet/outils:ro
+      - ./docs/annexes:/projet/docs/annexes
       # La cle privee est montee en lecture seule et n'entre jamais dans l'image.
       - ./secrets:/projet/secrets:ro
     working_dir: /projet

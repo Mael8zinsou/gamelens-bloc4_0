@@ -98,7 +98,7 @@ Mis à jour le 27/08/2026 en fin de session 6.
 | Recette automatisée de l'entrepôt | ✅ **Exécutée sur le runner** (run 32954104664, 41 s). Base Snowflake créée pour le run, schéma livré appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles d'intégrité vérifiés en positif **et en négatif**, base supprimée. |
 | **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. |
 | **C4.3.2 feuille de route d'exploitation** | ✅ **Écrite** : `docs/feuille_route_exploitation.md`, 10 sections. Tâches quotidiennes à trimestrielles, planification de maintenance, 11 points de vigilance dont 2 datés, durées d'incident mesurées, procédures d'intervention éprouvées avant d'être prescrites. |
-| Documentation technique (C4.3.3) | 🟡 `README.md`, les trois documents de suivi et le cahier de recettes. Reste à consolider. |
+| **C4.3.3 documentation technique** | ✅ **Écrite** : `docs/documentation_technique.md`, 600 lignes. Point d'entrée, 9 décisions d'architecture datées avec leur contrepartie, traçabilité champ par champ, référence de configuration, matrice de droits, plus **2 annexes générées** depuis le catalogue et vérifiées par la CI. |
 | Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **44 PASS, 0 partiel, 0 en attente**. |
 | Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-008 s'y ajoutent comme incidents secondaires. |
 
@@ -168,6 +168,14 @@ Mis à jour le 27/08/2026 en fin de session 6.
 - **`bronze.reponses_brutes` n'accorde aucun UPDATE ni DELETE**, pas même à
   `etl_service`. Une archive modifiable n'est plus une archive. Ne pas
   « corriger » ce qui ressemble à un oubli de droits : c'est testé (TBRZ-04).
+- **Les dictionnaires de `docs/annexes/` sont GÉNÉRÉS, jamais édités à la main.**
+  Source : les `COMMENT ON` des fichiers de `sql/`. Après toute modification de
+  schéma, lancer `python outils/generer_dictionnaire.py` (et `--cible snowflake`
+  pour la couche Gold), sinon la CI échoue. Le fichier ne porte volontairement
+  aucune date de génération : elle ferait échouer la comparaison à chaque run.
+- **`sql/commentaires_gold_snowflake.sql` documente les colonnes Snowflake**,
+  séparément du schéma parce que celui-ci contient des `CREATE OR REPLACE TABLE`
+  et ne peut pas être rejoué. Le réappliquer après toute recréation du schéma.
 - **Les scripts de `sql/` ne rejouent pas sur une instance déjà initialisée** :
   `docker-entrypoint-initdb.d` ne s'exécute que sur un volume vierge. Appliquer
   à la main par `docker exec -i ... psql < sql/<fichier>.sql`.
@@ -191,21 +199,22 @@ Mis à jour le 27/08/2026 en fin de session 6.
 
 ## Prochaine étape immédiate
 
-**Les trois compétences éliminatoires sont couvertes, la chaîne est autonome de
-bout en bout, et l'architecture Medallion est complète depuis l'ajout de la
-couche Bronze.** Le dernier livrable entièrement absent, la feuille de route
-d'exploitation, a été écrit le 27/08.
+**Tous les livrables du Bloc 4 sont écrits.** Les trois compétences
+éliminatoires sont couvertes par des briques exécutées, la chaîne est
+autonome de bout en bout, l'architecture Medallion est complète, et les deux
+derniers documents manquants (feuille de route C4.3.2 et documentation
+technique C4.3.3) ont été écrits le 27/08.
 
-1. **Consolider la documentation technique (C4.3.3)** à partir du `README.md`,
-   des trois documents de suivi et de la feuille de route.
-2. **Préparer le support de soutenance** (30 min de présentation). C'est
+Il ne reste que le support oral et des améliorations non éliminatoires.
+
+1. **Préparer le support de soutenance** (30 min de présentation). C'est
    désormais le poste le plus rentable : tout ce qui doit être montré existe et
    a été exécuté.
-3. Brancher dbt sur Snowflake pour porter les contrôles d'intégrité de
+2. Brancher dbt sur Snowflake pour porter les contrôles d'intégrité de
    `entrepot/verifier_gold.py` en tests dbt, ce que le Bloc 1 annonçait. Le
    répertoire `dbt/` est vide à ce jour. La recette de CI fournit le banc
    d'essai.
-4. A4.1, rapport d'analyse : s'appuie largement sur le Bloc 1.
+3. A4.1, rapport d'analyse : s'appuie largement sur le Bloc 1.
 
 Corrections courtes identifiées, aucune ne bloque, toutes sont documentées
 comme points de vigilance dans la feuille de route :

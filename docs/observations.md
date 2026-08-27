@@ -1267,3 +1267,92 @@ correspondance n'est pas unique.
 
 C'est la même famille de problème que celle qu'on traque dans le code : une
 opération qui réussit silencieusement là où elle aurait dû refuser.
+
+---
+
+# Session 7, 27 août 2026
+
+## OBS-60. Le générateur a mesuré l'écart avant de le combler
+
+Avant d'écrire quoi que ce soit, une requête sur le catalogue a donné l'état
+réel de la documentation des schémas :
+
+```
+19 objets commentes sur 19
+7 colonnes commentees sur 126
+```
+
+Toutes les tables et vues étaient décrites, presque aucune colonne. L'écart
+n'était pas visible en lisant les fichiers SQL, où les quelques commentaires
+existants donnaient l'impression d'un travail fait.
+
+C'est le premier bénéfice de la génération, et il arrive avant la première
+ligne générée : **poser la question « qu'est-ce qui est documenté ? » sous forme
+de requête donne une réponse chiffrée**, là où une relecture donne une
+impression. La même requête a ensuite servi à trouver les quatre dernières
+colonnes manquantes, toutes dans la couche Bronze écrite la veille.
+
+État final : 78 colonnes de tables sur 78, des deux côtés, PostgreSQL et
+Snowflake.
+
+## OBS-61. Générer révèle ce qu'écrire à la main aurait masqué
+
+Le dictionnaire Snowflake a été généré une première fois avant que les colonnes
+ne soient documentées. Il a rendu ceci :
+
+```
+Colonnes de tables sans description : 24.
+```
+
+Vingt-quatre colonnes sur vingt-neuf. Le fichier de schéma
+`sql/schema_gold_snowflake.sql` portait bien quelques `COMMENT` en ligne, ce qui
+donnait l'impression rassurante d'un schéma documenté.
+
+Un dictionnaire écrit à la main n'aurait jamais produit ce chiffre : on aurait
+décrit les colonnes en les recopiant, et le résultat aurait paru complet sans
+qu'aucun de ces textes ne se trouve dans la base. Autrement dit, la
+documentation aurait existé **à côté** du schéma plutôt que dedans, et rien
+n'aurait signalé la différence.
+
+Le générateur compte ce qui manque et l'écrit en bas du fichier. Une case vide
+est un manque déclaré ; une case remplie à la main dans un document séparé est
+une affirmation invérifiable.
+
+## OBS-62. Un fichier généré doit exclure sa propre date de génération
+
+Détail de conception qui aurait fait échouer le contrôle de non-régression.
+
+La première intention était d'horodater le dictionnaire, « généré le
+27/08/2026 à 12h42 ». Or la CI régénère le fichier et le compare à celui du
+dépôt : avec un horodatage, la comparaison aurait échoué **à chaque exécution**,
+sans qu'aucun schéma n'ait bougé.
+
+Un contrôle qui échoue pour une raison sans rapport avec ce qu'il vérifie finit
+désactivé dans la semaine. La date est donc affichée par le programme, dans sa
+sortie console, et absente du fichier.
+
+La règle générale : **tout ce qui varie sans que le sujet varie doit sortir de
+l'artefact comparé.** C'est le même raisonnement que celui qui a fait remplacer
+les assertions par comptage par des vérifications d'objets nommés (OBS-32), et
+il se transpose partout où l'on compare deux états.
+
+## OBS-63. Deux documents qui se contredisaient sur la même procédure
+
+En rédigeant la section d'installation de la documentation technique, une
+contradiction est apparue avec le `README.md` : ordre inverse entre
+`create_topics.py` et `seed_game_mapping.py`, et un commentaire du README
+annonçant « PostgreSQL + Kafka » là où `docker compose up -d` démarre en réalité
+sept conteneurs depuis l'ajout d'Airflow et de Grafana.
+
+Aucune des deux versions n'était fausse au moment où elle avait été écrite. Le
+README a simplement vieilli sans que rien ne le signale.
+
+C'est exactement le mécanisme que la documentation technique prétend éviter, et
+il s'est manifesté pendant sa rédaction. D'où la section liminaire « ce que ce
+document ne contient pas, et où ça vit », qui désigne pour chaque sujet **une
+seule source faisant foi**, et la règle explicite : en cas de contradiction,
+c'est la source qui gagne et ce document qui se corrige.
+
+La leçon opérationnelle : la duplication ne se combat pas par la vigilance, qui
+s'épuise, mais par une règle d'arbitrage écrite et par la génération partout où
+elle est possible.

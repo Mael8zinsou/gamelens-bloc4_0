@@ -1544,3 +1544,76 @@ docker exec gamelens-airflow-scheduler airflow db clean \
     --clean-before-timestamp "2026-05-29" --dry-run --yes
 # -> parcourt chaque table et rend le decompte, sans rien supprimer.
 ```
+
+---
+
+# Session 7, 27 août 2026 : documentation technique et dictionnaire généré
+
+## Phase 16. Mesurer avant de documenter (diagnostic)
+
+```bash
+# Combien d'objets et de colonnes sont reellement decrits ?
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc \
+  "SELECT count(*) FILTER (WHERE d.description IS NOT NULL) || ' / ' || count(*)
+     FROM information_schema.columns c
+     JOIN pg_class pc ON pc.relname = c.table_name
+     JOIN pg_namespace n ON n.oid = pc.relnamespace AND n.nspname = c.table_schema
+     LEFT JOIN pg_description d ON d.objoid = pc.oid AND d.objsubid = c.ordinal_position
+    WHERE c.table_schema IN ('speed','mart','bronze') AND pc.relkind = 'r';"
+# Avant : 7 / 126.  Apres : 78 / 78 (colonnes de tables).
+
+# Lister nommement ce qui manque, plutot que de compter.
+# Meme requete avec : AND d.description IS NULL
+```
+
+## Phase 17. Enrichir les schémas (procédure)
+
+Les descriptions sont écrites en SQL, dans les fichiers de `sql/`, sous forme de
+`COMMENT ON COLUMN`. `COMMENT ON` étant idempotent et non destructif, les
+fichiers se rejouent sans risque sur une base déjà initialisée :
+
+```bash
+for f in schema_silver_speed schema_gold schema_supervision schema_bronze; do
+  docker exec -i gamelens-postgres psql -U gamelens_app -d gamelens < sql/${f}.sql
+done
+
+# Cote Snowflake, fichier SEPARE : le schema contient des CREATE OR REPLACE
+# TABLE et ne peut pas etre rejoue sans detruire la couche de demonstration.
+docker compose --profile outillage run --rm snowflake-cli \
+    python entrepot/executer_sql.py sql/commentaires_gold_snowflake.sql
+```
+
+## Phase 18. Générer et vérifier le dictionnaire (procédure)
+
+```bash
+# Generation.
+python outils/generer_dictionnaire.py                      # PostgreSQL
+docker compose --profile outillage run --rm snowflake-cli \
+    python outils/generer_dictionnaire.py --cible snowflake
+
+# Verification, mode utilise par la CI : ne rien ecrire, comparer, sortir en 1.
+python outils/generer_dictionnaire.py --verifier
+```
+
+Éprouvé dans les deux sens avant d'être branché sur la CI :
+
+```bash
+# Negatif : on simule un schema modifie sans regeneration.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "ALTER TABLE speed.alertes ADD COLUMN colonne_de_test text;
+   COMMENT ON COLUMN speed.alertes.colonne_de_test IS 'Colonne de test.';"
+python outils/generer_dictionnaire.py --verifier
+# ECHEC : ... ne correspond plus au catalogue.  321 dans le depot, 322 attendues.
+# code de sortie 1
+
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "ALTER TABLE speed.alertes DROP COLUMN colonne_de_test;"
+python outils/generer_dictionnaire.py --verifier   # OK, code 0
+```
+
+## Phase 19. Montage nécessaire côté conteneur (procédure)
+
+Le générateur Snowflake tourne dans le conteneur d'outillage et doit écrire dans
+le dépôt. `docker-compose.yml` monte donc `./outils` en lecture seule et
+`./docs/annexes` **en écriture**, seul point du projet où un conteneur écrit
+dans l'arborescence versionnée.

@@ -79,6 +79,14 @@ COMMENT ON COLUMN bronze.reponses_brutes.charge IS
     'Corps de la reponse tel quel. NULL si la reponse n''a jamais ete obtenue.';
 COMMENT ON COLUMN bronze.reponses_brutes.motif_rejet IS
     'Pourquoi la reponse est inexploitable. Obligatoire dans ce cas.';
+COMMENT ON COLUMN bronze.reponses_brutes.reponse_id IS
+    'Clef technique de l''archive, sans signification metier.';
+COMMENT ON COLUMN bronze.reponses_brutes.statut_http IS
+    'Code HTTP de la reponse. Nul quand l''appel n''a jamais abouti (erreur reseau).';
+COMMENT ON COLUMN bronze.reponses_brutes.exploitable IS
+    'Faux si la reponse ne portait pas la donnee attendue. Impose alors un motif_rejet.';
+COMMENT ON COLUMN bronze.reponses_brutes.archivee_le IS
+    'Instant de l''ecriture dans l''archive, distinct de collecte_le qui est l''instant de l''appel.';
 
 CREATE INDEX IF NOT EXISTS idx_reponses_brutes_source_temps
     ON bronze.reponses_brutes (source, collecte_le DESC);

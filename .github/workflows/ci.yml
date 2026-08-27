@@ -227,6 +227,20 @@ jobs:
           echo "archives exploitables portant leur charge : ${avec_charge}"
           [ "${avec_charge}" -ge 1 ] || { echo "aucune reponse exploitable ne porte sa charge"; exit 1; }
 
+      - name: Verifier que le dictionnaire de donnees est a jour
+        # Le dictionnaire publie en annexe de la documentation technique est
+        # GENERE depuis le catalogue de la base, jamais ecrit a la main. Ce
+        # controle regenere et compare : si quelqu'un ajoute une colonne sans
+        # regenerer, la chaine vire au rouge.
+        #
+        # Sans lui, la garantie serait declarative. Une consigne du type "penser
+        # a regenerer apres modification du schema" n'est pas un mecanisme,
+        # c'est un espoir.
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5433"
+        run: python outils/generer_dictionnaire.py --verifier
+
       - name: Verifier l'idempotence du puits
         # Rejoue les memes messages depuis le debut du topic : la table ne doit
         # pas grossir. C'est le test de recette de la session 1, automatise.
@@ -325,6 +339,21 @@ jobs:
           SNOWFLAKE_WAREHOUSE: gamelens_wh
           PYTHONPATH: entrepot
         run: python entrepot/recette_ci.py
+
+      - name: Verifier que le dictionnaire de la couche Gold est a jour
+        # Lecture seule sur la base de demonstration : ce controle n'ecrit rien
+        # et ne cree aucune base. Il compare le dictionnaire du depot au
+        # catalogue reel de gamelens.mart.
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+          SNOWFLAKE_ROLE: ACCOUNTADMIN
+          SNOWFLAKE_WAREHOUSE: gamelens_wh
+          SNOWFLAKE_DATABASE: gamelens
+          SNOWFLAKE_SCHEMA: mart
+          PYTHONPATH: entrepot
+        run: python outils/generer_dictionnaire.py --cible snowflake --verifier
 
       - name: Supprimer la base jetable restee en place
         # recette_ci.py supprime deja la base dans son bloc finally. Ce filet ne

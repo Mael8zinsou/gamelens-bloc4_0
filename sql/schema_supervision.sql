@@ -225,3 +225,20 @@ GRANT SELECT ON speed.v_indicateur_fraicheur, speed.v_indicateur_completude,
 GRANT SELECT, INSERT, UPDATE ON speed.alertes TO etl_service;
 GRANT USAGE, SELECT ON SEQUENCE speed.alertes_alerte_id_seq TO etl_service;
 GRANT SELECT ON speed.alertes TO analyst;
+
+-- ============================================================================
+-- Dictionnaire de donnees : description de chaque colonne
+-- Source du dictionnaire genere par outils/generer_dictionnaire.py (C4.3.3).
+-- ============================================================================
+
+COMMENT ON COLUMN speed.alertes.alerte_id IS 'Clef technique de l''alerte.';
+COMMENT ON COLUMN speed.alertes.regle IS
+    'Nom de la regle declenchante, tel que defini dans supervision/regles_alertes.py.';
+COMMENT ON COLUMN speed.alertes.severite IS 'critique ou avertissement. Contraint par CHECK.';
+COMMENT ON COLUMN speed.alertes.message IS 'Message formate, valeur observee et seuil substitues.';
+COMMENT ON COLUMN speed.alertes.valeur IS 'Valeur observee au declenchement.';
+COMMENT ON COLUMN speed.alertes.seuil IS 'Seuil franchi. Defini en SQL, jamais dans l''outil de restitution.';
+COMMENT ON COLUMN speed.alertes.declenchee_le IS 'Premiere evaluation ayant constate le franchissement.';
+COMMENT ON COLUMN speed.alertes.resolue_le IS
+    'Evaluation ayant constate le retour sous seuil. Nul tant que l''alerte est ouverte. '
+    'L''ecart avec declenchee_le mesure la duree d''incident.';

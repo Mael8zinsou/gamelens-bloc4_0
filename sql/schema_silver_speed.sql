@@ -171,3 +171,67 @@ GRANT SELECT ON speed.v_daily_player_stats TO dashboard_viewer;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA speed GRANT SELECT, INSERT, UPDATE ON TABLES TO etl_service;
 ALTER DEFAULT PRIVILEGES IN SCHEMA speed GRANT SELECT ON TABLES TO analyst;
+
+-- ============================================================================
+-- Dictionnaire de donnees : description de chaque colonne
+-- ----------------------------------------------------------------------------
+-- Ces commentaires ne sont pas decoratifs : ils sont la SOURCE du dictionnaire
+-- de donnees publie en annexe de la documentation technique (C4.3.3), genere
+-- par outils/generer_dictionnaire.py depuis le catalogue vivant.
+--
+-- Un dictionnaire recopie a la main diverge du schema en quelques semaines,
+-- sans que rien ne le signale. Le decrire ici, a cote de la definition, rend
+-- la divergence impossible : il n'existe qu'un seul endroit ou ecrire.
+-- ============================================================================
+
+COMMENT ON COLUMN speed.game_mapping.steam_appid IS
+    'Identifiant Steam, clef naturelle du referentiel. Verifie en direct titre par titre.';
+COMMENT ON COLUMN speed.game_mapping.unified_name IS
+    'Nom canonique retenu par GameLens, arbitre entre les libelles divergents des sources.';
+COMMENT ON COLUMN speed.game_mapping.developer IS 'Studio de developpement, renseigne manuellement.';
+COMMENT ON COLUMN speed.game_mapping.genre IS
+    'Genre principal. Sert de partition au classement distribue calcule par Snowpark.';
+COMMENT ON COLUMN speed.game_mapping.steam_name IS
+    'Libelle exact cote Steam, conserve pour tracer les ecarts avec unified_name.';
+COMMENT ON COLUMN speed.game_mapping.twitch_game_id IS
+    'Identifiant Twitch. Nul tant que la source de popularite diffusee n''est pas branchee.';
+COMMENT ON COLUMN speed.game_mapping.rawg_id IS 'Identifiant RAWG, source catalogue.';
+COMMENT ON COLUMN speed.game_mapping.is_active IS
+    'Titre suivi par la collecte. Mis a faux plutot que supprime, pour ne pas orpheliner l''historique.';
+COMMENT ON COLUMN speed.game_mapping.updated_at IS 'Derniere modification de la ligne de correspondance.';
+
+COMMENT ON COLUMN speed.player_count_events.event_id IS 'Clef technique, sans signification metier.';
+COMMENT ON COLUMN speed.player_count_events.steam_appid IS
+    'Titre concerne. Reference game_mapping, sans clef etrangere pour ne pas bloquer l''ingestion.';
+COMMENT ON COLUMN speed.player_count_events.player_count IS
+    'Joueurs connectes a l''instant de l''appel. Zero est une mesure valide, pas une absence.';
+COMMENT ON COLUMN speed.player_count_events.collected_at IS
+    'Instant de l''appel a Steam, fourni par le producteur. Avec steam_appid, definit le grain.';
+COMMENT ON COLUMN speed.player_count_events.ingested_at IS
+    'Instant de l''ecriture en base. L''ecart avec collected_at mesure la latence du pipeline.';
+COMMENT ON COLUMN speed.player_count_events.kafka_partition IS 'Partition Kafka d''origine, pour tracer un rejeu.';
+COMMENT ON COLUMN speed.player_count_events.kafka_offset IS 'Offset Kafka d''origine, pour tracer un rejeu.';
+
+COMMENT ON COLUMN speed.price_snapshots.snapshot_id IS 'Clef technique, sans signification metier.';
+COMMENT ON COLUMN speed.price_snapshots.steam_appid IS 'Titre concerne.';
+COMMENT ON COLUMN speed.price_snapshots.price_final IS
+    'Prix effectivement paye, en euros. Converti depuis les centimes rendus par Steam.';
+COMMENT ON COLUMN speed.price_snapshots.price_initial IS
+    'Prix avant remise. Egal a price_final hors promotion.';
+COMMENT ON COLUMN speed.price_snapshots.discount_percent IS
+    'Remise en pourcentage, telle qu''annoncee par Steam. Zero hors promotion.';
+COMMENT ON COLUMN speed.price_snapshots.currency IS 'Devise ISO 4217, EUR par construction (parametre cc=fr).';
+COMMENT ON COLUMN speed.price_snapshots.collected_at IS
+    'Instant du releve tarifaire. Avec steam_appid, definit le grain.';
+COMMENT ON COLUMN speed.price_snapshots.ingested_at IS 'Instant de l''ecriture en base.';
+
+COMMENT ON COLUMN speed.pipeline_runs.run_id IS 'Clef technique de l''execution.';
+COMMENT ON COLUMN speed.pipeline_runs.component IS
+    'Nom du composant execute. Valeurs attendues par la regle composant_muet de la supervision.';
+COMMENT ON COLUMN speed.pipeline_runs.status IS 'started, success ou failed. Contraint par CHECK.';
+COMMENT ON COLUMN speed.pipeline_runs.started_at IS 'Ouverture du contexte d''execution.';
+COMMENT ON COLUMN speed.pipeline_runs.ended_at IS 'Fermeture. Nul si le processus a ete tue sans passer par son finally.';
+COMMENT ON COLUMN speed.pipeline_runs.records_in IS
+    'Enregistrements lus. Un succes avec zero lu et zero ecrit designe une execution sterile.';
+COMMENT ON COLUMN speed.pipeline_runs.records_written IS 'Enregistrements reellement ecrits, doublons absorbes exclus.';
+COMMENT ON COLUMN speed.pipeline_runs.error_message IS 'Type et message de l''exception, tronques a 2000 caracteres.';

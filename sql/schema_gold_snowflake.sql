@@ -14,6 +14,21 @@
 -- pour preserver les credits du compte d'essai (point de vigilance A4.1 :
 -- estimation des couts).
 -- ----------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
+-- DOCUMENTATION DES COLONNES : voir sql/commentaires_gold_snowflake.sql
+--
+-- Quelques colonnes portent ici un COMMENT en ligne, herite de la premiere
+-- redaction. La documentation complete et faisant foi vit dans le fichier
+-- compagnon, parce que celui-ci peut etre rejoue sans risque alors que ce
+-- fichier-ci contient des CREATE OR REPLACE TABLE.
+--
+-- Consequence a connaitre : apres toute recreation du schema depuis ce
+-- fichier, REAPPLIQUER le fichier compagnon, faute de quoi les colonnes
+-- retombent sur leur commentaire en ligne ou n'en ont plus. La chaine
+-- d'integration continue le signalera, le dictionnaire genere ne correspondant
+-- plus a celui du depot.
+-- ----------------------------------------------------------------------------
+
 CREATE WAREHOUSE IF NOT EXISTS gamelens_wh
     WAREHOUSE_SIZE = 'XSMALL'
     AUTO_SUSPEND = 60
