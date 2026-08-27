@@ -140,7 +140,7 @@ le périmètre est petit, donc c'est tenable.
 
 ---
 
-# 3. Les huit décisions qui structurent tout le reste
+# 3. Les neuf décisions qui structurent tout le reste
 
 ## 3.1 L'exactement-une-fois par puits idempotent, pas par transaction distribuée
 
@@ -290,7 +290,8 @@ incompatible avec un entrepôt conçu pour ingérer massivement en parallèle.
 
 Conséquence directe : sur Snowflake, tes contrôles d'intégrité applicatifs ne
 **doublent** pas le moteur, ils le **remplacent**. Si tu ne les écris pas,
-personne ne le fait.
+personne ne le fait. La section 3.9 raconte comment ces contrôles ont fini par
+être écrits deux fois, en Python et en dbt, et pourquoi ce n'est pas un doublon.
 
 Deux choses valent d'être signalées ici.
 
@@ -492,6 +493,104 @@ mesure ne vaut rien, et qu'il suffisait de trois minutes pour la trancher.
 **Ce qui manque encore** : une politique de conservation. Rien ne purge cette
 table aujourd'hui. À 41 Mo par an ce n'est pas urgent, mais une couche qui
 grossit sans règle finit par en imposer une dans l'urgence.
+
+## 3.9 Deux filets valent mieux qu'un, à condition de vérifier qu'ils s'accordent
+
+Décision de la session 8, et suite directe de la 3.5. Relis-la d'abord : elle
+établit que sur Snowflake, les contrôles applicatifs ne doublent pas le moteur,
+ils le remplacent.
+
+**Le constat de départ n'était pas technique, il était documentaire.**
+L'architecture du Bloc 1 affirmait, au présent, que l'intégrité de la couche
+Gold reposait sur des tests dbt nommément cités. Les commentaires de colonnes du
+schéma Snowflake le répétaient, colonne par colonne : « valeur contrôlée par
+test dbt `accepted_values` ». Les dépendances `dbt-core` et `dbt-snowflake`
+étaient épinglées et installées à chaque exécution de la chaîne d'intégration.
+Le `.gitignore` prévoyait déjà `dbt/target/`.
+
+Le répertoire `dbt/` était vide.
+
+Retiens le mode de défaillance, il est plus intéressant que l'oubli lui-même :
+**un composant annoncé mais jamais construit laisse plus de traces qu'un
+composant dont personne n'a parlé**, et ces traces le font passer pour fait.
+Tous les signaux qu'on regarde d'ordinaire pour savoir si une brique existe
+étaient au vert. Le seul qui aurait tranché est celui qui manquait : l'exécuter.
+
+### Ce que dbt fait, et surtout ce qu'il ne fait pas
+
+dbt transforme et teste **à l'intérieur** de l'entrepôt. Il n'a pas d'étape
+d'extraction : il ne sait pas aller chercher de la donnée ailleurs pour la
+poser dans Snowflake. C'est le T de ELT, pas le E ni le L.
+
+Cela a une conséquence directe sur le périmètre. La promotion vers la couche
+Gold lit PostgreSQL et téléverse vers Snowflake : dbt ne saurait pas la faire.
+Elle reste donc en Snowpark, et dbt se voit confier deux choses.
+
+**Les sources.** Une source, pour dbt, est une table qu'il **lit sans l'avoir
+construite**. Les quatre tables Gold sont déclarées ainsi, et les contraintes
+que Snowflake n'applique pas leur sont accrochées sous forme de tests. Vingt-neuf
+au total. Chaque `relationships` est très exactement une clé étrangère écrite
+dans le schéma et jamais vérifiée par le moteur.
+
+C'est la distinction à retenir de tout ce paragraphe : **dbt teste ce que
+Snowpark construit, sans lui prendre la propriété de quoi que ce soit.** Rien de
+ce qui marchait n'a été déplacé.
+
+**Un seul modèle**, la vue de tableau de bord. Elle vivait au milieu d'un
+fichier SQL contenant vingt-quatre `CREATE OR REPLACE TABLE` : la corriger
+imposait soit d'en extraire l'instruction à la main, soit de rejouer un script
+qui aurait détruit toute la couche de démonstration. En modèle dbt, elle se
+reconstruit seule. Elle passe en outre par une référence symbolique au lieu de
+nommer la base en dur, ce qui la rend enfin testable sur une base jetable.
+
+### La vraie difficulté n'était pas d'écrire les tests
+
+Elle était de décider quoi faire des huit contrôles Python qui existaient déjà.
+
+L'argument pour tout basculer sur dbt est solide : deux mécanismes qui vérifient
+les mêmes faits finissent par diverger, et le jour où ils divergent, l'un des
+deux est faux sans que rien ne le signale. C'est un piège classique, et le
+projet l'avait déjà rencontré ailleurs, sur deux documents qui décrivaient la
+même procédure dans un ordre différent.
+
+L'arbitrage a été de garder les deux, mais de rendre leur accord **testé plutôt
+que déclaré**. La recette automatisée insère volontairement quatre violations
+que Snowflake laisse passer, puis exécute les deux filets sur ce même jeu de
+données fautif et exige que les deux tombent. Si l'un rattrape une violation que
+l'autre laisse passer, la recette s'arrête au lieu de laisser la divergence
+s'installer.
+
+### Ce que ce test a appris, et que personne n'avait prévu
+
+Sur les mêmes violations, le filet applicatif en rattrape **quatre**, dbt en
+rattrape **cinq**.
+
+Le cinquième est le test posé sur la vue. Un doublon sur `(jeu, jour)` dans une
+table de faits ne duplique pas seulement une ligne de faits : il duplique
+**chaque journée au travers de la jointure** de la vue. Les contrôles Python
+n'interrogent que les tables et ne peuvent pas voir ce gonflement.
+
+Autrement dit, le test destiné à surveiller la coexistence des deux filets a
+démontré au passage qu'ils n'étaient pas redondants. La décision de les garder
+tous les deux était bonne, pour une raison que personne n'avait su formuler en
+la prenant.
+
+### Deux pièges à connaître, parce qu'ils sont silencieux
+
+Sur Snowflake, remplacer une vue **détruit ses privilèges** et **efface son
+commentaire**. Aucune erreur n'est levée dans les deux cas.
+
+Le premier se manifesterait bien plus tard, sous la forme d'un tableau de bord
+vide : la vue existe, elle est correcte, elle est simplement devenue invisible
+pour le seul rôle qui la consultait. Le second ferait échouer **un autre étage**
+de la chaîne d'intégration, celui qui compare le dictionnaire de données généré
+au catalogue réel, sur un message parlant du dictionnaire et jamais de dbt.
+
+Les deux sont donc vérifiés après chaque reconstruction de la vue. Et, fidèlement
+à la doctrine de test de la section 5, les deux vérifications ont été éprouvées
+en retirant la configuration correspondante pour confirmer qu'elles savent
+échouer. Sans la configuration de droits, un seul bénéficiaire reste :
+le compte d'administration.
 
 ---
 
@@ -815,6 +914,21 @@ passe inaperçue jusqu'à l'évaluation suivante des règles. C'est acceptable p
 un échantillonnage au quart d'heure, ça ne le serait pas pour une chaîne
 d'événements.
 
+## Résolu le 27/08/2026 : dbt est branché
+
+Cette section listait « dbt est installé, pas encore branché » comme une
+faiblesse. Elle est levée, voir la décision 3.9 : vingt-neuf contrats
+déclaratifs couvrent désormais les contraintes que Snowflake n'applique pas, et
+la chaîne d'intégration les rejoue à chaque poussée, sur données saines puis sur
+données volontairement corrompues.
+
+La mention reste ici, comme la précédente. Ce qui est instructif dans ce cas
+précis, ce n'est pas le travail accompli, c'est la durée pendant laquelle
+l'écart est passé inaperçu : l'architecture annonçait ces tests depuis le
+Bloc 1, les commentaires du schéma les nommaient colonne par colonne, et les
+dépendances étaient installées à chaque exécution de la chaîne. Tout avait l'air
+fait.
+
 ## L'utilisateur de service tourne en ACCOUNTADMIN
 
 `GAMELENS_SERVICE` dispose du rôle `ACCOUNTADMIN` sur Snowflake, y compris dans
@@ -856,9 +970,12 @@ Les questions qui se posent à l'échelle ne se sont donc jamais posées :
 - **Mots de passe de développement en clair** dans le dépôt (`devlocal_*`,
   `admin/admin`). Acceptable parce qu'ils ne donnent accès qu'à des conteneurs
   locaux, mais c'est une habitude à ne pas prendre.
-- **dbt est installé, pas encore branché.** Les contrôles d'intégrité sont en
-  Python dans `verifier_gold.py` alors qu'ils devraient être des tests dbt
-  (`not_null`, `unique`, `relationships`, `expression_is_true`).
+- **`dim_games.critical_tier` est vide**, alors que le commentaire de la colonne
+  annonce qu'elle est dérivée par un modèle dbt. Ce modèle n'existe pas, et il
+  ne pourrait rien dériver aujourd'hui puisque la note critique dont il
+  partirait est vide elle aussi, faute de catalogue RAWG branché. C'est le même
+  écart entre l'annoncé et le réel que celui décrit en 3.9, en plus petit, et
+  il est signalé ici plutôt que corrigé en silence.
 
 ---
 

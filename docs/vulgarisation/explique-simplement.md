@@ -257,6 +257,31 @@ sont les seules qui existent.
 Pour rester dans la cuisine : on a loué une cuisine industrielle très puissante
 qui ne contrôle pas les dates de péremption. À nous de le faire à l'entrée.
 
+**Et il y a maintenant deux contrôleurs plutôt qu'un.** Le premier est un
+programme qui pose huit questions et attend huit fois la réponse « rien à
+signaler ». Le second est une liste de règles écrites, pas un programme : on y
+déclare « cette case ne peut pas être vide », « ce numéro ne peut pas être
+utilisé deux fois », « chaque relevé doit correspondre à un jeu qui existe », et
+un outil se charge de les traduire en vérifications. Il s'appelle dbt. Vingt-neuf
+règles au total.
+
+Deux contrôleurs pour le même travail, c'est suspect, et à raison : le jour où
+ils ne disent plus la même chose, l'un des deux se trompe et rien ne le signale.
+
+La réponse a été de **vérifier qu'ils sont d'accord plutôt que de l'espérer**.
+On abîme volontairement les données, on fait passer les deux contrôleurs
+dessus, et on exige que les deux protestent. Si un seul proteste, tout s'arrête.
+
+Le résultat de ce test n'était pas prévu. Sur les mêmes défauts, le premier
+contrôleur en signale quatre et le second en signale cinq. Le cinquième est un
+cas que le premier ne peut pas voir : quand un plat est compté deux fois dans le
+stock, le menu affiché aux clients, qui combine plusieurs listes, se met à
+répéter des journées entières. Le premier contrôleur ne regarde que les stocks,
+jamais le menu.
+
+Autrement dit, le test destiné à surveiller les deux contrôleurs a prouvé au
+passage qu'ils n'étaient pas en double emploi.
+
 ---
 
 ## 6. Comment on sait que ça marche : on essaie de le casser

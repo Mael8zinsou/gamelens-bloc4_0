@@ -67,8 +67,19 @@ Points connus à revoir lors de la prochaine mise à jour :
   admet dans sa section finale. Une source unique le rendrait caduc.
 
 Traité en session 6 (27/08/2026) : l'ingestion temps réel est désormais
-planifiée, et la couche Bronze est construite. Les deux documents ont été corrigés en conséquence plutôt que
-d'effacer la mention, l'écart entre le constat et la correction faisant partie
-de l'histoire du projet.
+planifiée, et la couche Bronze est construite. Les deux documents ont été
+corrigés en conséquence plutôt que d'effacer la mention, l'écart entre le
+constat et la correction faisant partie de l'histoire du projet.
 
-Dernière mise à jour : 27/08/2026, fin de session 6.
+Traité en session 8 (27/08/2026) : dbt est branché sur Snowflake. Le document
+pour un junior gagne une décision 3.9 et perd la faiblesse « dbt installé, pas
+encore branché » ; la version Feynman gagne le passage sur les deux contrôleurs
+et leur mise d'accord. Même règle que ci-dessus : les mentions résolues restent,
+datées.
+
+Un manque a été **ajouté** à cette occasion plutôt que retiré :
+`dim_games.critical_tier` est vide alors que le schéma annonce qu'un modèle dbt
+la dérive. C'est le même écart entre l'annoncé et le réel que celui refermé
+cette session, en plus petit, et il est signalé plutôt que corrigé en silence.
+
+Dernière mise à jour : 27/08/2026, fin de session 8.

@@ -37,10 +37,13 @@ un incident réel et sa méthode d'investigation (C4.4.2).
   portent sur une relation entre lignes ou entre tables ne le sont pas (CHECK, FOREIGN KEY,
   PRIMARY KEY, UNIQUE). La formulation antérieure, « seul NOT NULL est appliqué », était
   inexacte : voir les résultats consignés dans `sql/verify_snowflake_constraints.sql`.
-  L'intégrité réelle est donc reportée sur des tests dbt (`not_null`, `unique`, `relationships`,
-  `expression_is_true`), qui font échouer le run du pipeline en cas de violation. C'est un choix
-  d'architecture à assumer explicitement à l'oral, pas un oubli — voir
-  `sql/verify_snowflake_constraints.sql` pour la vérification empirique de ce comportement.
+  L'intégrité réelle est donc reportée hors du moteur, sur **deux filets rejoués à chaque
+  push** : les 29 contrats déclaratifs de `dbt/models/gold/` (`not_null`, `unique`,
+  `relationships`, `expression_is_true`, `accepted_values`) et les 8 contrôles applicatifs de
+  `entrepot/verifier_gold.py`. Ils ne sont pas redondants : voir OBS-65. C'est un choix
+  d'architecture à assumer explicitement à l'oral, pas un oubli. Voir
+  `sql/verify_snowflake_constraints.sql` pour la vérification empirique de ce comportement,
+  et DA-10 de la documentation technique pour le périmètre exact confié à dbt.
 - Conventions de nommage (posées au Bloc 2, 1.3) : préfixe `dim_`/`fact_`, snake_case, clé primaire
   interne UUID indépendante des identifiants sources.
 - 4 rôles de sécurité déjà actés : `admin`, `etl_service`, `analyst`, `dashboard_viewer` (déclinés en
@@ -81,7 +84,7 @@ un incident réel et sa méthode d'investigation (C4.4.2).
 
 ## État d'avancement
 
-Mis à jour le 27/08/2026 en fin de session 6.
+Mis à jour le 27/08/2026 en fin de session 8.
 
 | Élément | Statut |
 |---|---|
@@ -95,11 +98,12 @@ Mis à jour le 27/08/2026 en fin de session 6.
 | Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté** : 15 dim_games, 15 faits popularité, 45 faits prix |
 | Schéma Gold Snowflake (cible finale) | ✅ **Exécuté** sur `RTZSXDV-PM63908` (AWS_EU_WEST_3) : 27 instructions, 0 erreur. Couche alimentée, 8 contrôles d'intégrité au vert. |
 | **C4.2.3 pipeline CI/CD** | ✅ **Exécuté, 6 étages verts** sur `Mael8zinsou/gamelens-bloc4_0` (privé). Qualité, tests, intégrité du DAG, intégration sur infrastructure jetable, **recette Snowflake sur base jetable**, publication d'image sur `ghcr.io` avec double étiquetage `latest` et SHA. Le premier run avait échoué : défaut dans l'assertion, pas dans l'infra (OBS-22). |
-| Recette automatisée de l'entrepôt | ✅ **Exécutée sur le runner** (run 32954104664, 41 s). Base Snowflake créée pour le run, schéma livré appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles d'intégrité vérifiés en positif **et en négatif**, base supprimée. |
+| Recette automatisée de l'entrepôt | ✅ **Exécutée sur le runner** (run 32954104664, 41 s). Base Snowflake créée pour le run, schéma livré appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles d'intégrité et contrats dbt vérifiés en positif **et en négatif** sur le même jeu fautif, base supprimée. |
 | **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. |
 | **C4.3.2 feuille de route d'exploitation** | ✅ **Écrite** : `docs/feuille_route_exploitation.md`, 10 sections. Tâches quotidiennes à trimestrielles, planification de maintenance, 11 points de vigilance dont 2 datés, durées d'incident mesurées, procédures d'intervention éprouvées avant d'être prescrites. |
-| **C4.3.3 documentation technique** | ✅ **Écrite** : `docs/documentation_technique.md`, 600 lignes. Point d'entrée, 9 décisions d'architecture datées avec leur contrepartie, traçabilité champ par champ, référence de configuration, matrice de droits, plus **2 annexes générées** depuis le catalogue et vérifiées par la CI. |
-| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **44 PASS, 0 partiel, 0 en attente**. |
+| **C4.3.3 documentation technique** | ✅ **Écrite** : `docs/documentation_technique.md`, 600 lignes. Point d'entrée, 10 décisions d'architecture datées avec leur contrepartie, traçabilité champ par champ, référence de configuration, matrice de droits, plus **2 annexes générées** depuis le catalogue et vérifiées par la CI. |
+| **dbt sur Snowflake** | ✅ **Construit et exécuté** : 29 contrats déclaratifs sur 4 sources, 1 modèle (la vue de tableau de bord, sortie d'un script SQL non rejouable). Éprouvés en positif et en négatif, sur base jetable et sur la couche de démonstration. |
+| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **50 PASS, 0 partiel, 0 en attente**. |
 | Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-008 s'y ajoutent comme incidents secondaires. |
 
 ## Faits d'environnement à ne pas redécouvrir
@@ -181,6 +185,31 @@ Mis à jour le 27/08/2026 en fin de session 6.
   à la main par `docker exec -i ... psql < sql/<fichier>.sql`.
 - La base de métadonnées Airflow est une base séparée sur la **même** instance
   PostgreSQL que la couche Silver speed. Choix d'échelle de développement assumé.
+- **Le projet dbt vit dans `dbt/` et s'invoque par le conteneur d'outillage.**
+  L'image pose `DBT_PROFILES_DIR` et `DBT_PROJECT_DIR`, mais les appels
+  programmés passent `--project-dir` et `--profiles-dir` explicitement : la CI
+  installe dbt sur le runner et n'hérite de rien de l'image.
+- **`dbt/profiles.yml` a deux cibles, `local` et `ci`, et il faut les deux.**
+  `dbt-snowflake` refuse `private_key` et `private_key_path` renseignés
+  ensemble, et un `env_var()` sur une variable absente rend un champ **présent
+  et vide**, ce qui déclenche ce refus. Ne pas fusionner les deux cibles.
+  `_cible_dbt()` déduit laquelle utiliser du mode d'authentification présent.
+- **dbt CONCATÈNE le schéma personnalisé à celui de la cible** : un
+  `+schema: mart` dans `dbt_project.yml` donne `mart_mart`. Le schéma est donc
+  porté par le profil seul (OBS-67).
+- **`dbt/package-lock.yml` est versionné**, volontairement : c'est lui qui rend
+  la résolution de `dbt_utils` reproductible sur le runner.
+- **Ne pas retirer `grants` ni `persist_docs`** du modèle
+  `dbt/models/gold/v_popularity_dashboard.sql`. Sans le premier, la vue perd
+  ses droits et le tableau de bord se vide sans erreur ; sans le second, elle
+  perd son `COMMENT` et c'est le contrôle du dictionnaire, à un autre étage de
+  la CI, qui échoue sur un message sans rapport. Les deux sont testés (TDBT-04,
+  TDBT-05).
+- **Normaliser les fins de ligne avant de committer** après toute édition
+  écrite depuis Python : le dépôt n'a pas de `.gitattributes`, mélange LF et
+  CRLF selon les fichiers, et une conversion involontaire présente un fichier
+  entièrement réécrit là où sept lignes ont changé. Procédure en phase 26 du
+  journal des commandes (OBS-68).
 
 ## Décisions de session 1 (19/08/2026)
 
@@ -199,22 +228,27 @@ Mis à jour le 27/08/2026 en fin de session 6.
 
 ## Prochaine étape immédiate
 
-**Tous les livrables du Bloc 4 sont écrits.** Les trois compétences
-éliminatoires sont couvertes par des briques exécutées, la chaîne est
-autonome de bout en bout, l'architecture Medallion est complète, et les deux
-derniers documents manquants (feuille de route C4.3.2 et documentation
-technique C4.3.3) ont été écrits le 27/08.
+**Tous les livrables du Bloc 4 sont écrits, et dbt est branché.** Les trois
+compétences éliminatoires sont couvertes par des briques exécutées, la chaîne
+est autonome de bout en bout, l'architecture Medallion est complète, et le
+dernier écart connu entre ce que l'architecture annonçait et ce que le dépôt
+contenait a été refermé le 27/08 (session 8, DA-10).
 
-Il ne reste que le support oral et des améliorations non éliminatoires.
+Il ne reste que le support oral et une amélioration non éliminatoire.
 
 1. **Préparer le support de soutenance** (30 min de présentation). C'est
-   désormais le poste le plus rentable : tout ce qui doit être montré existe et
-   a été exécuté.
-2. Brancher dbt sur Snowflake pour porter les contrôles d'intégrité de
-   `entrepot/verifier_gold.py` en tests dbt, ce que le Bloc 1 annonçait. Le
-   répertoire `dbt/` est vide à ce jour. La recette de CI fournit le banc
-   d'essai.
-3. A4.1, rapport d'analyse : s'appuie largement sur le Bloc 1.
+   désormais le poste le plus rentable, et de loin : tout ce qui doit être
+   montré existe, a été exécuté, et laisse des traces consultables.
+2. A4.1, rapport d'analyse : s'appuie largement sur le Bloc 1.
+
+Piste identifiée pendant la session 8, non traitée et sans urgence :
+`dim_games.critical_tier` est vide, et le commentaire de la colonne annonce
+qu'elle est « dérivée de metacritic_score par le modèle dbt ». Ce modèle
+n'existe pas, et il ne pourrait rien dériver aujourd'hui puisque
+`metacritic_score` est vide lui aussi, faute de catalogue RAWG branché. C'est
+le même genre d'écart entre l'annoncé et le réel que celui qu'a refermé
+DA-10, en plus petit. Le traiter suppose soit de brancher RAWG, soit de
+corriger le commentaire.
 
 Corrections courtes identifiées, aucune ne bloque, toutes sont documentées
 comme points de vigilance dans la feuille de route :

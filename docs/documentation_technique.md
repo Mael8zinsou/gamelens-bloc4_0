@@ -134,7 +134,7 @@ exécutées côté serveur.
 **Contrepartie** : dépendance forte à Snowflake, dont le compte expire (feuille
 de route, V-01).
 
-## DA-04 Intégrité portée par l'applicatif sur Snowflake
+## DA-04 Intégrité portée hors du moteur sur Snowflake
 
 **Date** : établi empiriquement le 20/08/2026.
 
@@ -149,13 +149,20 @@ de route, V-01).
 La règle qui s'en dégage : ce qui porte sur la colonne elle-même est appliqué,
 ce qui porte sur une relation entre lignes ou entre tables ne l'est pas.
 
-**Décision** : reporter l'intégrité sur des contrôles applicatifs
-(`entrepot/verifier_gold.py`), qui ne doublent pas le moteur mais le remplacent.
+**Décision** : reporter l'intégrité hors du moteur, sur des contrôles qui ne le
+doublent pas mais le remplacent. Deux filets la portent aujourd'hui, et le choix
+de les garder tous les deux est détaillé en DA-10 :
 
-**Ce qui rend la décision durable** : le comportement est rejoué à chaque push
-par `entrepot/recette_ci.py`. Si Snowflake se mettait à appliquer les clés
-étrangères, la chaîne virerait au rouge et la décision serait réexaminée. Une
-hypothèse d'architecture vérifiée une seule fois est une hypothèse qui périme.
+| Filet | Nature | Ce qu'il couvre |
+|---|---|---|
+| `dbt/models/gold/` | déclaratif, 29 contrats | les contraintes du schéma, chaque `relationships` étant une clé étrangère que le moteur ignore |
+| `entrepot/verifier_gold.py` | applicatif, 8 contrôles | les mêmes règles exprimées en SQL, plus la volumétrie et un échantillon lisible |
+
+**Ce qui rend la décision durable** : le comportement du moteur est rejoué à
+chaque push par `entrepot/recette_ci.py`. Si Snowflake se mettait à appliquer
+les clés étrangères, la chaîne virerait au rouge et la décision serait
+réexaminée. Une hypothèse d'architecture vérifiée une seule fois est une
+hypothèse qui périme.
 
 ## DA-05 Frontière de configuration vers l'entrepôt
 
@@ -246,6 +253,78 @@ Markdown, et c'est le prix de la non-divergence.
 De la source jusqu'à la restitution, champ par champ. C'est la section à
 consulter pour répondre à « d'où vient ce chiffre ? », question qu'un analyste
 finit toujours par poser.
+
+## DA-10 dbt teste ce que Snowpark construit
+
+**Date** : 27/08/2026, session 8.
+
+**Ce qui a déclenché la décision** : un écart entre l'annoncé et le réel. Le
+Bloc 1, `CLAUDE.md` et les commentaires de colonnes de
+`sql/schema_gold_snowflake.sql` affirmaient tous les trois, au présent, que
+l'intégrité de la couche Gold reposait sur des tests dbt nommément cités
+(`not_null`, `unique`, `relationships`, `expression_is_true`, `accepted_values`).
+Elle reposait en fait sur huit `SELECT count(*)` écrits à la main. Le répertoire
+`dbt/` était vide, alors que `dbt-core` et `dbt-snowflake` étaient épinglés,
+installés à chaque run de CI, que `.gitignore` prévoyait déjà `dbt/target/` et
+que le Dockerfile d'outillage installait `git` avec le commentaire « requis par
+dbt pour les packages ». Tout était prêt sauf le projet lui-même.
+
+**Décision, et surtout son périmètre.** dbt ne construit pas les tables de
+faits et de dimensions. Elles restent produites par
+`entrepot/snowpark_promotion.py`, et sont déclarées ici en **sources**, c'est-à-
+dire en tables que dbt lit sans les avoir écrites.
+
+**Alternative écartée** : porter la promotion elle-même en modèles dbt.
+Rejetée pour deux raisons distinctes, dont la seconde suffirait seule.
+
+D'abord, cette promotion porte la compétence C4.2.2 méthode 3, le calcul
+distribué, déjà exécutée et vérifiée. La réécrire échangerait une preuve contre
+une autre sans rien gagner, en déstabilisant ce qui est acquis.
+
+Ensuite, dbt ne saurait pas la faire. La promotion lit la couche Silver speed
+dans PostgreSQL et téléverse vers Snowflake par `write_pandas`. dbt ne
+transforme qu'à l'intérieur de l'entrepôt : il n'a pas d'étape d'extraction.
+Une architecture « tout dbt » aurait exigé un composant d'ingestion séparé de
+toute façon.
+
+**Un seul modèle**, la vue `v_popularity_dashboard`. Elle vivait dans un fichier
+de 24 `CREATE OR REPLACE TABLE` qu'on ne peut pas rejouer sans détruire la
+couche de démonstration : la corriger imposait de découper le fichier à la main.
+En modèle, elle se reconstruit seule et suit la base de la cible au lieu de
+nommer `gamelens.mart.` en dur, ce qui la rend éprouvable sur base jetable.
+
+**Contrepartie, et elle est réelle.** La plateforme porte désormais deux filets
+d'intégrité sur les mêmes faits. Deux autorités sur un même fait divergent tôt
+ou tard, et le jour où elles divergent, l'une des deux est fausse sans que rien
+ne le signale. C'est précisément le mécanisme décrit en OBS-63.
+
+**Ce qui rend la contrepartie tenable** : leur accord est testé, pas déclaré.
+Les étapes 9 et 10 de `entrepot/recette_ci.py` confrontent les deux filets à
+**exactement le même jeu de données fautif** et exigent que les deux tombent. Si
+l'un rattrape une violation que l'autre laisse passer, la recette s'arrête au
+lieu de laisser la divergence s'installer.
+
+**Ce que ce test a appris, et qui n'était pas prévu** : les deux filets ne sont
+pas redondants. Sur les mêmes violations, l'applicatif en rattrape 4 et dbt 5.
+Le cinquième est le test posé sur la vue, qui détecte le gonflement de la
+**jointure** lorsqu'un doublon apparaît dans une table de faits.
+`verifier_gold.py` n'interroge que les tables et ne peut pas le voir. Garder les
+deux n'est donc pas une prudence, c'est une couverture plus large.
+
+**Deux propriétés qu'un `CREATE OR REPLACE VIEW` détruit en silence** sont
+vérifiées après chaque matérialisation, et les deux vérifications ont été
+éprouvées en négatif :
+
+| Propriété | Ce qui se passe sans la configuration | Comment on le voit |
+|---|---|---|
+| Droits | seul `ACCOUNTADMIN` garde un accès ; le tableau de bord affiche un panneau vide, plus tard | `SHOW GRANTS ON VIEW`, exigence de `gamelens_dashboard_viewer` |
+| `COMMENT` | le dictionnaire généré diverge du catalogue, et c'est **un autre étage** de la CI qui échoue, sur un message parlant du dictionnaire | `information_schema.views`, exigence d'un commentaire non vide |
+
+**Dépendance assumée** : `dbt_utils` 1.3.1, figée par `dbt/package-lock.yml`.
+Trois contrôles de bornes et deux unicités de grain portant sur une combinaison
+de colonnes ne s'expriment pas avec les seuls tests du cœur de dbt. S'en passer
+reviendrait à les réécrire en SQL à la main, c'est-à-dire à retomber sur ce que
+ce chantier remplace.
 
 ## 3.1 Fréquentation
 

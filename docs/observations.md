@@ -1356,3 +1356,116 @@ c'est la source qui gagne et ce document qui se corrige.
 La leçon opérationnelle : la duplication ne se combat pas par la vigilance, qui
 s'épuise, mais par une règle d'arbitrage écrite et par la génération partout où
 elle est possible.
+
+# Session 8, 27 août 2026
+
+## OBS-64. Tout était prêt sauf le projet lui-même
+
+En ouvrant le chantier dbt, l'inventaire de l'existant a donné ceci :
+`dbt-core` et `dbt-snowflake` épinglés dans `requirements-snowflake.txt` et
+**installés à chaque run de CI** depuis des jours ; `.gitignore` prévoyant déjà
+`dbt/target/`, `dbt/dbt_packages/` et `dbt/logs/` ; le Dockerfile d'outillage
+posant `DBT_PROFILES_DIR=/projet/dbt` et installant `git` avec le commentaire
+« requis par dbt pour les packages » ; `docker-compose.yml` montant `./dbt` en
+écriture ; et les commentaires de colonnes de `sql/schema_gold_snowflake.sql`
+nommant les tests attendus, colonne par colonne : « valeur contrôlée par test
+dbt `accepted_values` », « vérifié par test dbt `expression_is_true` ».
+
+Le répertoire `dbt/` était vide.
+
+L'observation intéressante n'est pas l'oubli, c'est sa signature. Un composant
+**annoncé mais jamais construit** laisse plus de traces qu'un composant dont
+personne n'a parlé, et ces traces le font passer pour fait. Les dépendances
+étaient résolues, l'image était bâtie, la CI les installait : tous les signaux
+que l'on regarde d'habitude pour savoir si une brique existe étaient au vert.
+Le seul contrôle qui aurait tranché, c'est celui qui manquait, à savoir
+l'exécution.
+
+C'est la même leçon qu'OBS-32, formulée autrement : ce qui n'est pas exécuté
+n'est pas su. Et ici, l'écart était visible depuis le dépôt, à condition de
+comparer ce que l'architecture affirme au présent avec ce que les fichiers
+contiennent.
+
+## OBS-65. Garder deux filets n'était pas de la prudence
+
+Le choix de conserver `entrepot/verifier_gold.py` en plus des contrats dbt a
+été discuté avant d'écrire quoi que ce soit. L'argument contre était solide :
+deux autorités sur un même fait divergent tôt ou tard, c'est le mécanisme
+d'OBS-63, et la recommandation initiale était de faire de dbt l'autorité unique.
+
+L'arbitrage a été de garder les deux, en rendant leur accord **testé plutôt que
+déclaré** : les étapes 9 et 10 de la recette les confrontent au même jeu de
+données fautif et exigent que les deux tombent.
+
+Le résultat de cette exécution n'était pas prévu. Sur les quatre violations que
+Snowflake laisse entrer, le filet applicatif en rattrape **4** et dbt en
+rattrape **5**.
+
+Le cinquième est le test d'unicité posé sur la vue `v_popularity_dashboard`. Un
+doublon sur `(game_id, day)` dans la table de faits ne se contente pas de
+dupliquer une ligne de faits : il duplique **chaque journée au travers de la
+jointure** de la vue. `verifier_gold.py` n'interroge que les tables et ne peut
+pas voir ce gonflement.
+
+Autrement dit, le test destiné à surveiller la coexistence des deux filets a
+démontré au passage qu'ils n'étaient pas redondants. La décision était bonne
+pour une raison que personne n'avait formulée en la prenant.
+
+## OBS-66. Deux modes d'authentification ne tiennent pas dans un seul profil
+
+`entrepot/connexion.py` gère les deux façons de présenter la clé privée RSA
+dans une seule fonction, par une cascade de `if` : chemin de fichier en local,
+contenu PEM en intégration continue. La transposition naturelle en YAML aurait
+été un bloc unique portant les deux champs, chacun renvoyant à sa variable.
+
+Elle ne marche pas, et pour une raison qui ne saute pas aux yeux.
+`dbt-snowflake` refuse `private_key` et `private_key_path` renseignés ensemble.
+Or `env_var('SNOWFLAKE_PRIVATE_KEY')` sur une variable absente ne rend pas un
+champ absent : il rend un champ **présent et vide**, ce qui déclenche exactement
+ce refus. Un fichier de configuration déclaratif n'a pas d'équivalent du `elif`.
+
+D'où deux cibles distinctes dans `dbt/profiles.yml`, `local` et `ci`, et une
+fonction `_cible_dbt()` qui **déduit** laquelle utiliser du mode
+d'authentification présent, plutôt que de laisser l'appelant la choisir. Laisser
+le choix à l'appelant aurait suffi à ce qu'un jour la CI vise la cible locale et
+échoue sur un fichier de clé absent, avec un message parlant de format PEM.
+
+La leçon générale : ce qui s'exprime par une condition dans du code doit
+souvent s'exprimer par une **variante nommée** dans de la configuration. Ce
+n'est pas la même chose, et la traduction n'est pas mécanique.
+
+## OBS-67. Deux pièges de dbt trouvés en une heure
+
+Aucun des deux n'est grave, les deux coûtent du temps parce que le message
+d'erreur ne désigne pas la cause.
+
+**Un commentaire Jinja dans un appel de fonction.** Documenter chaque option à
+l'intérieur du bloc `config(...)` du modèle, ce qui paraît le meilleur endroit
+pour le faire, produit `invalid syntax for function call expression`. Les
+commentaires doivent sortir de l'appel. La documentation est donc juste
+au-dessus du code qu'elle explique, et non dedans.
+
+**La concaténation du schéma.** Écrire `+schema: mart` dans `dbt_project.yml`
+alors que la cible pointe déjà `mart` ne donne pas `mart` : dbt **concatène** le
+schéma personnalisé à celui de la cible et produit `mart_mart`. Le schéma est
+donc porté par le profil seul, ce qui est de toute façon plus juste : il dépend
+de l'endroit où l'on se connecte, pas du modèle.
+
+## OBS-68. Un diff de 67 lignes pour un ajout de 7
+
+Les modifications de fichiers faites depuis Python sur ce poste ont converti
+`docker/snowflake/Dockerfile` de LF vers CRLF, parce que `Path.write_text`
+traduit les fins de ligne selon la plateforme. Git a présenté un fichier
+entièrement réécrit, 37 ajouts et 30 suppressions, là où le changement réel
+tenait en 7 lignes. Un peu plus tard, `write_bytes` a produit l'erreur inverse
+sur `entrepot/recette_ci.py`.
+
+Le dépôt n'a pas de `.gitattributes` et `core.autocrlf` vaut `false` : chaque
+fichier est donc versionné avec les fins de ligne qu'il avait le jour de son
+premier commit, et le dépôt en mélange les deux sortes sans que ce soit visible.
+
+Corrigé en normalisant chaque fichier modifié sur ce que `git show HEAD:` en
+contient. La conséquence pratique dépasse l'esthétique du diff : une revue qui
+voit un fichier entièrement réécrit ne lit pas le changement, elle le survole.
+Un bruit de cette nature n'est pas neutre, il annule la relecture.
+

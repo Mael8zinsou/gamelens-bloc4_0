@@ -749,6 +749,118 @@ Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt privé
 - **Verdict** : PASS. Le chiffre alimente la politique de conservation de la
   feuille de route (C4.3.2).
 
+## Contrats dbt sur Snowflake (session 8)
+
+Ces six cas couvrent une bascule et non un ajout : l'intégrité de la couche
+Gold était portée par huit requêtes écrites à la main, alors que le Bloc 1 et
+les commentaires de `sql/schema_gold_snowflake.sql` annonçaient des tests dbt
+nommément cités. Les deux filets coexistent désormais, et TDBT-03 est le cas
+qui rend cette coexistence défendable plutôt que redondante.
+
+## TDBT-01. Les contrats dbt passent sur la couche Gold réelle
+
+- **Objet** : vérifier que les contraintes déclarées dans le schéma Snowflake
+  et jamais appliquées par le moteur sont réellement satisfaites par les
+  données de démonstration.
+- **Méthode** : `dbt test` depuis le conteneur d'outillage, cible `local`,
+  authentification par paire de clés RSA, sur la base `gamelens`.
+- **Attendu** : 29 contrats au vert, dont 3 `relationships` qui sont les clés
+  étrangères écrites dans le schéma, et 2 tests d'unicité de grain.
+- **Observé (27/08/2026)** : `PASS=29 WARN=0 ERROR=0 SKIP=0`, en **7,12
+  secondes** sur l'entrepôt virtuel `gamelens_wh` dimensionné XS.
+- **Verdict** : **PASS**.
+
+## TDBT-02. Les contrats savent échouer, et sur les bonnes violations
+
+- **Objet** : le point qui sépare un filet d'une décoration. Une suite de tests
+  qui n'a jamais échoué ne prouve rien sur les fois où elle réussit.
+- **Méthode** : étape 10 de `entrepot/recette_ci.py`. Les quatre violations que
+  Snowflake laisse entrer à l'étape 8 restent en base, et `dbt test` est rejoué
+  dessus. L'assertion ne porte pas sur le code de sortie ni sur un nombre, mais
+  sur un **ensemble nommé** : les cinq tests attendus sont déduits ligne à ligne
+  du tableau des violations et déclarés dans `ATTENDU_ECHECS_DBT`.
+- **Attendu**, dérivé à la main avant exécution :
+
+  | Violation acceptée par le moteur | Contrat qui doit tomber |
+  |---|---|
+  | prix négatif | `expression_is_true` sur `fact_prices.price > 0` |
+  | `game_id` inexistant | `relationships` sur `fact_prices.game_id` |
+  | `(game_id, day)` en doublon | unicité du grain, **et** la vue qui les joint |
+  | `steam_appid` en doublon | `unique` sur `dim_games.steam_appid` |
+
+- **Observé (27/08/2026)** : **5 contrats en échec, exactement ceux prévus**,
+  aucun manquant et aucun surnuméraire, dès la première exécution.
+- **Verdict** : **PASS**. Un échec supplémentaire ou manquant arrête la recette
+  avec le nom du test concerné, et non un simple code de retour.
+
+## TDBT-03. Les deux filets restent d'accord
+
+- **Objet** : la plateforme conserve deux mécanismes d'intégrité, l'un
+  applicatif (`entrepot/verifier_gold.py`) et l'autre déclaratif (dbt). Deux
+  autorités sur le même fait divergent tôt ou tard, et le jour où elles
+  divergent, l'une des deux est fausse sans que rien ne le signale.
+- **Méthode** : les étapes 9 et 10 de la recette éprouvent les deux filets sur
+  **exactement le même jeu de données fautif**, l'un après l'autre, chacun avec
+  sa propre assertion d'échec attendu. Si l'un rattrape une violation que
+  l'autre laisse passer, la recette s'arrête.
+- **Observé (27/08/2026)** : le filet applicatif détecte **4** violations, dbt
+  en détecte **5**. Les deux tombent, la recette poursuit.
+- **Verdict** : **PASS**, avec une conclusion qui n'était pas attendue. Les
+  deux filets ne sont pas redondants : le cinquième échec dbt est le test posé
+  sur la vue `v_popularity_dashboard`, qui détecte le gonflement de la
+  **jointure**. `verifier_gold.py` ne regarde que les tables et ne peut pas le
+  voir. Garder les deux n'est donc pas une prudence, c'est une couverture plus
+  large.
+
+## TDBT-04. La vue reconstruite conserve ses droits
+
+- **Objet** : sur Snowflake, remplacer une vue détruit ses privilèges. Un
+  `dbt run` mal configuré retirerait au tableau de bord son accès sans qu'aucune
+  erreur ne soit levée : la vue existe, elle est correcte, elle est simplement
+  devenue invisible pour le seul rôle qui la consultait. Le symptôme
+  arriverait plus tard, sous la forme d'un panneau vide.
+- **Méthode** : `verifier_vue_dbt()` interroge `SHOW GRANTS ON VIEW` après
+  chaque matérialisation et exige d'y trouver `gamelens_dashboard_viewer`.
+- **Observé (27/08/2026)** : `SELECT` accordé à `gamelens_dashboard_viewer`,
+  aussi bien sur base jetable que sur la base de démonstration après bascule.
+- **Test négatif** : la configuration `grants` a été retirée du modèle et la
+  recette relancée. Bénéficiaires alors trouvés : **`ACCOUNTADMIN` seul**.
+  L'assertion s'est déclenchée en nommant la cause.
+- **Verdict** : **PASS**, positif et négatif.
+
+## TDBT-05. La vue reconstruite conserve son commentaire
+
+- **Objet** : le `COMMENT` de la vue n'est pas décoratif. Il est lu dans le
+  catalogue par `outils/generer_dictionnaire.py`, et la CI compare le fichier
+  produit à celui du dépôt. Une vue recréée sans commentaire ferait échouer la
+  chaîne **ailleurs**, sur un message parlant du dictionnaire et jamais de dbt.
+- **Méthode** : la même fonction lit `information_schema.views` et exige un
+  commentaire non vide. Le texte est poussé par `persist_docs` depuis la
+  description de `dbt/models/gold/_models.yml`, tenue identique au caractère
+  près à celle du script SQL.
+- **Observé (27/08/2026)** : commentaire présent et identique. Après bascule de
+  la base de démonstration sous dbt, `generer_dictionnaire.py --verifier` rend
+  `OK : docs/annexes/dictionnaire_gold_snowflake.md est a jour (89 lignes)`,
+  donc le catalogue n'a pas bougé.
+- **Test négatif** : `persist_docs` retiré, recette relancée, assertion
+  déclenchée avec le message attendu.
+- **Verdict** : **PASS**, positif et négatif.
+
+## TDBT-06. Le modèle est portable, ce que la version SQL n'était pas
+
+- **Objet** : la vue vivait dans `sql/schema_gold_snowflake.sql`, un fichier qui
+  contient 24 `CREATE OR REPLACE TABLE` et nomme `gamelens.mart.` en dur 24
+  fois. La corriger imposait soit d'extraire son instruction à la main, soit de
+  rejouer un script qui aurait détruit la couche de démonstration.
+- **Méthode** : le modèle dbt passe par `source()`, donc suit la base de la
+  cible. Il est matérialisé sur la base jetable de la recette, dont le nom est
+  tiré du numéro de run.
+- **Observé (27/08/2026)** : vue créée sur `gamelens_ci_local_39029` puis sur la
+  base de démonstration, sans modification du modèle ni redirection par
+  expression régulière, à la seule différence de la variable d'environnement.
+- **Verdict** : **PASS**. La redirection de base par `executer_sql.py` reste
+  nécessaire pour le schéma lui-même, mais plus pour cet objet.
+
 ## Détail des contrôles de l'étage d'intégration
 
 Chacun a une assertion explicite, aucun ne se contente d'un code de retour nul.
@@ -814,7 +926,8 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 | Supervision | 5 | 0 | 0 |
 | Ingestion orchestrée | 6 | 0 | 0 |
 | Couche Bronze | 6 | 0 | 0 |
-| **Total** | **44** | **0** | **0** |
+| Contrats dbt | 6 | 0 | 0 |
+| **Total** | **50** | **0** | **0** |
 
 Le cloisonnement des rôles est décrit par 3 cas de la section Sécurité et par
 TBRZ-04, compté avec la couche Bronze. À l'exécution, ces quatre cas se
@@ -851,6 +964,7 @@ dans trois cas sur cinq ici, le défaut était dans le test.
 | C4.2.2 calcul distribué | TS-10, TS-11, TS-12, TS-15 |
 | C4.2.3 CI/CD | section 5 complète, TS-14, TS-19 |
 | C4.2.1 intégrité applicative | TS-16, TS-17, TS-18 |
+| C4.2.1 intégrité déclarative (dbt) | TDBT-01 à TDBT-06 |
 | C4.3.1 supervision | TSUP-01 à TSUP-05, TING-06 |
 | C4.2.2 ingestion orchestrée | TING-01 à TING-05 |
 | Sécurité transverse | TSEC-01 à TSEC-03, TBRZ-04 |

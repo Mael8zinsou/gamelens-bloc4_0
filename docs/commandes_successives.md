@@ -1617,3 +1617,160 @@ Le générateur Snowflake tourne dans le conteneur d'outillage et doit écrire d
 le dépôt. `docker-compose.yml` monte donc `./outils` en lecture seule et
 `./docs/annexes` **en écriture**, seul point du projet où un conteneur écrit
 dans l'arborescence versionnée.
+
+---
+
+# Session 8, 27 août 2026 : dbt sur Snowflake
+
+## Phase 20. Reconnaissance avant de rien écrire (diagnostic ponctuel)
+
+```bash
+# Le repertoire dbt existe-t-il, et l'outillage sait-il deja faire tourner dbt ?
+ls -la dbt/
+docker compose --profile outillage run --rm --no-deps snowflake-cli dbt --version
+# Core 1.12.2, plugin snowflake 1.12.0 : deja installes, jamais invoques.
+
+# Quels champs d'authentification l'adaptateur accepte-t-il reellement ?
+# Question tranchee par l'introspection plutot que par la documentation.
+docker compose --profile outillage run --rm --no-deps snowflake-cli python -c "
+from dbt.adapters.snowflake.connections import SnowflakeCredentials as C
+import dataclasses
+for f in dataclasses.fields(C): print(f.name)"
+# private_key ET private_key_path existent : les deux modes de connexion.py
+# sont transposables tels quels.
+```
+
+## Phase 21. Amorcer le projet dbt (procédure)
+
+```bash
+# DBT_PROJECT_DIR manquait dans l'image : dbt cherchait /projet/dbt_project.yml.
+# Ajoute au Dockerfile a cote de DBT_PROFILES_DIR, puis reconstruction.
+docker compose --profile outillage build snowflake-cli
+
+# Resolution du paquet dbt_utils. Ecrit dbt/package-lock.yml, qui EST versionne :
+# c'est lui qui rend la resolution reproductible sur le runner.
+docker compose --profile outillage run --rm --no-deps snowflake-cli dbt deps
+
+# Analyse hors connexion : valide le YAML et le graphe, ne touche pas Snowflake.
+docker compose --profile outillage run --rm --no-deps snowflake-cli dbt parse
+
+# Inventaire de ce qui a ete declare, pour verifier le compte avant d'executer.
+docker compose --profile outillage run --rm --no-deps snowflake-cli \
+  dbt ls --resource-type test
+# 29 tests, 1 modele, 4 sources.
+```
+
+## Phase 22. Première exécution réelle (procédure)
+
+```bash
+# Connexion. Lecture seule, ne cree rien.
+docker compose --profile outillage run --rm --no-deps snowflake-cli dbt debug
+# All checks passed!
+
+# Les 29 contrats sur la couche Gold de demonstration. Lecture seule egalement :
+# un dbt test ne fait que des SELECT tant que store_failures n'est pas active.
+docker compose --profile outillage run --rm --no-deps snowflake-cli dbt test
+# PASS=29 WARN=0 ERROR=0 SKIP=0 en 7,12 s
+```
+
+## Phase 23. Éprouver les deux filets ensemble (procédure)
+
+```bash
+# La recette complete sur base jetable, dbt compris : 10 etapes, 3 tests negatifs.
+docker compose --profile outillage run --rm --no-deps snowflake-cli \
+  python entrepot/recette_ci.py
+# 5. Materialisation des modeles dbt      -> 1 modele, droits et commentaire preserves
+# 6. Contrats dbt sur donnees saines      -> 29 contrats, 0 violation
+# 9. Controles applicatifs EN ECHEC       -> 4 violations detectees
+# 10. Contrats dbt EN ECHEC               -> 5 contrats, exactement ceux attendus
+# Recette au vert en 97 s.
+```
+
+## Phase 24. Les deux tests négatifs sur la vue (diagnostic ponctuel)
+
+Le but n'est pas de vérifier que la configuration marche, ce que la phase
+précédente montre déjà, mais que **l'assertion sait échouer**. Chacun de ces
+deux essais retire une ligne du modèle, relance la recette, et remet la ligne.
+
+```bash
+# 1. Sans la configuration grants.
+#    Attendu : la vue perd tous ses droits au profit du seul proprietaire.
+sed -i '/grants={"select"/d' dbt/models/gold/v_popularity_dashboard.sql
+docker compose --profile outillage run --rm --no-deps snowflake-cli \
+  python entrepot/recette_ci.py
+# La vue reconstruite par dbt n'accorde plus rien a GAMELENS_DASHBOARD_VIEWER.
+# Beneficiaires trouves : ACCOUNTADMIN.
+git checkout dbt/models/gold/v_popularity_dashboard.sql
+
+# 2. Sans persist_docs.
+#    Attendu : la vue perd son COMMENT, donc le dictionnaire genere divergerait.
+sed -i '/persist_docs=/d' dbt/models/gold/v_popularity_dashboard.sql
+docker compose --profile outillage run --rm --no-deps snowflake-cli \
+  python entrepot/recette_ci.py
+# La vue reconstruite par dbt a perdu son COMMENT.
+git checkout dbt/models/gold/v_popularity_dashboard.sql
+```
+
+## Phase 25. Basculer la vue de démonstration sous dbt (procédure)
+
+La vue de la base `gamelens` était encore celle du script SQL. La faire produire
+par dbt lève l'incohérence, mais remplace un objet vivant : les deux
+vérifications de la phase 24 sont ce qui rend l'opération sûre.
+
+```bash
+# Avant : verifier qu'aucun consommateur direct n'existe cote Snowflake.
+grep -rn "v_popularity_dashboard" --include=*.py --include=*.json .
+# La seule occurrence en CI vise l'homonyme PostgreSQL, pas la vue Snowflake.
+
+docker compose --profile outillage run --rm --no-deps snowflake-cli dbt run
+# OK created sql view model mart.v_popularity_dashboard
+
+# Apres : le catalogue n'a pas bouge, donc l'annexe generee reste valide.
+docker compose --profile outillage run --rm snowflake-cli \
+  python outils/generer_dictionnaire.py --cible snowflake --verifier
+# OK : docs/annexes/dictionnaire_gold_snowflake.md est a jour (89 lignes).
+
+# Et les droits sont intacts sur la base de demonstration.
+docker compose --profile outillage run --rm --no-deps snowflake-cli python -c "
+import sys; sys.path.insert(0, 'entrepot')
+from connexion import connexion
+c = connexion()
+with c.cursor() as cur:
+    cur.execute('SHOW GRANTS ON VIEW mart.v_popularity_dashboard')
+    for l in cur.fetchall(): print(f'  {l[1]:<12} -> {l[5]}')
+c.close()"
+#   OWNERSHIP    -> ACCOUNTADMIN
+#   SELECT       -> GAMELENS_DASHBOARD_VIEWER
+```
+
+## Phase 26. Normaliser les fins de ligne avant de committer (procédure)
+
+À faire après toute modification de fichier écrite depuis Python sur ce poste.
+Sans cela, le diff présente des fichiers entièrement réécrits (OBS-68).
+
+```bash
+python - <<'FIN'
+import subprocess
+from pathlib import Path
+CRLF, LF = b"\r\n", b"\n"
+for c in subprocess.run(["git","diff","--name-only"],capture_output=True,text=True).stdout.split():
+    r = subprocess.run(["git","show",f"HEAD:{c}"],capture_output=True)
+    attendu = "CRLF" if CRLF in r.stdout else "LF"
+    brut = Path(c).read_bytes()
+    if ("CRLF" if CRLF in brut else "LF") != attendu:
+        Path(c).write_bytes(brut.replace(CRLF,LF) if attendu=="LF" else brut.replace(LF,CRLF))
+FIN
+git diff --stat   # doit refleter le changement reel, pas la reecriture du fichier
+```
+
+## Bilan de session
+
+| Vérification | Commande | Résultat |
+|---|---|---|
+| Contrats dbt, couche de démonstration | `dbt test` | 29 PASS, 7,12 s |
+| Recette complète, base jetable | `recette_ci.py` | 10 étapes, 97 s en local, 82 s sur le runner |
+| Échecs dbt attendus | étape 10 | 5 nommés, 0 surnuméraire |
+| Concordance des deux filets | étapes 9 et 10 | applicatif 4, dbt 5 |
+| Tests unitaires | `pytest tests` | 39 passed |
+| Chaîne complète | run 33080391892 | 6 étages verts |
+
