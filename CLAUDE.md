@@ -81,14 +81,14 @@ un incident réel et sa méthode d'investigation (C4.4.2).
 
 ## État d'avancement
 
-Mis à jour le 26/08/2026 en fin de session 5.
+Mis à jour le 27/08/2026 en fin de session 6.
 
 | Élément | Statut |
 |---|---|
 | Dépôt git dédié, structure, .gitignore | ✅ Fait (dépôt local, décision 2b) |
 | Socle Docker (PostgreSQL 16 + Kafka 3.9 KRaft) | ✅ 6 conteneurs, tous *healthy* |
 | Schéma Silver speed PostgreSQL | ✅ Construit, initialisé automatiquement |
-| **C4.2.2 méthode 1, pipeline temps réel** | ✅ **Exécuté** : Steam vers Kafka vers PostgreSQL. Idempotence prouvée par rejeu. |
+| **C4.2.2 méthode 1, pipeline temps réel** | ✅ **Exécuté et désormais orchestré** : Steam vers Kafka vers PostgreSQL. Idempotence prouvée par rejeu. DAG `gamelens_ingestion_temps_reel` toutes les 15 min, porte de sortie, test négatif broker coupé et reprise automatique vérifiée. |
 | **C4.2.2 méthode 2, orchestrateur** | ✅ **Exécuté** : Airflow 3.1.8 en conteneurs, DAG `gamelens_promotion_gold`, 6 tâches, 3 runs réels en succès. Test négatif de la porte de fraîcheur réussi, reprise automatique observée. |
 | **C4.2.2 méthode 3, calcul distribué** | ✅ **Exécuté** : Snowpark, MERGE idempotents et calcul analytique (fenêtre glissante 7 j, classement par genre). Nature distribuée prouvée par le SQL généré et l'historique de session. |
 | Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté** : 15 dim_games, 15 faits popularité, 45 faits prix |
@@ -97,8 +97,8 @@ Mis à jour le 26/08/2026 en fin de session 5.
 | Recette automatisée de l'entrepôt | ✅ **Exécutée sur le runner** (run 32954104664, 41 s). Base Snowflake créée pour le run, schéma livré appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles d'intégrité vérifiés en positif **et en négatif**, base supprimée. |
 | **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. |
 | Documentation technique / feuille de route | 🟡 `README.md`, les trois documents de suivi et le cahier de recettes. **Feuille de route d'exploitation (C4.3.2) reste à écrire.** |
-| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **32 PASS, 0 partiel, 0 en attente**. |
-| Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-007 s'y ajoutent comme incidents secondaires. |
+| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **38 PASS, 0 partiel, 0 en attente**. |
+| Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-008 s'y ajoutent comme incidents secondaires. |
 
 ## Faits d'environnement à ne pas redécouvrir
 
@@ -179,29 +179,35 @@ Mis à jour le 26/08/2026 en fin de session 5.
 ## Prochaine étape immédiate
 
 **Les trois compétences éliminatoires sont couvertes par des briques réellement
-exécutées.** Ce qui reste n'est plus éliminatoire.
+exécutées, et la chaîne est désormais autonome de bout en bout.** Le trou
+d'ordonnancement constaté le 26/08 est comblé : les cinq alertes ouvertes se
+sont refermées d'elles-mêmes, sans écriture manuelle dans `speed.alertes`.
 
-1. **Planifier l'ingestion temps réel.** Trou structurel constaté le 26/08/2026 :
-   `steam_producer.py` et `kafka_to_postgres.py` ne sont lancés que **à la main
-   ou par la CI**, aucun DAG ne les déclenche. La chaîne batch est orchestrée,
-   la chaîne temps réel ne l'est pas. Conséquence observée : la couche Gold
-   accusait 6 jours de retard et 5 alertes étaient ouvertes, le run planifié du
-   26/08 échouant sur la porte de fraîcheur. La supervision fait son travail,
-   mais la question « et qui lance le pipeline temps réel ? » n'a aujourd'hui
-   pour réponse que « moi, au clavier ». Un troisième DAG refermerait les
-   alertes de lui-même et rendrait la démonstration autonome le jour J.
-2. Écrire la feuille de route d'exploitation (C4.3.2) : tâches, échéances,
-   planification de la maintenance, points de vigilance. Le journal d'alertes et
-   sa colonne `resolue_le` fournissent déjà la matière sur les durées d'incident,
-   l'expiration du compte Snowflake (120 jours) est un point de vigilance tout
-   trouvé, et le point 1 ci-dessus en est un autre, constaté et chiffré.
-3. Consolider la documentation technique (C4.3.3) à partir du `README.md` et des
-   documents de suivi.
-4. Brancher dbt sur Snowflake pour porter les contrôles d'intégrité de
-   `entrepot/verifier_gold.py` en tests dbt, ce que le Bloc 1 annonçait. La
-   recette de CI en fournit désormais le banc d'essai : une base jetable où
-   faire tourner les tests dbt sans risque pour la couche de démonstration.
-5. Préparer le support de soutenance (30 min de présentation).
+1. **Écrire la feuille de route d'exploitation (C4.3.2).** Dernier livrable
+   entièrement absent. La matière est maintenant réelle et chiffrée :
+   - durées d'ouverture d'alerte mesurées : `fraicheur_frequentation`
+     6 j 20 h 26 min, les trois autres 1 j 00 h 34 min ;
+   - expiration du compte Snowflake à 120 jours, point de vigilance daté ;
+   - `GAMELENS_SERVICE` en `ACCOUNTADMIN`, écart au moindre privilège assumé
+     mais non corrigé, à inscrire comme dette ;
+   - la couche Bronze n'existe pas physiquement : aucun recalcul possible
+     depuis la matière première en cas de bug de transformation.
+2. Consolider la documentation technique (C4.3.3) à partir du `README.md` et
+   des documents de suivi.
+3. Brancher dbt sur Snowflake pour porter les contrôles d'intégrité de
+   `entrepot/verifier_gold.py` en tests dbt, ce que le Bloc 1 annonçait. Le
+   répertoire `dbt/` est vide à ce jour. La recette de CI fournit le banc
+   d'essai : une base jetable où faire tourner les tests sans risque.
+4. Préparer le support de soutenance (30 min de présentation).
+
+Deux corrections courtes, à faire quand l'occasion se présente, mais qui ne
+bloquent rien :
+
+- créer un rôle Snowflake dédié à la recette (`CREATE DATABASE` et rien de
+  plus) au lieu d'`ACCOUNTADMIN` ;
+- la latence p95 ne reflète pas les messages restés longtemps dans Kafka
+  (constaté à 42 s alors qu'une collecte avait attendu 7 jours) : la vue
+  `v_indicateur_latence` mérite d'être relue.
 
 ## Conventions de travail
 

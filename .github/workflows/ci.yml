@@ -94,7 +94,7 @@ jobs:
       - name: Construire l'image Airflow du projet
         run: docker build -t gamelens/airflow:ci ./docker/airflow
 
-      - name: Verifier que le DAG s'analyse sans erreur
+      - name: Verifier que les DAG s'analysent sans erreur
         # Analyse le dossier dags avec le vrai moteur Airflow, base de
         # metadonnees SQLite ephemere. Un DAG qui ne s'importe pas, une
         # dependance circulaire ou un provider manquant echouent ici, avant
@@ -104,8 +104,32 @@ jobs:
         # lit la base de metadonnees et non le dossier. Sans elle, la commande
         # renvoie une liste vide sur une base neuve, et le controle passerait
         # a cote d'un DAG absent.
+        #
+        # La liste est explicite et non un comptage, pour la raison deja
+        # rencontree sur les objets de schema (OBS-32) : une assertion qu'on
+        # ajuste a chaque evolution ne teste plus rien, elle enregistre.
+        # Ce controle ne visait que gamelens_promotion_gold, ecrit a l'epoque
+        # ou il etait le seul DAG, et il n'avait couvert ni la supervision ni
+        # l'ingestion temps reel ajoutees depuis.
+        env:
+          ATTENDUS: >-
+            gamelens_promotion_gold
+            gamelens_supervision
+            gamelens_ingestion_temps_reel
         run: |
-          docker run --rm             -v "${{ github.workspace }}/dags:/opt/airflow/dags:ro"             -e AIRFLOW__CORE__LOAD_EXAMPLES=false             -e AIRFLOW__CORE__EXECUTOR=LocalExecutor             gamelens/airflow:ci             bash -c "airflow db migrate >/dev/null 2>&1 &&                      airflow dags reserialize >/dev/null 2>&1 &&                      airflow dags list-import-errors 2>/dev/null | tee /tmp/erreurs.txt &&                      grep -q 'No data found' /tmp/erreurs.txt &&                      echo 'PASS: aucune erreur d import' &&                      airflow dags list 2>/dev/null | grep -q gamelens_promotion_gold &&                      echo 'PASS: le DAG gamelens_promotion_gold est enregistre'"
+            docker run --rm -v "${{ github.workspace }}/dags:/opt/airflow/dags:ro" -e AIRFLOW__CORE__LOAD_EXAMPLES=false -e AIRFLOW__CORE__EXECUTOR=LocalExecutor -e ATTENDUS gamelens/airflow:ci bash -c '
+              set -e
+              airflow db migrate >/dev/null 2>&1
+              airflow dags reserialize >/dev/null 2>&1
+              airflow dags list-import-errors 2>/dev/null | tee /tmp/erreurs.txt
+              grep -q "No data found" /tmp/erreurs.txt
+              echo "PASS: aucune erreur d import"
+              airflow dags list 2>/dev/null > /tmp/dags.txt
+              for attendu in ${ATTENDUS}; do
+                grep -q "${attendu}" /tmp/dags.txt || { echo "ECHEC: ${attendu} absent de la liste"; exit 1; }
+                echo "PASS: ${attendu} est enregistre"
+              done
+            '
 
   integration:
     name: Integration sur infrastructure reelle

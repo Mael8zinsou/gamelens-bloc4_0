@@ -945,3 +945,159 @@ vérification que l'épinglage tient toujours.
 Le coût est d'environ deux minutes par run, mis en cache par `actions/setup-python`.
 C'est un arbitrage assumé : deux minutes de CI contre la certitude que
 l'environnement d'outillage documenté est encore installable.
+
+---
+
+# Session 6, 27 août 2026
+
+## OBS-47. Le tampon Kafka a rendu une collecte vieille de sept jours
+
+Preuve non cherchée, et la meilleure de la session.
+
+Au premier run du nouveau DAG d'ingestion, le consommateur a rapporté
+`records_in = 30` alors que le producteur venait d'en publier 15. Vérification
+en base :
+
+```
+      collecte       | evenements |      ecrit_le
+---------------------+------------+---------------------
+ 2026-08-27 09:22:12 |         15 | 2026-08-27 09:22:54
+ 2026-08-20 12:36:09 |         15 | 2026-08-27 09:22:54
+```
+
+Quinze événements collectés le **20 août à 12h36** ont été écrits en base le
+**27 août à 09h22**, sept jours plus tard. Ils étaient restés dans Kafka tout
+ce temps, parce que le consommateur n'avait jamais tourné après cette collecte.
+Aucun n'a été perdu.
+
+C'est exactement ce que la documentation du DAG affirme sur le rôle du tampon,
+démontré sans l'avoir organisé. La phrase « si PostgreSQL est indisponible, les
+messages restent dans Kafka et le run suivant les reprend » n'est plus une
+affirmation de conception : elle a été vérifiée sur une interruption réelle de
+sept jours.
+
+Note d'honnêteté : la cause de l'interruption n'était pas une panne de
+PostgreSQL mais l'absence d'ordonnancement, c'est-à-dire le trou que cette
+session comble. Le mécanisme démontré est le bon, la circonstance était moins
+glorieuse.
+
+## OBS-48. `--depuis-le-debut` ne veut pas dire ce que son nom suggère
+
+Le drapeau pilote `auto_offset_reset`, que Kafka ne consulte **que** lorsque le
+groupe de consommation n'a aucun offset validé. Il ne relit donc pas tout à
+chaque passage : il décide seulement où commencer la toute première fois.
+
+La conséquence pratique est inverse de l'intuition. Sans lui, la valeur par
+défaut `latest` positionne un groupe neuf **après** les messages déjà présents.
+Le premier run après une remise à zéro du broker publierait quinze messages,
+sauterait par-dessus, et n'écrirait rien. Le DAG se terminerait en succès avec
+zéro ligne.
+
+`earliest` est donc le défaut sûr pour une chaîne qui ne doit rien perdre, et
+`latest` le défaut sûr pour un tableau de bord qui ne veut que le présent. Le
+nom de l'option décrit son implémentation, pas son intention.
+
+## OBS-49. La CI ne vérifiait qu'un DAG sur trois, et personne ne l'avait vu
+
+L'étage d'intégrité de la chaîne d'intégration continue se terminait par :
+
+```
+airflow dags list | grep -q gamelens_promotion_gold
+```
+
+Écrit à l'époque où c'était le seul DAG du projet. Depuis, `gamelens_supervision`
+puis `gamelens_ingestion_temps_reel` se sont ajoutés, et **aucun des deux n'était
+contrôlé**. Un DAG de supervision cassé serait passé au vert.
+
+C'est la même famille de défaut qu'OBS-32, sous une autre forme. Là, une
+assertion par comptage s'ajustait à chaque évolution et n'enregistrait plus
+qu'un état. Ici, une assertion nommée est restée juste mais a cessé d'être
+complète. Les deux ont la même origine : un contrôle écrit pour l'état du
+projet à un instant donné, que rien n'oblige à suivre son évolution.
+
+Corrigé par une liste explicite en variable d'environnement, et **testé en
+négatif** : avec un nom de DAG inexistant, le contrôle sort en code 1 avec le
+message attendu. Un contrôle qu'on étend sans vérifier qu'il sait encore
+échouer n'est pas un contrôle étendu, c'est un contrôle qu'on espère.
+
+## OBS-50. La plateforme a refermé ses cinq alertes toute seule
+
+Enchaînement observé, sans intervention entre les étapes autres que le
+déclenchement des DAG :
+
+| Moment | Fraîcheur | Complétude | Latence p95 | Retard Gold | Alertes |
+|---|---|---|---|---|---|
+| Avant | 8505 min | 0 % | inconnue | 6 j | **5 ouvertes** |
+| Après ingestion | 4,4 min | 100 % | 42 s | 7 j | 1 ouverte |
+| Après promotion | 1,0 min | 100 % | 42 s | 0 j | **0 ouverte** |
+
+Les quatre premières alertes se sont fermées à la seule évaluation suivante des
+règles, sans action dédiée : le moteur constate le retour sous seuil et
+renseigne `resolue_le`. La cinquième a suivi après la promotion.
+
+Le journal d'alertes fournit désormais de vraies durées d'incident, ce qui
+manquait pour écrire la feuille de route d'exploitation (C4.3.2) :
+
+| Règle | Durée d'ouverture |
+|---|---|
+| `fraicheur_frequentation` | 6 j 20 h 26 min |
+| `completude_collecte` | 1 j 00 h 34 min |
+| `latence_pipeline` | 1 j 00 h 34 min |
+| `composant_muet` | 1 j 00 h 34 min |
+
+Ces chiffres ne flattent personne, et c'est ce qui les rend utilisables : ils
+mesurent une plateforme réellement laissée sans surveillance, pas une
+démonstration préparée.
+
+## OBS-51. Orchestrer du temps réel commence par admettre que ce n'en est pas
+
+La question qui bloquait cette session n'était pas technique. Elle était de
+savoir ce qu'on orchestre au juste : on n'exécute pas une boucle infinie sous
+un ordonnanceur batch.
+
+Le déblocage est venu en regardant la source plutôt que l'outil.
+`GetNumberOfCurrentPlayers` rend la valeur d'un compteur à l'instant de
+l'appel. Il n'y a pas de flux à consommer, il y a un capteur à interroger. Le
+« temps réel » de GameLens est un **échantillonnage périodique**, et un
+échantillonnage périodique se planifie sans le moindre contresens.
+
+Corollaire immédiat, qui n'était pas visible avant ce recadrage : `catchup`
+devient dangereux et pas seulement inutile. Rattraper le run de 03h15
+consisterait à interroger Steam maintenant et à estampiller le résultat à
+03h15, c'est-à-dire à fabriquer de l'histoire fausse. Un échantillon manqué est
+perdu, c'est une propriété de la donnée et non un défaut du pipeline.
+
+La leçon est de méthode : nommer correctement ce qu'on manipule débloque des
+décisions de conception que le vocabulaire hérité rendait insolubles.
+
+## OBS-52. La supervision a validé le correctif d'INC-008 sans qu'on le lui demande
+
+En fin de session, un dernier passage de la synthèse laissait une alerte
+ouverte alors que les cinq indicateurs venaient de repasser au nominal :
+
+```
+ regle             | severite | declenchee_le       | message
+-------------------+----------+---------------------+---------------------------------
+ echecs_composants | critique | 2026-08-27 09:45:02 | 1 execution(s) en echec sur 24h
+```
+
+Elle est déclenchée par la panne de broker provoquée volontairement pour le
+test négatif TING-04. Rien d'anormal : une exécution a bien échoué dans les
+dernières 24 heures, la règle le dit.
+
+Ce qui mérite d'être noté, c'est que **cette alerte n'aurait pas pu se
+déclencher deux heures plus tôt**. La règle `echecs_composants` compte les
+lignes de `speed.pipeline_runs` en statut `failed`. Avant la correction
+d'INC-008, une panne de broker n'écrivait aucune ligne : la règle comptait
+zéro, et une panne totale de la collecte passait sous son radar.
+
+Le correctif n'a donc pas seulement rendu la panne traçable, il a rendu
+opérante une règle de supervision qui existait déjà et ne pouvait rien voir.
+On avait écrit la règle, on avait écrit le traçage, et les deux étaient
+corrects. Ils n'étaient simplement jamais reliés dans le seul cas qui compte.
+
+C'est une variante d'un motif qui revient dans ce projet : deux composants
+justes pris séparément, dont la combinaison ne fait pas ce qu'on croit. Le
+garde-fou inatteignable d'OBS-42 en était déjà un cas. Aucune relecture de code
+ne les signale, puisqu'il n'y a rien de faux à lire. Seule une mise en
+situation les révèle.

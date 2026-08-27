@@ -56,12 +56,19 @@ Règle retenue : à chaque session qui **ajoute ou retire une brique**, ou qui
 **invalide une explication donnée ici**, les deux documents sont relus et mis à
 jour dans la même session. Une correction de détail ne le justifie pas.
 
-Points connus à revoir en priorité lors de la prochaine mise à jour :
+Points connus à revoir lors de la prochaine mise à jour :
 
-- l'ingestion temps réel n'est aujourd'hui planifiée par rien, ce que les deux
-  documents disent explicitement. Le jour où un DAG s'en charge, les sections
-  « ce qui ne marche pas encore » deviennent fausses ;
-- l'utilisateur de service Snowflake tourne en `ACCOUNTADMIN`, ce qui est
-  signalé comme une incohérence assumée. Idem le jour où elle sera corrigée.
+- `GAMELENS_SERVICE` tourne en `ACCOUNTADMIN`, signalé comme une incohérence
+  assumée dans les deux documents. Le jour où un rôle dédié le remplacera, ces
+  passages deviendront faux.
+- La couche Bronze n'existe pas physiquement. Si elle est construite, la
+  section sur le quai de livraison change de statut.
+- Le seuil de fraîcheur est écrit à deux endroits, ce que la version Feynman
+  admet dans sa section finale. Une source unique le rendrait caduc.
 
-Dernière mise à jour : 26/08/2026, fin de session 5.
+Traité en session 6 (27/08/2026) : l'ingestion temps réel est désormais
+planifiée. Les deux documents ont été corrigés en conséquence plutôt que
+d'effacer la mention, l'écart entre le constat et la correction faisant partie
+de l'histoire du projet.
+
+Dernière mise à jour : 27/08/2026, fin de session 6.

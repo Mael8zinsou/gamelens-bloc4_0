@@ -330,7 +330,7 @@ Seul le fait d'essayer de casser la chose a révélé que le garde-fou était mo
 
 ## 7. Ce qui a cassé pour de vrai
 
-Sept incidents ont été consignés au fil de la construction. Voici le plus
+Huit incidents ont été consignés au fil de la construction. Voici le plus
 instructif, raconté en entier, parce qu'il montre à quoi ressemble vraiment un
 diagnostic.
 
@@ -399,6 +399,28 @@ problème lui-même.
   étaient bonnes, mais le carnet de bord était faux, donc la surveillance
   croyait le système quatre fois moins actif qu'il ne l'était. Personne n'aurait
   rien vu.
+- **Une panne totale qui ne laissait aucune trace.** En coupant volontairement
+  la file d'attente pour voir ce qui se passe, le programme a bien échoué et
+  l'a bien signalé. Mais le carnet de bord, lui, est resté vide : le mécanisme
+  qui note les échecs était placé juste après la ligne qui plantait, donc il
+  n'était jamais atteint. La panne existait, elle était visible d'un côté et
+  invisible de l'autre, précisément du côté qui sert à surveiller. Corrigé, et
+  revérifié dans les mêmes conditions.
+
+### Le tampon qui a gardé une collecte pendant sept jours
+
+Une histoire courte, et personne ne l'avait organisée.
+
+Souvenez-vous du passe de la cuisine, où le cuisinier dépose les plats sans
+attendre le serveur. Le 20 août, la collecte a déposé quinze relevés. Puis plus
+personne n'est venu les chercher, parce que rien ne lançait le rangement.
+
+Le 27 août, quand le nouveau programme automatique s'est mis en marche, il a
+trouvé ces quinze relevés toujours là, et les a rangés. Sept jours d'attente,
+zéro perte.
+
+C'est exactement ce à quoi sert ce tampon, démontré par accident plutôt que par
+une démonstration préparée. Ce qui vaut mieux.
 
 ---
 
@@ -407,14 +429,34 @@ problème lui-même.
 Cette section est là par honnêteté, et parce qu'un projet dont on ne sait pas
 nommer les limites est un projet mal compris.
 
-**Personne ne lance la collecte automatiquement.** C'est le trou le plus voyant.
-Le traitement de nuit, lui, est bien programmé. Mais la collecte en continu est
-lancée à la main. À la question « et qui démarre la collecte ? », la réponse
-honnête aujourd'hui est : moi, au clavier.
+**Corrigé le 27 août : la collecte se lance maintenant toute seule.** Cette
+section disait, la veille encore, que personne ne démarrait la collecte et que
+la réponse honnête à « qui la lance ? » était « moi, au clavier ». Un
+programme s'en charge désormais tous les quarts d'heure.
 
-Ça s'est vu tout seul le 26 août : le système de surveillance affichait cinq
-alertes et signalait six jours de retard. Il fonctionnait parfaitement. C'est ce
-qu'il surveillait qui ne tournait pas.
+Ce qu'il a fallu comprendre pour y arriver mérite d'être raconté, parce que le
+blocage n'était pas technique. On m'aurait dit « mets un déclencheur
+automatique » que j'aurais répondu, à juste titre, qu'on ne fait pas tourner
+une surveillance continue sous un programmateur conçu pour des tâches
+ponctuelles.
+
+Le déblocage est venu en regardant la source plutôt que l'outil. Steam ne
+diffuse pas un flux d'informations qu'il faudrait écouter en permanence : il
+tient un compteur, qu'on peut aller lire quand on veut. Ce n'est donc pas une
+surveillance continue, c'est un **relevé périodique**. Et un relevé périodique,
+ça se programme sans le moindre problème, comme un relevé de compteur d'eau.
+
+Le mot « temps réel » décrivait un besoin, avoir des chiffres frais. Il avait
+été compris comme une obligation technique.
+
+Conséquence immédiate, et elle est jolie : les cinq alertes qui étaient
+ouvertes se sont refermées toutes seules, sans que personne ne touche à quoi
+que ce soit. Le système constate que tout est rentré dans l'ordre et clôt ses
+propres signalements.
+
+Ce qui reste, plus modeste : entre deux relevés, une panne de quatorze minutes
+passe inaperçue. C'est acceptable pour un relevé au quart d'heure. Ça ne le
+serait pas pour une chaîne où chaque événement compte.
 
 **Le compte de service a tous les droits.** Le programme qui écrit dans
 l'entrepôt dispose des privilèges d'administrateur, alors que le projet met par
@@ -442,7 +484,7 @@ jargon, certains endroits résistent. Quand une explication ne passe pas, c'est
 rarement la faute du lecteur : c'est en général que la chose n'est pas
 totalement comprise, ou qu'elle est moins justifiée qu'on ne le croyait.
 
-Voici les six endroits où je bute, énoncés franchement.
+Voici les sept endroits où je bute, énoncés franchement.
 
 ### « Pourquoi une file d'attente pour quinze jeux ? »
 
@@ -510,14 +552,36 @@ préférable dans un cas réel.
 
 ### « Et si deux collecteurs tournaient en même temps ? »
 
-Je n'en sais rien. Ce n'est pas testé.
+Toujours pas testé, mais la question a bougé depuis la mise en place du
+déclenchement automatique.
+
+Le programmateur a maintenant pour consigne de ne jamais lancer un relevé si le
+précédent n'est pas terminé. Ça règle le cas courant. Ça ne règle pas le cas où
+quelqu'un lance un relevé à la main pendant qu'un relevé automatique tourne :
+là, deux collectes se croiseraient vraiment.
 
 Le raisonnement dit que la protection anti-doublons devrait absorber les
-écritures redondantes, donc que ça devrait bien se passer. Mais « devrait » n'est
-pas « a été vérifié », et tout ce document explique justement pourquoi cette
-différence compte.
+écritures redondantes. Mais « devrait » n'est toujours pas « a été vérifié », et
+tout ce document explique pourquoi cette différence compte.
 
-C'est la première chose que j'irais tester si je reprenais ce projet demain.
+### « Pourquoi le seuil d'alerte est-il écrit à deux endroits ? »
+
+Une gêne que je préfère signaler moi-même.
+
+Le système d'alerte considère que passé 90 minutes sans donnée, il faut
+prévenir. Le programme de relevé vérifie, lui aussi, que les données ont moins
+de 90 minutes avant de se déclarer satisfait.
+
+Deux endroits, même nombre, écrit deux fois. Le jour où l'un des deux change et
+pas l'autre, ils se contrediront sans que rien ne le signale. C'est exactement
+le type de défaut que ce projet passe son temps à traquer ailleurs, et il est
+là, assumé, avec un commentaire dans le code qui l'admet.
+
+La bonne réponse serait une source unique que les deux consultent. Je ne l'ai
+pas faite, parce que le mécanisme pour partager proprement cette valeur entre
+un fichier SQL et un programme demande plus de travail que la valeur ne le
+justifie aujourd'hui. C'est un arbitrage, pas un oubli, mais un arbitrage qui
+vieillira mal si le projet grandit.
 
 ---
 
@@ -539,6 +603,6 @@ C'est la première chose que j'irais tester si je reprenais ce projet demain.
 
 ---
 
-Dernière mise à jour : 26/08/2026, fin de session 5.
+Dernière mise à jour : 27/08/2026, fin de session 6.
 
 Pour le détail technique des décisions, voir [`pour-un-junior.md`](pour-un-junior.md).

@@ -1246,3 +1246,113 @@ Note d'environnement : `pytest` lancé à la racine du dépôt échoue à la
 collecte, sur un lien symbolique `docker/airflow/logs/dag_processor/latest`
 illisible par Windows. Le répertoire est ignoré par git et la CI lance
 `pytest tests`. Cibler le répertoire `tests` en local, pas la racine.
+
+---
+
+# Session 6, 27 août 2026 : ordonnancement de l'ingestion temps réel
+
+## Phase 1. Constat de l'existant (diagnostic)
+
+```bash
+# Qui appelle les scripts d'ingestion ? Reponse : la CI et le clavier.
+grep -rn "steam_producer\|kafka_to_postgres" --include=*.py --include=*.yml .
+
+# L'image Airflow embarque-t-elle le client Kafka ? Non.
+docker exec gamelens-airflow-scheduler python -c "import kafka"
+# ModuleNotFoundError: No module named 'kafka'
+
+# Seuil de la regle de fraicheur, pour caler la cadence du DAG dessus.
+grep -nE "nom=|seuil=" supervision/regles_alertes.py
+# fraicheur_frequentation, seuil 90 minutes
+```
+
+## Phase 2. Mise en place (procédure reproductible)
+
+```bash
+# 1. Ajouter le client Kafka a l'image Airflow, puis la reconstruire.
+docker compose build airflow-scheduler
+docker compose up -d airflow-scheduler airflow-apiserver \
+                    airflow-dag-processor airflow-triggerer
+
+# 2. Verifier que le client est present et que les DAG s'analysent.
+docker exec gamelens-airflow-scheduler python -c "import kafka; print(kafka.__version__)"
+docker exec gamelens-airflow-scheduler airflow dags reserialize
+# Sync 3 DAGs
+
+# 3. Declencher un cycle et suivre son etat.
+docker exec gamelens-airflow-scheduler airflow dags trigger \
+    gamelens_ingestion_temps_reel --run-id ingestion-01
+docker exec gamelens-airflow-scheduler airflow tasks states-for-dag-run \
+    gamelens_ingestion_temps_reel ingestion-01
+```
+
+## Phase 3. Lecture des journaux de tâche (procédure)
+
+Les noms de dossiers de journaux contiennent des `:`, illisibles par un client
+Windows. La lecture passe donc par le conteneur, et la sortie JSON est filtrée
+pour ne garder que les messages :
+
+```bash
+docker exec gamelens-airflow-scheduler sh -c \
+  'cat "/opt/airflow/logs/dag_id=gamelens_ingestion_temps_reel/run_id=ingestion-01/task_id=controler_ingestion/attempt=1.log"' \
+  | grep -oE '"event":"[^"]*"' | sed 's/"event":"//;s/"$//'
+```
+
+## Phase 4. Vérification de l'étage de CI, en positif et en négatif (procédure)
+
+```bash
+docker tag gamelens/airflow:3.1.8 gamelens/airflow:ci
+
+# Positif : les trois DAG attendus sont trouves.
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W)/dags:/opt/airflow/dags:ro" \
+  -e AIRFLOW__CORE__LOAD_EXAMPLES=false -e AIRFLOW__CORE__EXECUTOR=LocalExecutor \
+  -e ATTENDUS="gamelens_promotion_gold gamelens_supervision gamelens_ingestion_temps_reel" \
+  gamelens/airflow:ci bash -c '...'
+# PASS x3
+
+# Negatif : un nom inexistant doit faire sortir en code 1.
+#   ATTENDUS="gamelens_promotion_gold gamelens_dag_inexistant"
+# ECHEC: gamelens_dag_inexistant absent de la liste ; code de sortie 1
+```
+
+## Phase 5. Test négatif sur le broker (procédure)
+
+```bash
+docker stop gamelens-kafka
+docker exec gamelens-airflow-scheduler airflow dags trigger \
+    gamelens_ingestion_temps_reel --run-id test-broker-absent
+
+# La tache echoue (NoBrokersAvailable), l'aval ne demarre pas. Mais :
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT component, status FROM speed.pipeline_runs
+   WHERE started_at >= now() - interval '8 minutes';"
+# (0 rows)  <- defaut reel, voir INC-008
+
+# Apres correction de steam_producer.py et kafka_to_postgres.py, meme test :
+# steam_producer | failed | NoBrokersAvailable: NoBrokersAvailable
+
+docker start gamelens-kafka
+# La reprise automatique d'Airflow repart seule 2 minutes plus tard.
+```
+
+## Phase 6. Vérification de bout en bout (diagnostic)
+
+```bash
+# Etat de la supervision, avant et apres.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT * FROM speed.v_supervision_synthese;"
+
+# Durees d'ouverture des alertes, matiere pour la feuille de route C4.3.2.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT regle, severite, declenchee_le::timestamp(0), resolue_le::timestamp(0),
+          age(resolue_le, declenchee_le) AS duree
+     FROM speed.alertes ORDER BY declenchee_le DESC;"
+
+# D'ou viennent les evenements ecrits, pour comprendre un records_in inattendu.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT collected_at::timestamp(0), count(*), min(ingested_at)::timestamp(0)
+     FROM speed.player_count_events GROUP BY collected_at ORDER BY 1 DESC LIMIT 8;"
+```
+
+Cette dernière requête est celle qui a révélé qu'une collecte du 20/08 avait
+attendu sept jours dans Kafka avant d'être écrite (OBS-47).

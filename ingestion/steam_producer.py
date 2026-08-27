@@ -109,16 +109,24 @@ def main(argv: list[str] | None = None) -> int:
         cfg["poll_interval"],
     )
 
-    producteur = KafkaProducer(
-        bootstrap_servers=cfg["kafka_servers"].split(","),
-        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-        acks="all",
-        retries=3,
-        linger_ms=50,
-    )
-
+    # Le producteur est construit A L'INTERIEUR du contexte de tracage, et non
+    # avant lui. Corrige un angle mort constate le 27/08/2026 par un test
+    # deliberé, broker arrete : KafkaProducer leve NoBrokersAvailable des sa
+    # construction, donc AVANT que execution() n'ouvre la ligne de journal. Une
+    # panne de broker ne laissait alors aucune trace en echec dans
+    # speed.pipeline_runs. La supervision finissait par la voir, mais comme un
+    # composant muet et non comme une execution echouee, ce qui est un
+    # diagnostic moins precis pour la meme panne.
+    producteur = None
     try:
         with execution("steam_producer", logger) as compteurs:
+            producteur = KafkaProducer(
+                bootstrap_servers=cfg["kafka_servers"].split(","),
+                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+                acks="all",
+                retries=3,
+                linger_ms=50,
+            )
             numero = 0
             while True:
                 numero += 1
@@ -133,7 +141,9 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("erreur Kafka : %s", exc)
         return 1
     finally:
-        producteur.close(timeout=10)
+        # Peut valoir None si la construction elle-meme a echoue.
+        if producteur is not None:
+            producteur.close(timeout=10)
 
     return 0
 

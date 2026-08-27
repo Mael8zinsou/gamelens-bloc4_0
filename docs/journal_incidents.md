@@ -309,3 +309,120 @@ erreur fonctionnelle plus haute, pas le probleme lui-meme.
   cas, un indicateur au vert, ou muet, ne disait rien de la realite. Un
   systeme de supervision doit etre teste sur ce qu'il rate, pas seulement sur
   ce qu'il rapporte.
+
+---
+
+# Session 6, 27 août 2026
+
+## INC-008 Une panne d'infrastructure ne laissait aucune trace en échec
+
+- **Date de detection** : 27/08/2026, mise en service du DAG d'ingestion.
+- **Detecte par / comment** : par un test negatif deliberé, et non par une
+  panne subie. Le broker Kafka a ete arrete volontairement pour verifier que la
+  chaine echoue bruyamment plutot que de reussir a vide.
+- **Severite** : mineur en apparence, degradant pour la supervision.
+
+### Nature du probleme
+
+Le test a produit le resultat attendu au niveau de l'orchestrateur : la tache
+`collecter_et_publier` echoue, l'aval ne demarre pas, le message est explicite
+(`NoBrokersAvailable`). Jusque-la, tout est conforme.
+
+La verification suivante, elle, ne l'etait pas :
+
+```sql
+SELECT component, status, error_message FROM speed.pipeline_runs
+WHERE started_at >= now() - interval '8 minutes';
+-- (0 rows)
+```
+
+**Zero ligne.** Une panne complete du broker n'avait laisse aucune trace dans
+le journal d'executions, alors que ce journal est precisement la source de la
+supervision.
+
+Cause : dans `steam_producer.py`, l'objet `KafkaProducer` etait construit
+**avant** l'ouverture du gestionnaire de contexte `execution()`. Or c'est sa
+construction qui leve `NoBrokersAvailable`. L'exception survenait donc avant
+que la ligne `started` ne soit inscrite, et le mecanisme de tracage, qui gere
+pourtant parfaitement les exceptions, n'etait jamais atteint.
+
+Le meme defaut existait dans `kafka_to_postgres.py`, ou `KafkaConsumer` et
+`connexion_pg()` etaient egalement construits en amont du contexte.
+
+### Consequence reelle
+
+La panne n'etait pas invisible, elle etait **mal qualifiee**. La regle
+`echecs_composants`, qui compte les executions en statut `failed`, ne voyait
+rien. Seule la regle `composant_muet` aurait fini par se declencher, plus tard
+et avec un diagnostic moins precis : elle dit « ce composant ne s'est pas
+manifeste », la ou l'information disponible etait « ce composant a echoue, et
+voici pourquoi ».
+
+Sur une plateforme de production, cette nuance separe une astreinte qui sait
+quoi regarder d'une astreinte qui cherche.
+
+### Investigation menee
+
+| Etape | Hypothese | Verification | Resultat |
+|---|---|---|---|
+| 1 | Le tracage ne gere pas les exceptions | Lecture de `execution()` : le bloc `except BaseException` ecrit bien `failed` puis relance | Ecartee |
+| 2 | La connexion de tracage a echoue aussi | PostgreSQL est sain, les DAG voisins ecrivent normalement | Ecartee |
+| 3 | L'exception precede l'ouverture du contexte | Lecture de l'ordre des instructions dans `main()` | **Confirmee** |
+
+L'etape 1 est celle qui oriente : constater que le mecanisme est correct
+deplace la question de « pourquoi n'a-t-il pas fonctionne ? » vers « pourquoi
+n'a-t-il pas ete atteint ? ».
+
+### Scenarios envisages et action retenue
+
+| Scenario | Effet | Effet de bord | Retenu |
+|---|---|---|---|
+| Envelopper l'appel dans un `try` dedie au niveau du DAG | Trace l'echec | Duplique la logique de tracage dans chaque orchestrateur, et laisse les executions manuelles sans trace | non |
+| Attraper l'exception dans `main()` et ecrire la ligne a la main | Trace l'echec | Deuxieme chemin d'ecriture a maintenir en parallele de `execution()` | non |
+| **Deplacer la construction a l'interieur du contexte `execution()`** | Trace l'echec | Le `finally` doit tolerer un objet non construit | **oui** |
+
+Retenu : la troisieme. Elle ne cree aucun chemin d'ecriture supplementaire et
+vaut pour tous les appelants, DAG comme ligne de commande. Les blocs `finally`
+ont ete rendus tolerants a une construction ratee.
+
+### Communication aux parties prenantes
+
+Defaut d'observabilite sans perte de donnee ni interruption de service rendu :
+pas de remontee au commanditaire dans le cadre Kestrel Interactive. La
+communication utile est destinee a l'equipe d'exploitation, qui s'appuie sur ce
+journal pour ses astreintes, sous la forme d'une note precisant que les pannes
+de dependance externe sont desormais qualifiees `failed` et non plus
+silencieuses.
+
+### Resultat obtenu et verification
+
+Rejoue dans les memes conditions, broker toujours arrete :
+
+```
+   component    | status |     started_at      |               erreur
+----------------+--------+---------------------+--------------------------------
+ steam_producer | failed | 2026-08-27 09:40:07 | NoBrokersAvailable: NoBrokersA
+```
+
+Puis, broker relance, la **reprise automatique** d'Airflow deux minutes plus
+tard a rendu la main sans intervention :
+
+```
+ steam_producer    | success | 2026-08-27 09:42:11 |              15 |
+ kafka_to_postgres | success | 2026-08-27 09:42:22 |              15 |
+```
+
+Avant correction : 0 ligne. Apres : une ligne `failed` portant la cause, puis
+une reprise reussie. Aucune donnee perdue.
+
+### Enseignement
+
+Un mecanisme d'observabilite correct ne sert a rien s'il n'est pas atteint. Le
+code de `execution()` etait juste, testé, et gerait les exceptions exactement
+comme il fallait : il etait simplement place apres la ligne qui echoue.
+
+Corollaire de methode : ce defaut n'a ete trouve que parce que le test negatif
+ne s'est pas arrete au premier resultat satisfaisant. La tache Airflow etait
+rouge, ce qui suffisait a valider « la chaine echoue bruyamment ». C'est la
+verification suivante, celle du journal, qui a revele que le bruit n'arrivait
+pas jusqu'a la supervision.

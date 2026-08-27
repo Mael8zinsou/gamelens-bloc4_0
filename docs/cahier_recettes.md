@@ -541,6 +541,116 @@ Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt privé
 | `integration` | Socle Docker réel, 6 contrôles métier | ✅ |
 | `publication` | Image Airflow poussée sur `ghcr.io` | ✅ deux étiquettes |
 
+## Orchestration de l'ingestion temps réel (session 6)
+
+## TING-01. Les trois DAG sont enregistrés, et le contrôle sait échouer
+
+- **Objet** : l'étage d'intégrité de la CI ne vérifiait qu'un DAG sur trois.
+- **Procédure** : image Airflow du projet, dossier `dags/` monté, base de
+  métadonnées éphémère, `airflow dags reserialize` puis recherche de chaque nom
+  attendu dans `airflow dags list`.
+- **Résultat attendu** : les trois noms trouvés, code de sortie 0.
+- **Résultat observé** :
+  ```
+  PASS: aucune erreur d import
+  PASS: gamelens_promotion_gold est enregistre
+  PASS: gamelens_supervision est enregistre
+  PASS: gamelens_ingestion_temps_reel est enregistre
+  ```
+- **Test négatif** : même contrôle avec `gamelens_dag_inexistant` dans la liste
+  attendue. Observé : `ECHEC: gamelens_dag_inexistant absent de la liste`,
+  **code de sortie 1**.
+- **Verdict** : PASS.
+
+## TING-02. Un cycle complet d'ingestion orchestrée
+
+- **Objet** : le DAG `gamelens_ingestion_temps_reel` collecte, publie, consomme
+  et écrit sans intervention.
+- **Procédure** : `airflow dags trigger gamelens_ingestion_temps_reel`.
+- **Résultat attendu** : trois tâches en succès, au moins un événement écrit,
+  les 15 titres de la watchlist couverts, fraîcheur sous le seuil de 90 minutes,
+  et les deux composants tracés dans `speed.pipeline_runs`.
+- **Résultat observé** :
+  ```
+  Ecritures sur les 10 dernieres minutes : 45 evenement(s) sur 15 titre(s) distinct(s).
+  Fraicheur de la frequentation apres ce run : 0.9 minute(s), seuil d'alerte 90.
+    trace kafka_to_postgres    2 execution(s), statut success
+    trace steam_producer       2 execution(s), statut success
+  Ingestion conforme : 45 evenement(s), 15 titre(s), fraicheur 0.9 min, deux composants traces.
+  ```
+  Fraîcheur passée de **8505 minutes à 0,9 minute**.
+- **Verdict** : PASS.
+
+## TING-03. Le tampon Kafka n'a rien perdu pendant sept jours
+
+- **Objet** : vérifier que les messages non consommés survivent à l'absence du
+  consommateur. Constat non provoqué, relevé au premier run.
+- **Résultat attendu** : les messages publiés sans consommateur restent
+  disponibles et sont écrits au passage suivant, sans doublon.
+- **Résultat observé** : le consommateur rapporte `records_in = 30` pour
+  15 messages fraîchement publiés.
+  ```
+        collecte       | evenements |      ecrit_le
+  ---------------------+------------+---------------------
+   2026-08-27 09:22:12 |         15 | 2026-08-27 09:22:54
+   2026-08-20 12:36:09 |         15 | 2026-08-27 09:22:54
+  ```
+  Quinze événements collectés le 20/08 écrits le 27/08, **sept jours plus
+  tard**, sans perte et sans doublon.
+- **Verdict** : PASS.
+
+## TING-04. Broker arrêté : la chaîne échoue bruyamment et laisse une trace
+
+- **Objet** : test négatif. Un pipeline qui réussit à ne rien faire est un
+  pipeline qui ment ; encore faut-il que son échec parvienne à la supervision.
+- **Procédure** : `docker stop gamelens-kafka`, puis déclenchement du DAG.
+- **Résultat attendu** : tâche en échec, aval non démarré, **et** une ligne de
+  statut `failed` dans `speed.pipeline_runs` portant la cause.
+- **Résultat observé, première exécution** : tâche en échec avec
+  `NoBrokersAvailable`, aval non démarré. Mais **zéro ligne** dans
+  `pipeline_runs` : la panne était invisible pour la supervision. Défaut réel,
+  documenté en INC-008 et corrigé.
+- **Résultat observé après correction**, mêmes conditions :
+  ```
+     component    | status |     started_at      |               erreur
+  ----------------+--------+---------------------+--------------------------------
+   steam_producer | failed | 2026-08-27 09:40:07 | NoBrokersAvailable: NoBrokersA
+  ```
+- **Verdict** : PASS après correction. C'est ce test qui a trouvé le défaut.
+
+## TING-05. Reprise automatique après retour du broker
+
+- **Objet** : vérifier que la chaîne repart seule, sans intervention.
+- **Procédure** : `docker start gamelens-kafka` pendant que le run précédent
+  était en attente de reprise.
+- **Résultat attendu** : la reprise automatique d'Airflow réussit, les données
+  sont écrites, aucune perte.
+- **Résultat observé** : reprise à 09:42:11, soit le délai de 2 minutes
+  configuré, sans aucune action de l'opérateur.
+  ```
+   steam_producer    | success | 2026-08-27 09:42:11 |              15 |
+   kafka_to_postgres | success | 2026-08-27 09:42:22 |              15 |
+  ```
+- **Verdict** : PASS.
+
+## TING-06. La plateforme referme ses propres alertes
+
+- **Objet** : vérifier que l'ingestion orchestrée résorbe l'écart que la
+  supervision signalait, sans action manuelle sur les alertes.
+- **Résultat attendu** : les alertes ouvertes se ferment d'elles-mêmes à
+  l'évaluation suivante des règles, avec `resolue_le` renseigné.
+- **Résultat observé** :
+
+  | Moment | Fraîcheur | Complétude | Latence p95 | Retard Gold | Alertes ouvertes |
+  |---|---|---|---|---|---|
+  | Avant | 8505 min | 0 % | inconnue | 6 j | **5** |
+  | Après ingestion | 4,4 min | 100 % | 42 s | 7 j | 1 |
+  | Après promotion | 1,0 min | 100 % | 42 s | 0 j | **0** |
+
+  Cinq indicateurs sur cinq au nominal, zéro alerte ouverte, aucune écriture
+  manuelle dans `speed.alertes`.
+- **Verdict** : PASS.
+
 ## Détail des contrôles de l'étage d'intégration
 
 Chacun a une assertion explicite, aucun ne se contente d'un code de retour nul.
@@ -604,7 +714,8 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 | Structurels | 19 | 0 | 0 |
 | Sécurité | 3 | 0 | 0 |
 | Supervision | 5 | 0 | 0 |
-| **Total** | **32** | **0** | **0** |
+| Ingestion orchestrée | 6 | 0 | 0 |
+| **Total** | **38** | **0** | **0** |
 
 Les tests de sécurité comptent pour 3 cas au niveau du cahier, mais 13 cas
 paramétrés au niveau de l'exécution.
@@ -618,6 +729,10 @@ valeur :
 - **TS-08** a échoué en semblant démontrer le contraire de la réalité, parce que
   l'identifiant de test était rejeté sur sa longueur avant que la contrainte
   visée ne soit évaluée ;
+- **TING-04** a trouvé un défaut réel, en ne s'arrêtant pas au premier résultat
+  satisfaisant : la tâche Airflow était bien rouge, mais la panne ne laissait
+  aucune trace dans le journal d'exécutions et restait donc invisible pour la
+  supervision (INC-008) ;
 - **TS-18** a d'abord **réussi sans rien prouver**, cas plus insidieux qu'un
   échec : le garde-fou qu'il vérifiait était rendu inatteignable par la fonction
   de nommage, et le vert obtenu ne mesurait rien.
@@ -636,5 +751,6 @@ dans trois cas sur cinq ici, le défaut était dans le test.
 | C4.2.2 calcul distribué | TS-10, TS-11, TS-12, TS-15 |
 | C4.2.3 CI/CD | section 5 complète, TS-14, TS-19 |
 | C4.2.1 intégrité applicative | TS-16, TS-17, TS-18 |
-| C4.3.1 supervision | TSUP-01 à TSUP-05 |
+| C4.3.1 supervision | TSUP-01 à TSUP-05, TING-06 |
+| C4.2.2 ingestion orchestrée | TING-01 à TING-05 |
 | Sécurité transverse | TSEC-01 à TSEC-03 |

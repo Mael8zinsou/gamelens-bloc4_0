@@ -136,7 +136,7 @@ le périmètre est petit, donc c'est tenable.
 
 ---
 
-# 3. Les six décisions qui structurent tout le reste
+# 3. Les sept décisions qui structurent tout le reste
 
 ## 3.1 L'exactement-une-fois par puits idempotent, pas par transaction distribuée
 
@@ -333,6 +333,73 @@ changer une variable d'environnement.
 **Ce qu'il faut en retenir.** Une frontière de configuration n'est pas de la
 sur-ingénierie quand elle isole une dépendance externe susceptible de changer.
 Elle paie souvent dans un scénario auquel tu n'avais pas pensé en l'écrivant.
+
+## 3.7 Orchestrer du temps réel commence par admettre que ce n'en est pas
+
+Décision de la session 6, et c'est celle où la formulation du problème comptait
+plus que la solution.
+
+**Le blocage.** La chaîne batch était orchestrée par Airflow, la chaîne temps
+réel ne l'était pas : `steam_producer.py` et `kafka_to_postgres.py` étaient
+lancés à la main. Conséquence mesurée le 26/08/2026, la couche Gold accusait
+six jours de retard et cinq alertes étaient ouvertes. La supervision faisait
+parfaitement son travail ; c'est le pipeline qui ne tournait pas.
+
+L'objection évidente à « il n'y a qu'à mettre un DAG » est juste : on
+n'exécute pas une boucle infinie sous un ordonnanceur batch. C'est un
+contresens, et c'est ce qui bloquait.
+
+**Le déblocage vient de la source, pas de l'outil.**
+`GetNumberOfCurrentPlayers` rend la valeur d'un compteur à l'instant de
+l'appel. Il n'y a **pas de flux à consommer**, il y a un capteur à interroger.
+Le temps réel de GameLens est un échantillonnage périodique, et un
+échantillonnage périodique se planifie sans le moindre contresens.
+
+Le mot « temps réel » venait du Bloc 1 et décrivait un besoin métier, la
+fraîcheur. Il avait été lu comme une contrainte d'implémentation.
+
+**Ce que le recadrage débloque immédiatement.** `catchup=False` cesse d'être un
+confort pour devenir une correction. Rattraper le run manqué de 03h15
+consisterait à interroger Steam maintenant et à estampiller le résultat à
+03h15 : on fabriquerait de l'histoire fausse, ce qui est pire que le trou qu'on
+prétend combler. Un échantillon manqué est perdu, c'est une propriété de la
+donnée et non un défaut du pipeline.
+
+**Cadence.** 15 minutes, choisie contre le seuil de la règle d'alerte
+`fraicheur_frequentation`, fixé à 90 minutes. La marge absorbe cinq cycles
+manqués avant qu'une alerte ne se déclenche. Un seuil et une cadence qui
+s'ignorent finissent toujours par se contredire.
+
+**Kafka reste utile malgré l'enchaînement séquentiel.** Le producteur et le
+consommateur tournent l'un après l'autre dans le même run, ce qui peut donner
+l'impression que le tampon ne sert plus à rien. Il sert : le consommateur ne
+valide son offset qu'après l'écriture en base, donc si PostgreSQL est
+indisponible, les messages restent dans Kafka et le run suivant les reprend.
+
+Ce n'est pas resté théorique. Au premier run, le consommateur a rapporté
+30 messages là où le producteur venait d'en publier 15 :
+
+```
+      collecte       | evenements |      ecrit_le
+---------------------+------------+---------------------
+ 2026-08-27 09:22:12 |         15 | 2026-08-27 09:22:54
+ 2026-08-20 12:36:09 |         15 | 2026-08-27 09:22:54
+```
+
+Quinze événements collectés le 20 août ont été écrits le 27, **sept jours plus
+tard**, sans perte ni doublon. Le tampon avait fait exactement son travail
+pendant une interruption qu'on n'avait pas organisée.
+
+**Un piège de nommage à connaître.** L'option `--depuis-le-debut` ne signifie
+pas « tout relire à chaque fois ». Elle pilote `auto_offset_reset`, que Kafka
+ne consulte **que** lorsque le groupe n'a aucun offset validé. Sans elle, la
+valeur par défaut `latest` positionne un groupe neuf *après* les messages déjà
+présents : le premier run après une remise à zéro du broker publierait quinze
+messages, sauterait par-dessus, et n'écrirait rien, en se terminant en succès.
+`earliest` est le défaut sûr pour une chaîne qui ne doit rien perdre.
+
+**Résultat.** Cinq alertes ouvertes, refermées d'elles-mêmes en deux
+évaluations de règles, sans une seule écriture manuelle dans `speed.alertes`.
 
 ---
 
@@ -561,7 +628,7 @@ Et un test qui réussit ne prouve pas qu'il teste quelque chose.
 
 # 6. Les incidents, et la méthode
 
-Sept incidents sont documentés. Un seul mérite d'être raconté en détail, parce
+Huit incidents sont documentés. Un seul mérite d'être raconté en détail, parce
 qu'il illustre une méthode plutôt qu'une astuce.
 
 ## INC-004 : quand le message d'erreur désigne un innocent
@@ -606,7 +673,7 @@ l'anomalie apparente et réintroduirait l'incident.
 opération d'infrastructure. C'est souvent le linceul d'une erreur fonctionnelle
 plus haute, pas le problème lui-même.
 
-## Les six autres, en une ligne chacune
+## Les sept autres, en une ligne chacune
 
 | ID | Ce qui s'est passé | Ce qu'on en retient |
 |---|---|---|
@@ -616,6 +683,7 @@ plus haute, pas le problème lui-même.
 | INC-005 | Le DAG aurait dupliqué ses lignes au rejeu, faute de contrainte d'unicité | Détecté sans plantage, en cherchant à écrire un `ON CONFLICT` et en constatant qu'il n'avait rien où s'ancrer |
 | INC-006 | `logical_date` vaut `None` sur un lancement manuel en Airflow 3 | Ne suppose pas qu'une valeur fournie par le cadre est toujours présente |
 | INC-007 | Quatre collectes réelles, une seule ligne de journal | Vérifie l'effet de bord attendu, pas seulement le résultat principal |
+| INC-008 | Une panne de broker ne laissait aucune trace en échec : l'exception précédait l'ouverture du journal | Un mécanisme d'observabilité correct ne sert à rien s'il n'est pas atteint |
 
 ## Ce que la grille attend d'un incident
 
@@ -637,23 +705,23 @@ et c'est la troisième qu'on oublie systématiquement :
 Cette section est aussi importante que les précédentes. Un projet dont on ne
 sait pas nommer les limites est un projet qu'on ne comprend pas.
 
-## Rien ne planifie l'ingestion temps réel
+## Résolu le 27/08/2026 : l'ingestion est désormais planifiée
 
-C'est le trou le plus visible. `steam_producer.py` et `kafka_to_postgres.py`
-sont lancés à la main, ou par la chaîne d'intégration continue. **Aucun DAG ne
-les déclenche.** La chaîne batch est orchestrée, la chaîne temps réel ne l'est
-pas.
+Cette section listait « rien ne planifie l'ingestion temps réel » comme le trou
+le plus visible du projet. Il est comblé, voir la décision 3.7. Le DAG
+`gamelens_ingestion_temps_reel` tourne toutes les 15 minutes, la chaîne est
+autonome de bout en bout, et les cinq alertes qui étaient ouvertes se sont
+refermées d'elles-mêmes.
 
-Conséquence observée le 26/08/2026 : la couche Gold accusait six jours de
-retard, cinq alertes étaient ouvertes, et le run planifié échouait sur la porte
-de fraîcheur avec le bon message. La supervision faisait parfaitement son
-travail. C'est le pipeline qui ne tournait pas.
+La mention reste ici plutôt que d'être effacée : l'écart entre le moment où le
+manque a été constaté, le 26/08, et celui où il a été comblé, le 27/08, fait
+partie de l'histoire du projet.
 
-À la question « et qui lance le pipeline temps réel ? », la réponse honnête
-aujourd'hui est « moi, au clavier ».
-
-Coût estimé de la correction : une session courte. Un troisième DAG, ou un
-service en boucle continue avec redémarrage automatique.
+Ce qui subsiste, et qui est plus modeste : le DAG collecte, il ne **surveille**
+pas la collecte en continu. Entre deux cycles, une panne de quatorze minutes
+passe inaperçue jusqu'à l'évaluation suivante des règles. C'est acceptable pour
+un échantillonnage au quart d'heure, ça ne le serait pas pour une chaîne
+d'événements.
 
 ## L'utilisateur de service tourne en ACCOUNTADMIN
 
@@ -761,4 +829,4 @@ documentée d'une architecture surveillée.
 | La supervision | `supervision/` et `sql/schema_supervision.sql` |
 | La chaîne d'intégration continue | `.github/workflows/ci.yml`, six étages |
 
-Dernière mise à jour : 26/08/2026, fin de session 5.
+Dernière mise à jour : 27/08/2026, fin de session 6.

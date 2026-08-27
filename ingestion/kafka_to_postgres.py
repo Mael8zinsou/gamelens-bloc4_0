@@ -87,22 +87,28 @@ def main(argv: list[str] | None = None) -> int:
     args = parseur.parse_args(argv)
 
     cfg = config()
-    consommateur = KafkaConsumer(
-        cfg["topic_players"],
-        bootstrap_servers=cfg["kafka_servers"].split(","),
-        group_id=GROUPE,
-        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
-        auto_offset_reset="earliest" if args.depuis_le_debut else "latest",
-        enable_auto_commit=False,  # la validation suit l'ecriture en base
-        consumer_timeout_ms=args.timeout * 1000 if args.timeout else float("inf"),
-        max_poll_records=200,
-    )
-
     logger.info("groupe=%s topic=%s broker=%s", GROUPE, cfg["topic_players"], cfg["kafka_servers"])
-    conn = connexion_pg()
 
+    # Consommateur et connexion construits A L'INTERIEUR du contexte de tracage.
+    # Meme correction que dans steam_producer.py, pour la meme raison constatee
+    # le 27/08/2026 : construits avant, un broker injoignable ou une base
+    # indisponible levaient leur exception avant l'ouverture de la ligne de
+    # journal, et la panne ne laissait aucune trace en echec.
+    consommateur = None
+    conn = None
     try:
         with execution("kafka_to_postgres", logger) as compteurs:
+            consommateur = KafkaConsumer(
+                cfg["topic_players"],
+                bootstrap_servers=cfg["kafka_servers"].split(","),
+                group_id=GROUPE,
+                value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+                auto_offset_reset="earliest" if args.depuis_le_debut else "latest",
+                enable_auto_commit=False,  # la validation suit l'ecriture en base
+                consumer_timeout_ms=args.timeout * 1000 if args.timeout else float("inf"),
+                max_poll_records=200,
+            )
+            conn = connexion_pg()
             lot: list = []
             for message in consommateur:
                 compteurs["records_in"] += 1
@@ -129,8 +135,11 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         logger.info("arret demande par l'operateur")
     finally:
-        consommateur.close()
-        conn.close()
+        # L'un ou l'autre peut valoir None si sa construction a echoue.
+        if consommateur is not None:
+            consommateur.close()
+        if conn is not None:
+            conn.close()
 
     return 0
 

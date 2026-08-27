@@ -24,3 +24,15 @@ USER airflow
 RUN pip install --no-cache-dir --constraint "${CONSTRAINTS}" \
         apache-airflow-providers-postgres \
         requests
+
+# kafka-python : le DAG d'ingestion temps reel reutilise tels quels les modules
+# de ingestion/, montes en lecture seule dans /opt/gamelens. Sans ce client, les
+# taches echouent des l'import, donc a l'ANALYSE du DAG et pas a son execution :
+# le DAG n'apparait meme pas dans l'interface, ce qui est plus deroutant qu'une
+# tache en echec.
+#
+# Installe hors contraintes : le fichier de contraintes d'Airflow ne connait pas
+# ce paquet, qui n'est pas une dependance du coeur. La version suit celle de
+# requirements.txt, les deux environnements executant le meme code doivent
+# parler au broker de la meme facon.
+RUN pip install --no-cache-dir kafka-python==2.3.0
