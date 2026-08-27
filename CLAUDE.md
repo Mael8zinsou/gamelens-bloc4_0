@@ -87,6 +87,7 @@ Mis à jour le 27/08/2026 en fin de session 6.
 |---|---|
 | Dépôt git dédié, structure, .gitignore | ✅ Fait (dépôt local, décision 2b) |
 | Socle Docker (PostgreSQL 16 + Kafka 3.9 KRaft) | ✅ 6 conteneurs, tous *healthy* |
+| **Couche Bronze** | ✅ **Construite et alimentée** : `bronze.reponses_brutes`, archivage de tout appel abouti ou non, vue de santé des sources. Écart assumé avec le S3 du Bloc 1. |
 | Schéma Silver speed PostgreSQL | ✅ Construit, initialisé automatiquement |
 | **C4.2.2 méthode 1, pipeline temps réel** | ✅ **Exécuté et désormais orchestré** : Steam vers Kafka vers PostgreSQL. Idempotence prouvée par rejeu. DAG `gamelens_ingestion_temps_reel` toutes les 15 min, porte de sortie, test négatif broker coupé et reprise automatique vérifiée. |
 | **C4.2.2 méthode 2, orchestrateur** | ✅ **Exécuté** : Airflow 3.1.8 en conteneurs, DAG `gamelens_promotion_gold`, 6 tâches, 3 runs réels en succès. Test négatif de la porte de fraîcheur réussi, reprise automatique observée. |
@@ -97,7 +98,7 @@ Mis à jour le 27/08/2026 en fin de session 6.
 | Recette automatisée de l'entrepôt | ✅ **Exécutée sur le runner** (run 32954104664, 41 s). Base Snowflake créée pour le run, schéma livré appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles d'intégrité vérifiés en positif **et en négatif**, base supprimée. |
 | **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. |
 | Documentation technique / feuille de route | 🟡 `README.md`, les trois documents de suivi et le cahier de recettes. **Feuille de route d'exploitation (C4.3.2) reste à écrire.** |
-| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **38 PASS, 0 partiel, 0 en attente**. |
+| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **44 PASS, 0 partiel, 0 en attente**. |
 | Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-008 s'y ajoutent comme incidents secondaires. |
 
 ## Faits d'environnement à ne pas redécouvrir
@@ -158,6 +159,17 @@ Mis à jour le 27/08/2026 en fin de session 6.
 - **Les heredocs bash tronquent au-delà d'environ 8 Ko** et l'antislash y est
   parfois avalé, ce qui casse les séquences d'échappement dans le Python
   généré. Écrire par morceaux et construire les échappements par `chr(92)`.
+- **La couche Bronze est une table PostgreSQL, pas un stockage objet.** Écart
+  assumé avec le `Bronze (S3)` annoncé au Bloc 1 : le support change, la
+  propriété recherchée est la même, et un service tiers de plus n'apportait
+  rien à cette échelle. Volumétrie mesurée : 78 octets par relevé de
+  fréquentation, 238 par relevé tarifaire, environ 41 Mo par an.
+- **`bronze.reponses_brutes` n'accorde aucun UPDATE ni DELETE**, pas même à
+  `etl_service`. Une archive modifiable n'est plus une archive. Ne pas
+  « corriger » ce qui ressemble à un oubli de droits : c'est testé (TBRZ-04).
+- **Les scripts de `sql/` ne rejouent pas sur une instance déjà initialisée** :
+  `docker-entrypoint-initdb.d` ne s'exécute que sur un volume vierge. Appliquer
+  à la main par `docker exec -i ... psql < sql/<fichier>.sql`.
 - La base de métadonnées Airflow est une base séparée sur la **même** instance
   PostgreSQL que la couche Silver speed. Choix d'échelle de développement assumé.
 
@@ -190,8 +202,8 @@ sont refermées d'elles-mêmes, sans écriture manuelle dans `speed.alertes`.
    - expiration du compte Snowflake à 120 jours, point de vigilance daté ;
    - `GAMELENS_SERVICE` en `ACCOUNTADMIN`, écart au moindre privilège assumé
      mais non corrigé, à inscrire comme dette ;
-   - la couche Bronze n'existe pas physiquement : aucun recalcul possible
-     depuis la matière première en cas de bug de transformation.
+   - politique de conservation de la couche Bronze : elle croît d'environ
+     41 Mo par an et rien ne la purge aujourd'hui.
 2. Consolider la documentation technique (C4.3.3) à partir du `README.md` et
    des documents de suivi.
 3. Brancher dbt sur Snowflake pour porter les contrôles d'intégrité de

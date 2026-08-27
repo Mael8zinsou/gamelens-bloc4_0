@@ -1101,3 +1101,92 @@ justes pris séparément, dont la combinaison ne fait pas ce qu'on croit. Le
 garde-fou inatteignable d'OBS-42 en était déjà un cas. Aucune relecture de code
 ne les signale, puisqu'il n'y a rien de faux à lire. Seule une mise en
 situation les révèle.
+
+## OBS-53. Le commentaire décrivait un chemin d'erreur que Steam n'emprunte pas
+
+`steam_producer.py` portait depuis l'origine ce commentaire :
+
+> `result == 1` signale une réponse exploitable côté Steam ; toute autre valeur
+> accompagne une réponse HTTP 200 sans donnée utile.
+
+En éprouvant le chemin de rejet sur un identifiant volontairement inexistant,
+Steam a répondu **404**, pas 200 :
+
+```
+HTTPError: 404 Client Error: Not Found for url:
+https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=999999999
+```
+
+Le rejet réel passe donc par `raise_for_status()` et l'exception réseau, pas
+par la branche `result != 1` que le commentaire décrivait. Cette branche
+existe, elle est testée, et rien ne prouve qu'elle soit jamais empruntée en
+production.
+
+Ce n'est pas grave : les deux chemins archivent désormais. Mais le commentaire
+énonçait avec assurance un comportement de fournisseur qui n'avait jamais été
+vérifié, exactement le travers corrigé sur les contraintes Snowflake en
+session 4. Un commentaire qui décrit le comportement d'un tiers vaut ce que
+vaut la dernière fois où on l'a mis à l'épreuve.
+
+## OBS-54. Archiver révèle ce que l'on jetait
+
+La couche Bronze a rendu visible la perte, jusque-là invisible parce que
+personne ne regardait ce qui n'existait plus. Première réponse tarifaire
+archivée :
+
+```json
+{"1145360": {"data": {"price_overview": {
+    "final": 2450, "initial": 2450, "currency": "EUR",
+    "final_formatted": "24,50€", "discount_percent": 0,
+    "initial_formatted": ""
+}}, "success": true}}
+```
+
+`final_formatted` et `initial_formatted` étaient jetés. Ils ne servent à rien
+aujourd'hui. Le jour où une question se pose sur l'affichage régional d'un
+prix, ils auraient manqué, et personne n'aurait su qu'ils avaient existé.
+
+C'est le renversement propre à Bronze : on ne conserve pas ce dont on a besoin,
+on conserve ce dont on ignore encore avoir besoin. Tant qu'on n'archive pas, la
+question « qu'est-ce qu'on perd ? » est structurellement impossible à poser.
+
+## OBS-55. Le coût de l'archive, chiffré plutôt que redouté
+
+L'objection réflexe à une couche Bronze est le volume. Mesuré sur les données
+réelles plutôt qu'estimé :
+
+| Source | Octets moyens par réponse |
+|---|---|
+| `steam_player_count` | 78 |
+| `steam_appdetails` | 238 |
+
+À la cadence en place, 15 titres toutes les 15 minutes pour la fréquentation et
+une fois par jour pour les tarifs, cela donne environ **114 Ko par jour**, soit
+**41 Mo par an**. Sur une base qui héberge déjà les métadonnées d'Airflow, c'est
+sous le seuil du remarquable.
+
+La conclusion utile n'est pas « c'est petit ». C'est qu'une objection de volume
+formulée sans mesure ne vaut rien, et qu'il suffisait de trois minutes pour la
+trancher. Le calcul est refait dans la feuille de route, où il conditionne la
+politique de conservation.
+
+## OBS-56. Une archive qu'on nettoie n'est plus une archive
+
+Le test du chemin de rejet a laissé dans `bronze.reponses_brutes` une ligne
+concernant l'appid 999999999, qui n'appartient pas au panel suivi. Elle fait
+tomber le taux d'exploitabilité affiché à 96,9 % au lieu de 100 %.
+
+Réflexe naturel : supprimer la ligne pour que la démonstration soit propre.
+Décision retenue : la garder.
+
+Trois raisons. Elle est vraie, l'appel a réellement eu lieu à cet instant. Le
+schéma vient d'être écrit avec l'argument qu'une archive modifiable n'est plus
+une archive, et n'accorde d'ailleurs aucun droit de suppression à
+`etl_service` : contourner cette règle en tant que propriétaire pour des
+raisons cosmétiques la viderait de son sens dès le premier jour. Enfin, cette
+ligne est le seul exemple vivant du chemin de rejet, et un taux à 96,9 %
+raconte mieux le fonctionnement de la vue qu'un 100 % lisse.
+
+Le nettoyage de la couche Bronze est un sujet réel, mais il s'appelle politique
+de conservation, il se décide à l'avance, et il s'applique par ancienneté et
+non par convenance.

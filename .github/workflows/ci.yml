@@ -174,11 +174,11 @@ jobs:
         # donne directement la liste de ce qui manque au lieu d'un ecart de
         # comptage a interpreter.
         run: |
-          manquants=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc "SELECT coalesce(string_agg(o, ', '), '') FROM (VALUES ('speed.game_mapping'), ('speed.player_count_events'), ('speed.price_snapshots'), ('speed.pipeline_runs'), ('speed.alertes'), ('speed.v_daily_player_stats'), ('speed.v_indicateur_fraicheur'), ('speed.v_indicateur_completude'), ('speed.v_indicateur_latence'), ('speed.v_indicateur_fiabilite'), ('speed.v_indicateur_gold'), ('speed.v_supervision_synthese'), ('mart.dim_games'), ('mart.dim_stores'), ('mart.fact_prices'), ('mart.fact_popularity_history'), ('mart.v_popularity_dashboard')) AS attendus(o) WHERE to_regclass(o) IS NULL")
+          manquants=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc "SELECT coalesce(string_agg(o, ', '), '') FROM (VALUES ('speed.game_mapping'), ('speed.player_count_events'), ('speed.price_snapshots'), ('speed.pipeline_runs'), ('speed.alertes'), ('speed.v_daily_player_stats'), ('speed.v_indicateur_fraicheur'), ('speed.v_indicateur_completude'), ('speed.v_indicateur_latence'), ('speed.v_indicateur_fiabilite'), ('speed.v_indicateur_gold'), ('speed.v_supervision_synthese'), ('mart.dim_games'), ('mart.dim_stores'), ('mart.fact_prices'), ('mart.fact_popularity_history'), ('mart.v_popularity_dashboard'), ('bronze.reponses_brutes'), ('bronze.v_sante_sources')) AS attendus(o) WHERE to_regclass(o) IS NULL")
           if [ -n "${manquants}" ]; then
             echo "objets absents apres initialisation : ${manquants}"; exit 1
           fi
-          echo "les 17 objets attendus des schemas speed et mart sont presents"
+          echo "les 19 objets attendus des schemas bronze, speed et mart sont presents"
 
       - name: Tests de securite sur les roles
         # Ces tests ont besoin d'une base : l'etage `tests` les ignore
@@ -206,6 +206,26 @@ jobs:
                    "SELECT count(*) FROM speed.player_count_events")
           echo "lignes ecrites : ${lignes}"
           [ "${lignes}" -gt 0 ] || { echo "aucune ligne ecrite"; exit 1; }
+
+      - name: Verifier que la couche Bronze a archive la collecte
+        # La couche Bronze n'a d'interet que si elle est alimentee par le
+        # chemin normal, sans que personne n'y pense. On verifie donc qu'elle
+        # s'est remplie du seul fait d'avoir lance le pipeline, et que le
+        # nombre d'archives correspond au nombre de titres suivis : un ecart
+        # signalerait un chemin de code qui interroge une source sans archiver.
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5433"
+        run: |
+          attendu=$(python -c "import json; print(len(json.load(open('config/watchlist.json'))['titres']))")
+          archivees=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc "SELECT count(*) FROM bronze.reponses_brutes WHERE source = 'steam_player_count'")
+          echo "titres suivis : ${attendu} ; reponses archivees : ${archivees}"
+          [ "${archivees}" -ge "${attendu}" ] || { echo "la couche Bronze n a pas archive tous les appels"; exit 1; }
+          # Une archive qui perd le corps de la reponse ne sert a rien : c'est
+          # exactement ce qu'on cherche a conserver.
+          avec_charge=$(docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc "SELECT count(*) FROM bronze.reponses_brutes WHERE source = 'steam_player_count' AND exploitable AND charge IS NOT NULL")
+          echo "archives exploitables portant leur charge : ${avec_charge}"
+          [ "${avec_charge}" -ge 1 ] || { echo "aucune reponse exploitable ne porte sa charge"; exit 1; }
 
       - name: Verifier l'idempotence du puits
         # Rejoue les memes messages depuis le debut du topic : la table ne doit

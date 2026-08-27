@@ -61,13 +61,11 @@ Points connus à revoir lors de la prochaine mise à jour :
 - `GAMELENS_SERVICE` tourne en `ACCOUNTADMIN`, signalé comme une incohérence
   assumée dans les deux documents. Le jour où un rôle dédié le remplacera, ces
   passages deviendront faux.
-- La couche Bronze n'existe pas physiquement. Si elle est construite, la
-  section sur le quai de livraison change de statut.
 - Le seuil de fraîcheur est écrit à deux endroits, ce que la version Feynman
   admet dans sa section finale. Une source unique le rendrait caduc.
 
 Traité en session 6 (27/08/2026) : l'ingestion temps réel est désormais
-planifiée. Les deux documents ont été corrigés en conséquence plutôt que
+planifiée, et la couche Bronze est construite. Les deux documents ont été corrigés en conséquence plutôt que
 d'effacer la mention, l'écart entre le constat et la correction faisant partie
 de l'histoire du projet.
 

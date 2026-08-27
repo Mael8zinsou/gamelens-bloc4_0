@@ -1356,3 +1356,107 @@ docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
 
 Cette dernière requête est celle qui a révélé qu'une collecte du 20/08 avait
 attendu sept jours dans Kafka avant d'être écrite (OBS-47).
+
+---
+
+# Session 6 (suite), 27 août 2026 : construction de la couche Bronze
+
+## Phase 7. Constat de la perte (diagnostic)
+
+```bash
+# La couche Bronze est-elle implementee quelque part ? Non.
+grep -rniE "boto3|s3\.|bucket|bronze" --include=*.py --include=*.sql --include=*.yml .
+
+# Que garde reellement le producteur de la reponse Steam ?
+sed -n '/^def interroger_steam/,/^def main/p' ingestion/steam_producer.py
+# Un entier est extrait, le reste est jete dans la ligne suivante.
+
+# Retention Kafka : 168 heures. Une fenetre, pas un archivage, et le message
+# transporte est deja transforme.
+grep -nE "RETENTION" docker-compose.yml
+```
+
+## Phase 8. Mise en place (procédure reproductible)
+
+```bash
+# Le schema est monte a l'initialisation en 15_, apres le script Silver en 10_
+# qui cree les roles auxquels bronze accorde des droits.
+# Sur une instance deja demarree, les scripts d'init ne rejouent pas :
+docker exec -i gamelens-postgres psql -U gamelens_app -d gamelens \
+    -v ON_ERROR_STOP=1 < sql/schema_bronze.sql
+
+# Verification des objets crees.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c "\dt bronze.*"
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c "\dv bronze.*"
+```
+
+## Phase 9. Vérification sur la plateforme réelle (procédure)
+
+```bash
+# Un cycle d'ingestion alimente Bronze sans action particuliere.
+docker exec gamelens-airflow-scheduler airflow dags trigger \
+    gamelens_ingestion_temps_reel --run-id bronze-01
+
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT source, count(*), count(*) FILTER (WHERE exploitable) AS ok,
+          count(*) FILTER (WHERE NOT exploitable) AS rejets
+     FROM bronze.reponses_brutes GROUP BY source;"
+
+# Ce qui est reellement conserve.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT identifiant, jsonb_pretty(charge) FROM bronze.reponses_brutes
+    WHERE source = 'steam_appdetails' ORDER BY reponse_id LIMIT 1;"
+
+# Collecte tarifaire, second point d'appel archive.
+docker exec gamelens-airflow-scheduler python -c \
+  "from steam_prices import collecter_et_tracer; print(collecter_et_tracer())"
+```
+
+## Phase 10. Test du chemin de rejet, par le code de production (procédure)
+
+Le chemin qui compte est celui de l'échec, et il ne se teste pas en simulation
+seule. Appel réel sur un identifiant inexistant, avec la gestion d'erreur
+copiée de `cycle()` :
+
+```bash
+docker exec gamelens-airflow-scheduler python -c "
+import logging, requests
+from datetime import UTC, datetime
+from bronze import archive
+from steam_producer import interroger_steam, SOURCE_BRONZE
+log = logging.getLogger('essai'); logging.basicConfig(level=logging.WARNING)
+session = requests.Session(); instant = datetime.now(UTC).replace(microsecond=0)
+with archive(log) as depot:
+    for appid in (999999999, 413150):
+        try:
+            releve = interroger_steam(session, appid)
+        except requests.RequestException as exc:
+            depot.enregistrer(SOURCE_BRONZE, appid, instant,
+                              motif_rejet=f'{type(exc).__name__}: {exc}'[:500])
+            continue
+        depot.enregistrer(SOURCE_BRONZE, appid, instant, charge=releve.charge,
+                          statut_http=releve.statut_http, motif_rejet=releve.motif_rejet)
+"
+# Constat : Steam repond 404 pour un appid inconnu, pas 200 avec result != 1
+# comme le commentaire du code l'affirmait (OBS-53).
+```
+
+Piège rencontré, déjà connu (INC-002) : `docker exec -e PYTHONPATH=/opt/...`
+depuis Git Bash fait réécrire le chemin par MSYS et le module devient
+introuvable. Le conteneur porte déjà la bonne valeur, il suffit de ne pas
+passer le drapeau.
+
+## Phase 11. Sécurité et volumétrie (procédure)
+
+```bash
+# L'immuabilite de l'archive se verifie en tentant l'interdit, pas en lisant
+# les GRANT. 20 cas parametres, contre 13 avant Bronze.
+POSTGRES_HOST=localhost POSTGRES_PORT=5433 python -m pytest tests/test_securite_roles.py -q
+
+# Volumetrie mesuree, pour trancher l'objection de volume par un chiffre.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT source, count(*), pg_size_pretty(sum(pg_column_size(charge))::bigint),
+          round(avg(pg_column_size(charge))) AS octets_moyens
+     FROM bronze.reponses_brutes GROUP BY source;"
+# 78 octets par frequentation, 238 par tarif, soit environ 41 Mo par an.
+```

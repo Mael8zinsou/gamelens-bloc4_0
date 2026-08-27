@@ -30,12 +30,18 @@ import argparse
 import json
 import sys
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import requests
+from bronze import Archive, archive
 from common import charger_watchlist, config, configurer_logs, execution
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
+
+# Nom du point d'appel dans bronze.reponses_brutes. Constante plutot que
+# chaine libre : la vue bronze.v_sante_sources regroupe dessus.
+SOURCE_BRONZE = "steam_player_count"
 
 logger = configurer_logs("steam_producer")
 
@@ -44,20 +50,52 @@ DELAI_ENTRE_APPELS = 0.4  # respect des limites de frequence de l'API Steam
 TIMEOUT_HTTP = 10
 
 
-def interroger_steam(session: requests.Session, appid: int) -> int | None:
-    """Retourne le nombre de joueurs connectes, ou None si la reponse est inexploitable."""
+@dataclass
+class Releve:
+    """Resultat d'un appel a Steam, exploitable ou non.
+
+    Renvoyer un objet plutot qu'un `int | None` n'est pas du confort : la
+    couche Bronze a besoin de la reponse telle que recue et de la raison du
+    rejet, or les deux etaient jetes dans la ligne meme qui en extrayait le
+    nombre de joueurs.
+    """
+
+    joueurs: int | None
+    charge: dict | None
+    statut_http: int | None
+    motif_rejet: str | None
+
+
+def interroger_steam(session: requests.Session, appid: int) -> Releve:
+    """Interroge Steam et rend la reponse complete, exploitable ou non."""
     reponse = session.get(URL_STEAM, params={"appid": appid}, timeout=TIMEOUT_HTTP)
+    statut = reponse.status_code
     reponse.raise_for_status()
-    corps = reponse.json().get("response", {})
+
+    corps = reponse.json()
+    contenu = corps.get("response", {})
     # result == 1 signale une reponse exploitable cote Steam ; toute autre
     # valeur accompagne une reponse HTTP 200 sans donnee utile.
-    if corps.get("result") != 1 or "player_count" not in corps:
-        return None
-    return int(corps["player_count"])
+    if contenu.get("result") != 1:
+        return Releve(None, corps, statut, f"result={contenu.get('result')!r}")
+    if "player_count" not in contenu:
+        return Releve(None, corps, statut, "player_count absent de la reponse")
+    return Releve(int(contenu["player_count"]), corps, statut, None)
 
 
-def cycle(producteur: KafkaProducer, topic: str, titres: list[dict], compteurs: dict) -> None:
-    """Un passage complet sur la watchlist."""
+def cycle(
+    producteur: KafkaProducer,
+    topic: str,
+    titres: list[dict],
+    compteurs: dict,
+    depot: Archive,
+) -> None:
+    """Un passage complet sur la watchlist.
+
+    Chaque appel est archive en couche Bronze AVANT toute exploitation, y
+    compris ceux qui echouent. C'est l'ordre qui compte : archiver apres avoir
+    exploite reviendrait a ne conserver que ce qu'on a su lire.
+    """
     session = requests.Session()
     session.headers["User-Agent"] = "GameLens/1.0 (projet de certification RNCP39586)"
     collecte_le = datetime.now(UTC).replace(microsecond=0)
@@ -66,17 +104,35 @@ def cycle(producteur: KafkaProducer, topic: str, titres: list[dict], compteurs: 
         appid = titre["steam_appid"]
         compteurs["records_in"] += 1
         try:
-            joueurs = interroger_steam(session, appid)
+            releve = interroger_steam(session, appid)
         except requests.RequestException as exc:
+            # Un appel qui n'aboutit pas est une observation, pas un neant :
+            # la source etait injoignable a cet instant precis, et c'est
+            # exactement ce qu'on voudra savoir en analysant un trou.
+            depot.enregistrer(
+                SOURCE_BRONZE,
+                appid,
+                collecte_le,
+                motif_rejet=f"{type(exc).__name__}: {exc}"[:500],
+            )
             logger.warning(
                 "appid=%s injoignable (%s), titre ignore pour ce cycle", appid, type(exc).__name__
             )
             continue
 
-        if joueurs is None:
-            logger.warning("appid=%s reponse sans player_count exploitable", appid)
+        depot.enregistrer(
+            SOURCE_BRONZE,
+            appid,
+            collecte_le,
+            charge=releve.charge,
+            statut_http=releve.statut_http,
+            motif_rejet=releve.motif_rejet,
+        )
+
+        if releve.joueurs is None:
             continue
 
+        joueurs = releve.joueurs
         evenement = {
             "steam_appid": appid,
             "unified_name": titre["unified_name"],
@@ -119,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
     # diagnostic moins precis pour la meme panne.
     producteur = None
     try:
-        with execution("steam_producer", logger) as compteurs:
+        with execution("steam_producer", logger) as compteurs, archive(logger) as depot:
             producteur = KafkaProducer(
                 bootstrap_servers=cfg["kafka_servers"].split(","),
                 value_serializer=lambda v: json.dumps(v).encode("utf-8"),
@@ -131,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
             while True:
                 numero += 1
                 logger.info("--- cycle %s ---", numero)
-                cycle(producteur, cfg["topic_players"], titres, compteurs)
+                cycle(producteur, cfg["topic_players"], titres, compteurs, depot)
                 if cycles_vises and numero >= cycles_vises:
                     break
                 time.sleep(cfg["poll_interval"])

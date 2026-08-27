@@ -17,10 +17,15 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import requests
+from bronze import archive
 from common import charger_watchlist, configurer_logs, connexion_pg, execution
+
+# Nom du point d'appel dans bronze.reponses_brutes.
+SOURCE_BRONZE = "steam_appdetails"
 
 logger = configurer_logs("steam_prices")
 
@@ -36,31 +41,61 @@ ON CONFLICT ON CONSTRAINT uq_price_snapshot DO NOTHING
 """
 
 
-def lire_prix(session: requests.Session, appid: int) -> dict | None:
-    """Retourne le tarif d'un titre, ou None si Steam n'en expose pas.
+@dataclass
+class Tarif:
+    """Resultat d'un appel a appdetails, exploitable ou non.
 
-    Un None n'est pas une erreur : un jeu gratuit, retire de la vente ou
-    indisponible dans la region interrogee ne porte pas de `price_overview`.
+    Porte la reponse telle que recue en plus du tarif derive. C'est ici que la
+    perte d'information etait la plus marquee du projet : `price_overview`
+    contient plus que les quatre champs conserves, et la conversion en euros,
+    le choix entre `initial` et `final` puis les valeurs par defaut sont de
+    vraies decisions de transformation. Leur entree n'etait gardee nulle part,
+    alors que la source n'est pas rejouable : personne ne dira jamais a quel
+    prix un jeu etait vendu mardi dernier.
+    """
+
+    tarif: dict | None
+    charge: dict | None
+    statut_http: int | None
+    motif_rejet: str | None
+
+
+def lire_prix(session: requests.Session, appid: int) -> Tarif:
+    """Interroge appdetails et rend la reponse complete, exploitable ou non.
+
+    Une absence de tarif n'est pas une erreur : un jeu gratuit, retire de la
+    vente ou indisponible dans la region interrogee ne porte pas de
+    `price_overview`. Elle est desormais archivee comme telle plutot que
+    reduite a une ligne de journal.
     """
     reponse = session.get(
         URL_APPDETAILS,
         params={"appids": appid, "cc": "fr", "l": "fr", "filters": "price_overview"},
         timeout=TIMEOUT_HTTP,
     )
+    statut = reponse.status_code
     reponse.raise_for_status()
-    bloc = reponse.json().get(str(appid), {})
+
+    corps = reponse.json()
+    bloc = corps.get(str(appid), {})
     if not bloc.get("success"):
-        return None
+        return Tarif(None, corps, statut, "success=false cote Steam")
     apercu = (bloc.get("data") or {}).get("price_overview")
     if not apercu:
-        return None
+        return Tarif(None, corps, statut, "aucun price_overview expose")
+
     # Steam exprime les montants en centimes.
-    return {
-        "price_final": apercu["final"] / 100,
-        "price_initial": apercu.get("initial", apercu["final"]) / 100,
-        "discount_percent": apercu.get("discount_percent", 0),
-        "currency": apercu.get("currency", "EUR"),
-    }
+    return Tarif(
+        {
+            "price_final": apercu["final"] / 100,
+            "price_initial": apercu.get("initial", apercu["final"]) / 100,
+            "discount_percent": apercu.get("discount_percent", 0),
+            "currency": apercu.get("currency", "EUR"),
+        },
+        corps,
+        statut,
+        None,
+    )
 
 
 def collecter(compteurs: dict | None = None) -> dict:
@@ -75,22 +110,41 @@ def collecter(compteurs: dict | None = None) -> dict:
     sans_tarif: list[int] = []
     conn = connexion_pg()
     try:
-        with conn, conn.cursor() as cur:
+        with archive(logger) as depot, conn, conn.cursor() as cur:
             for titre in titres:
                 appid = titre["steam_appid"]
                 compteurs["records_in"] += 1
                 try:
-                    tarif = lire_prix(session, appid)
+                    releve = lire_prix(session, appid)
                 except requests.RequestException as exc:
+                    depot.enregistrer(
+                        SOURCE_BRONZE,
+                        appid,
+                        collecte_le,
+                        motif_rejet=f"{type(exc).__name__}: {exc}"[:500],
+                    )
                     logger.warning("appid=%s injoignable (%s)", appid, type(exc).__name__)
                     continue
 
-                if tarif is None:
+                # Archivage AVANT exploitation : archiver apres reviendrait a ne
+                # conserver que ce qu'on a su lire, ce qui vide la couche Bronze
+                # de son interet.
+                depot.enregistrer(
+                    SOURCE_BRONZE,
+                    appid,
+                    collecte_le,
+                    charge=releve.charge,
+                    statut_http=releve.statut_http,
+                    motif_rejet=releve.motif_rejet,
+                )
+
+                if releve.tarif is None:
                     sans_tarif.append(appid)
                     logger.info("appid=%-8s %-18s aucun tarif expose", appid, titre["unified_name"])
                     time.sleep(DELAI_ENTRE_APPELS)
                     continue
 
+                tarif = releve.tarif
                 cur.execute(
                     INSERTION,
                     (

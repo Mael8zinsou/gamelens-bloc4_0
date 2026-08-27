@@ -98,6 +98,9 @@ services:
       # l'etage d'integration de la CI depend.
       - ./sql/00_create_airflow_db.sql:/docker-entrypoint-initdb.d/00_create_airflow_db.sql:ro
       - ./sql/schema_silver_speed.sql:/docker-entrypoint-initdb.d/10_schema_silver_speed.sql:ro
+      # 15 et non 05 : le schema bronze accorde des droits aux roles
+      # etl_service et analyst, qui sont crees par le script Silver.
+      - ./sql/schema_bronze.sql:/docker-entrypoint-initdb.d/15_schema_bronze.sql:ro
       - ./sql/schema_gold.sql:/docker-entrypoint-initdb.d/20_schema_gold.sql:ro
       - ./sql/schema_supervision.sql:/docker-entrypoint-initdb.d/30_schema_supervision.sql:ro
     healthcheck:

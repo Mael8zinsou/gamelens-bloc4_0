@@ -104,6 +104,10 @@ transformation, tu peux tout recalculer. Si tu as écrasé la source, tu ne peux
 rien recalculer du tout. C'est une assurance, et comme toute assurance elle ne
 sert que le jour où ça va mal.
 
+Ici, c'est `bronze.reponses_brutes`, une table PostgreSQL et non le stockage
+objet annoncé au Bloc 1. Elle archive **tout appel, abouti ou non**, ce second
+point étant le moins évident et le plus utile : voir la décision 3.8.
+
 **Silver**, c'est la donnée nettoyée, typée, dédoublonnée, avec les
 identifiants réconciliés. C'est là que le travail réel a lieu.
 
@@ -136,7 +140,7 @@ le périmètre est petit, donc c'est tenable.
 
 ---
 
-# 3. Les sept décisions qui structurent tout le reste
+# 3. Les huit décisions qui structurent tout le reste
 
 ## 3.1 L'exactement-une-fois par puits idempotent, pas par transaction distribuée
 
@@ -400,6 +404,94 @@ messages, sauterait par-dessus, et n'écrirait rien, en se terminant en succès.
 
 **Résultat.** Cinq alertes ouvertes, refermées d'elles-mêmes en deux
 évaluations de règles, sans une seule écriture manuelle dans `speed.alertes`.
+
+## 3.8 Archiver ce qu'on ne sait pas encore vouloir
+
+Décision de la session 6, et celle dont l'argument est le moins intuitif.
+
+**Le constat.** L'architecture du Bloc 1 déclarait une couche Bronze. Elle
+n'existait pas. Regarde ce que faisait le producteur :
+
+```python
+corps = reponse.json().get("response", {})
+if corps.get("result") != 1 or "player_count" not in corps:
+    return None
+return int(corps["player_count"])
+```
+
+La réponse de Steam est lue, un entier en est extrait, et **le reste est jeté
+dans la ligne même qui l'exploite**. Une ligne plus loin, la réponse d'origine
+n'existe plus nulle part, même pas en mémoire.
+
+**L'objection habituelle**, et elle est raisonnable : à quoi bon conserver une
+réponse dont on n'exploite qu'un champ, alors qu'on peut toujours réinterroger
+l'API ?
+
+**La réponse tient en trois mots : la source n'est pas rejouable.** Personne ne
+te dira jamais combien de joueurs étaient connectés mardi dernier, ni à quel
+prix un jeu était vendu ce jour-là. Un défaut de transformation découvert dans
+trois mois aurait donc corrompu trois mois d'historique définitivement, sans
+aucun chemin de réparation. C'est le seul endroit du projet où une erreur
+serait irrattrapable ; tout le reste se reconstruit.
+
+**Pourquoi Kafka ne suffisait pas**, alors qu'il retient les messages 168
+heures et que la session 6 a justement démontré une récupération à sept jours.
+Deux raisons : il transporte le message **déjà transformé**, pas la réponse
+d'origine, et sept jours est une fenêtre de rétention, pas un archivage. Il
+donne un rejeu de sept jours au niveau Silver. C'est utile, ça a servi, et ce
+n'est pas la même chose.
+
+**Ce qui est archivé, et l'ordre compte.** Chaque appel est écrit en Bronze
+**avant** toute exploitation. Archiver après reviendrait à ne conserver que ce
+qu'on a su lire.
+
+Et surtout, **les appels qui échouent sont archivés aussi**. C'est la moitié
+la moins évidente et probablement la plus utile. Avant, une réponse
+inexploitable ne produisait qu'un `logger.warning` puis disparaissait. Or
+« la source a répondu pour cet identifiant à cet instant, mais sans donnée
+utilisable » est précisément le signal d'un jeu retiré du catalogue ou d'une
+API qui se dégrade. La contrainte du schéma l'impose :
+
+```sql
+CONSTRAINT ck_reponses_brutes_motif
+    CHECK (exploitable OR motif_rejet IS NOT NULL)
+```
+
+Sans elle, le cas le plus intéressant serait aussi le moins documenté.
+
+**Une archive ne se modifie pas.** Contrairement au schéma `speed`, aucun
+`UPDATE` n'est accordé sur Bronze, pas même à `etl_service`. Le seul droit
+d'écriture est l'ajout. Ce n'est pas un oubli de droits, c'est ce qui distingue
+une archive d'un cache, et c'est testé : la matrice de sécurité tente
+l'opération interdite et vérifie le refus.
+
+**Ce que ça a révélé immédiatement.** Première réponse tarifaire archivée :
+
+```json
+{"price_overview": {
+    "final": 2450, "initial": 2450, "currency": "EUR",
+    "final_formatted": "24,50€", "initial_formatted": "",
+    "discount_percent": 0
+}}
+```
+
+`final_formatted` et `initial_formatted` étaient jetés depuis le début. Ils ne
+servent à rien aujourd'hui. Le jour où une question se posera sur l'affichage
+régional d'un prix, ils auraient manqué, et personne n'aurait su qu'ils avaient
+existé. C'est le renversement propre à Bronze : **on ne conserve pas ce dont on
+a besoin, on conserve ce dont on ignore encore avoir besoin.** Tant qu'on
+n'archive pas, la question « qu'est-ce qu'on perd ? » est structurellement
+impossible à poser.
+
+**Le coût, mesuré et pas estimé.** L'objection réflexe à une couche Bronze est
+le volume. 78 octets par relevé de fréquentation, 238 par relevé tarifaire,
+soit environ 114 Ko par jour et **41 Mo par an** à la cadence en place. La
+leçon n'est pas « c'est petit », c'est qu'une objection de volume formulée sans
+mesure ne vaut rien, et qu'il suffisait de trois minutes pour la trancher.
+
+**Ce qui manque encore** : une politique de conservation. Rien ne purge cette
+table aujourd'hui. À 41 Mo par an ce n'est pas urgent, mais une couche qui
+grossit sans règle finit par en imposer une dans l'urgence.
 
 ---
 
@@ -751,9 +843,10 @@ Les questions qui se posent à l'échelle ne se sont donc jamais posées :
 
 ## Autres manques assumés
 
-- **La couche Bronze n'existe pas physiquement.** L'architecture la décrit sur
-  S3, mais le projet passe de l'API à Silver. En cas de bug de transformation,
-  on ne peut pas recalculer.
+- **La couche Bronze existe depuis le 27/08, mais pas sur S3.** C'est une table
+  PostgreSQL, `bronze.reponses_brutes`. L'écart avec l'architecture annoncée au
+  Bloc 1 est assumé : le support change, la propriété recherchée est la même.
+  Elle n'a pas de politique de conservation, et croît d'environ 41 Mo par an.
 - **Un seul environnement.** Pas de séparation développement / recette /
   production. La chaîne d'intégration crée bien une base jetable, ce qui en est
   une ébauche.

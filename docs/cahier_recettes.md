@@ -651,6 +651,104 @@ Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt privé
   manuelle dans `speed.alertes`.
 - **Verdict** : PASS.
 
+## Couche Bronze (session 6)
+
+## TBRZ-01. Toute collecte alimente l'archive sans qu'on y pense
+
+- **Objet** : la couche Bronze n'a d'intérêt que si le chemin normal l'alimente.
+- **Procédure** : déclenchement du DAG d'ingestion, sans action particulière.
+- **Résultat attendu** : autant de réponses archivées que de titres suivis, et
+  la réponse conservée telle que reçue.
+- **Résultat observé** :
+  ```
+         source       | lignes | ok | rejets
+  --------------------+--------+----+--------
+   steam_player_count |     15 | 15 |      0
+  ```
+  Charge archivée pour l'appid 1145360 :
+  `{"response": {"result": 1, "player_count": 2776}}`
+- **Verdict** : PASS.
+
+## TBRZ-02. Un appel en échec est archivé avec son motif
+
+- **Objet** : test du chemin de rejet, la moitié la plus utile de cette couche.
+  Avant elle, une réponse inexploitable ne laissait qu'un avertissement dans les
+  journaux, puis disparaissait.
+- **Procédure** : appel réel à Steam sur l'appid inexistant 999999999, par le
+  code de production et non par une simulation.
+- **Résultat attendu** : une ligne `exploitable = false` portant la cause.
+- **Résultat observé** :
+  ```
+   identifiant | exploitable | statut_http |            motif             | sans_charge
+  -------------+-------------+-------------+------------------------------+-------------
+   999999999   | f           |             | HTTPError: 404 Client Error  | t
+  ```
+  `charge` est NULL, aucun corps n'ayant été obtenu, ce que la contrainte
+  autorise explicitement.
+- **Constat collatéral** : Steam répond **404** pour un identifiant inconnu, et
+  non 200 avec `result != 1` comme le commentaire du code l'affirmait depuis
+  l'origine. Voir OBS-53.
+- **Verdict** : PASS.
+
+## TBRZ-03. La collecte tarifaire archive une charge plus riche que ce qu'elle exploite
+
+- **Objet** : vérifier que la couche conserve ce que la transformation jette.
+- **Procédure** : `collecter_et_tracer()` sur la watchlist complète.
+- **Résultat attendu** : 15 réponses archivées, contenant des champs absents de
+  `speed.price_snapshots`.
+- **Résultat observé** : 15 réponses, 15 exploitables. Charge conservée :
+  ```json
+  {"1145360": {"data": {"price_overview": {
+      "final": 2450, "initial": 2450, "currency": "EUR",
+      "final_formatted": "24,50€", "discount_percent": 0,
+      "initial_formatted": ""
+  }}, "success": true}}
+  ```
+  `final_formatted` et `initial_formatted` n'existaient nulle part auparavant.
+- **Verdict** : PASS.
+
+## TBRZ-04. L'archive est immuable, y compris pour le compte qui l'alimente
+
+- **Objet** : une archive que l'on peut modifier n'est plus une archive. La
+  propriété se vérifie en tentant l'opération interdite, pas en lisant le GRANT.
+- **Procédure** : matrice de droits exécutée sous chaque rôle réel.
+- **Résultat attendu** :
+
+  | Rôle | Lire | Ajouter | Modifier | Supprimer |
+  |---|---|---|---|---|
+  | `etl_service` | autorisé | autorisé | **refusé** | **refusé** |
+  | `analyst` | autorisé | refusé | **refusé** | refusé |
+  | `dashboard_viewer` | **refusé** | refusé | refusé | refusé |
+
+- **Résultat observé** : conforme. 20 cas de sécurité exécutés, 20 conformes,
+  contre 13 avant l'ajout de cette couche.
+- **Verdict** : PASS.
+
+## TBRZ-05. La vue de santé des sources distingue source et composant
+
+- **Objet** : `bronze.v_sante_sources` mesure la santé des **sources**, ce que
+  la supervision existante ne savait pas faire : elle ne surveillait que les
+  composants du pipeline.
+- **Résultat observé** :
+  ```
+         source       | appels_24h | exploitables | rejets | taux_exploitable_pct
+  --------------------+------------+--------------+--------+----------------------
+   steam_player_count |         32 |           31 |      1 |                 96.9
+   steam_appdetails   |         15 |           15 |      0 |                100.0
+  ```
+  Le 96,9 % vient du rejet volontaire de TBRZ-02, délibérément conservé
+  (OBS-56).
+- **Verdict** : PASS.
+
+## TBRZ-06. Volumétrie mesurée plutôt qu'estimée
+
+- **Objet** : trancher l'objection de volume par la mesure.
+- **Résultat observé** : 78 octets par réponse de fréquentation, 238 par
+  réponse tarifaire, soit environ 114 Ko par jour et **41 Mo par an** à la
+  cadence en place.
+- **Verdict** : PASS. Le chiffre alimente la politique de conservation de la
+  feuille de route (C4.3.2).
+
 ## Détail des contrôles de l'étage d'intégration
 
 Chacun a une assertion explicite, aucun ne se contente d'un code de retour nul.
@@ -715,10 +813,12 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 | Sécurité | 3 | 0 | 0 |
 | Supervision | 5 | 0 | 0 |
 | Ingestion orchestrée | 6 | 0 | 0 |
-| **Total** | **38** | **0** | **0** |
+| Couche Bronze | 6 | 0 | 0 |
+| **Total** | **44** | **0** | **0** |
 
-Les tests de sécurité comptent pour 3 cas au niveau du cahier, mais 13 cas
-paramétrés au niveau de l'exécution.
+Le cloisonnement des rôles est décrit par 3 cas de la section Sécurité et par
+TBRZ-04, compté avec la couche Bronze. À l'exécution, ces quatre cas se
+déploient en **20 cas paramétrés**, contre 13 avant l'ajout de Bronze.
 
 Six de ces tests ont échoué avant de passer, et c'est ce qui leur donne de la
 valeur :
@@ -753,4 +853,5 @@ dans trois cas sur cinq ici, le défaut était dans le test.
 | C4.2.1 intégrité applicative | TS-16, TS-17, TS-18 |
 | C4.3.1 supervision | TSUP-01 à TSUP-05, TING-06 |
 | C4.2.2 ingestion orchestrée | TING-01 à TING-05 |
-| Sécurité transverse | TSEC-01 à TSEC-03 |
+| Sécurité transverse | TSEC-01 à TSEC-03, TBRZ-04 |
+| Couche Bronze (A4.1, Medallion) | TBRZ-01 à TBRZ-06 |

@@ -46,6 +46,15 @@ ECRIRE_JOURNAL = (
 )
 SUPPRIMER_EVENEMENTS = "DELETE FROM speed.player_count_events WHERE steam_appid = -1"
 
+# Couche Bronze. Contrairement au schema speed, aucun UPDATE n'y est accorde :
+# une archive que l'on peut modifier n'est plus une archive, et la seule raison
+# d'exister de cette couche est de conserver ce qui a ete recu tel qu'il a ete
+# recu. Le seul droit d'ecriture est l'ajout.
+LIRE_ARCHIVE = "SELECT 1 FROM bronze.reponses_brutes LIMIT 1"
+LIRE_SANTE_SOURCES = "SELECT 1 FROM bronze.v_sante_sources LIMIT 1"
+MODIFIER_ARCHIVE = "UPDATE bronze.reponses_brutes SET motif_rejet = 'altere' WHERE reponse_id = -1"
+SUPPRIMER_ARCHIVE = "DELETE FROM bronze.reponses_brutes WHERE reponse_id = -1"
+
 # Matrice de droits attendue, declinaison du modele de securite du Bloc 1.
 CAS = [
     # dashboard_viewer ne voit que des agregats, jamais une table de faits.
@@ -64,6 +73,18 @@ CAS = [
     ("etl_service", "lire la table de faits Gold", LIRE_FAITS_GOLD, AUTORISE),
     ("etl_service", "ecrire dans le journal d execution", ECRIRE_JOURNAL, AUTORISE),
     ("etl_service", "supprimer des evenements", SUPPRIMER_EVENEMENTS, REFUSE),
+    # Couche Bronze : etl_service alimente l'archive et ne peut ni la reecrire
+    # ni l'effacer. C'est cette immuabilite qui distingue une archive d'un
+    # simple cache, et elle ne se constate qu'en tentant l'operation interdite.
+    ("etl_service", "lire l archive Bronze", LIRE_ARCHIVE, AUTORISE),
+    ("etl_service", "modifier une ligne d archive", MODIFIER_ARCHIVE, REFUSE),
+    ("etl_service", "supprimer une ligne d archive", SUPPRIMER_ARCHIVE, REFUSE),
+    ("analyst", "lire l archive Bronze", LIRE_ARCHIVE, AUTORISE),
+    ("analyst", "lire la sante des sources", LIRE_SANTE_SOURCES, AUTORISE),
+    ("analyst", "modifier une ligne d archive", MODIFIER_ARCHIVE, REFUSE),
+    # La donnee brute n'a pas vocation a etre restituee : l'exposer
+    # contournerait le cloisonnement pose au Bloc 1.
+    ("dashboard_viewer", "lire l archive Bronze", LIRE_ARCHIVE, REFUSE),
 ]
 
 

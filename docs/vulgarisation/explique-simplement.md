@@ -81,6 +81,14 @@ découvre une erreur dans un calcul, on veut pouvoir **tout recommencer à parti
 de la matière première**. Si on a écrasé la matière première par le résultat du
 calcul, on ne peut plus rien recommencer.
 
+Ici, chaque question posée à Steam est conservée avec la réponse exacte, y
+compris **les questions qui n'ont pas obtenu de réponse utile**. Ce second
+point est le moins évident et probablement le plus précieux : « on a demandé le
+nombre de joueurs de ce jeu à 14h03, et on a reçu une erreur » est une
+information, pas un vide. C'est le signal d'un jeu retiré de la vente, ou d'un
+service qui se dégrade. Avant, ça ne laissait qu'une ligne dans un fichier de
+journal, vite noyée.
+
 ### La préparation (argent)
 
 Là, on lave, on épluche, on calibre, on jette ce qui est mauvais. À la sortie,
@@ -407,6 +415,24 @@ problème lui-même.
   invisible de l'autre, précisément du côté qui sert à surveiller. Corrigé, et
   revérifié dans les mêmes conditions.
 
+### Ce qu'on jetait sans le savoir
+
+Une conséquence inattendue de s'être mis à tout garder.
+
+La toute première réponse tarifaire archivée contenait ceci, en plus des
+chiffres qu'on utilisait déjà : le prix **tel qu'il s'affiche** pour un client
+français, « 24,50 € », mise en forme comprise.
+
+Ce champ était jeté depuis le début du projet, parce qu'on n'en avait pas
+l'usage. Il ne sert toujours à rien aujourd'hui. Mais le jour où quelqu'un
+demandera comment un prix apparaissait réellement dans telle région, il aurait
+manqué, et personne n'aurait su qu'il avait existé.
+
+C'est le renversement propre à ce genre d'archive : on ne conserve pas ce dont
+on a besoin, on conserve **ce dont on ignore encore avoir besoin**. Tant qu'on
+ne garde rien, la question « qu'est-ce qu'on perd ? » est impossible à poser,
+parce qu'il n'y a rien à regarder pour y répondre.
+
 ### Le tampon qui a gardé une collecte pendant sept jours
 
 Une histoire courte, et personne ne l'avait organisée.
@@ -470,10 +496,17 @@ présentées : que faire d'une donnée qui arrive en retard, comment recalculer 
 mois d'historique, comment réagir le jour où une source ajoute un champ. Rien de
 tout cela n'est traité.
 
-**Le quai de livraison n'existe pas physiquement.** Souvenez-vous des cageots
-qu'on garde pour pouvoir tout refaire. L'architecture le prévoit, le projet ne
-l'a pas construit. En cas d'erreur de préparation, on ne peut pas repartir de la
-matière première.
+**Corrigé le 27 août : le quai de livraison existe maintenant.** Souvenez-vous
+des cageots qu'on garde pour pouvoir tout refaire. Cette section disait la
+veille encore que le projet ne les gardait pas. Il les garde désormais.
+
+Ce n'est pas l'entrepôt séparé qui était prévu à l'origine, c'est un coin de
+réserve dans la cuisine existante. Le lieu change, la propriété recherchée est
+la même : on a la matière première, donc on peut tout recommencer.
+
+Ce qui reste : personne n'a décidé combien de temps on garde les cageots. La
+réserve grossit d'environ 41 mégaoctets par an, ce qui ne presse pas, mais une
+réserve sans règle finit par en imposer une dans l'urgence.
 
 ---
 
