@@ -1,0 +1,54 @@
+# ============================================================================
+# Projet dbt GameLens : contrats d'integrite de la couche Gold Snowflake.
+# ----------------------------------------------------------------------------
+# Perimetre volontairement etroit, et il faut dire pourquoi.
+#
+# dbt ne construit PAS les tables de faits et de dimensions : c'est le travail
+# de entrepot/snowpark_promotion.py, qui lit la couche Silver speed dans
+# PostgreSQL et televerse vers Snowflake. dbt ne sait pas faire cette etape,
+# il ne transforme qu'a l'interieur de l'entrepot. Et surtout, cette promotion
+# porte la competence C4.2.2 methode 3 (calcul distribue) : la reecrire en
+# modeles dbt echangerait une preuve contre une autre sans rien gagner.
+#
+# dbt fait donc ici ce qu'il fait le mieux, et ce que rien d'autre ne fait :
+#
+#   1. il DECLARE les quatre tables mart.* en sources et y accroche les
+#      contraintes que Snowflake n'applique pas (voir models/gold/_sources.yml) ;
+#   2. il materialise la vue de tableau de bord en modele versionne, la
+#      sortant d'un fichier SQL qu'on ne peut pas rejouer sans tout detruire.
+#
+# dbt teste ce que Snowpark construit. Il ne lui prend pas la propriete des
+# tables, et aucune brique deja verte n'est deplacee.
+# ============================================================================
+name: gamelens
+version: "1.0.0"
+config-version: 2
+
+profile: gamelens
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+# target/ et dbt_packages/ sont ignores par git (.gitignore, section dbt).
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+# Toutes les requetes emises par dbt portent cette etiquette. Elle les rend
+# reperables dans SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY, donc separables de
+# celles de Snowpark quand on analyse la consommation de credits (OBS-57).
+query-comment:
+  comment: "GameLens dbt {{ target.name }}"
+  append: true
+
+models:
+  gamelens:
+    gold:
+      # Vue et non table : la couche Gold tient dans quelques milliers de
+      # lignes, et une vue reste juste sans avoir a etre rafraichie apres
+      # chaque promotion Snowpark.
+      +materialized: view
+      # Pas de +schema ici : dbt CONCATENE le schema personnalise a celui de la
+      # cible (mart deviendrait mart_mart). Le schema est donc porte par le
+      # profil, ce qui est de toute facon plus juste : il depend de l'endroit
+      # ou l'on se connecte, pas du modele.

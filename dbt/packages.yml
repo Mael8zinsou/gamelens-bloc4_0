@@ -1,0 +1,23 @@
+# ============================================================================
+# dbt_utils : dependance assumee, pas un reflexe.
+# ----------------------------------------------------------------------------
+# Trois des huit controles d'integrite de la couche Gold ne s'expriment pas
+# avec les seuls tests du coeur de dbt (not_null, unique, relationships,
+# accepted_values) :
+#
+#   - prix strictement positif, popularite moyenne positive, note Metacritic
+#     entre 0 et 100  ->  dbt_utils.expression_is_true
+#   - unicite du grain (game_id, day) et (game_id, store_id, collected_at),
+#     qui portent sur une COMBINAISON de colonnes et non sur une seule
+#                       ->  dbt_utils.unique_combination_of_columns
+#
+# S'en passer voudrait dire les reecrire en tests singuliers, c'est-a-dire
+# retomber sur du SQL a la main : precisement ce que ce chantier remplace.
+#
+# Le cout est une resolution reseau au premier appel. Elle etait anticipee :
+# docker/snowflake/Dockerfile installe git avec le commentaire "requis par dbt
+# pour les packages".
+# ============================================================================
+packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.3.1

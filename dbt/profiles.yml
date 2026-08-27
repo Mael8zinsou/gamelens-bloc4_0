@@ -1,0 +1,62 @@
+# ============================================================================
+# Profil de connexion dbt. Ne contient AUCUN secret : uniquement des renvois
+# vers l'environnement, exactement les memes variables que lit
+# entrepot/connexion.py. C'est deliberé : deux chemins d'identifiants
+# divergent tot ou tard, et le jour ou ils divergent, l'un des deux est faux
+# sans que rien ne le signale.
+#
+# Deux cibles, parce qu'il y a deux facons legitimes de presenter la meme cle
+# privee RSA, et qu'aucune n'est un repli sur l'autre :
+#
+#   local : SNOWFLAKE_PRIVATE_KEY_PATH, un chemin de fichier. La cle vit dans
+#           secrets/, monte en lecture seule dans le conteneur, ignore par git.
+#
+#   ci    : SNOWFLAKE_PRIVATE_KEY, le contenu PEM en variable d'environnement.
+#           Le secret d'un dispositif d'integration continue est une chaine,
+#           pas un fichier, et on evite ainsi d'ecrire la cle sur le disque du
+#           runner : elle ne vit que dans la memoire du processus.
+#
+# Choisir avec DBT_TARGET, ou --target. Defaut : local.
+#
+# Pourquoi deux cibles et non un seul bloc portant les deux champs :
+# dbt-snowflake refuse private_key et private_key_path renseignes ensemble, et
+# env_var() sans valeur par defaut rend le champ present mais vide, ce qui
+# declenche precisement ce refus.
+# ============================================================================
+gamelens:
+  target: "{{ env_var('DBT_TARGET', 'local') }}"
+  outputs:
+
+    local:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'ACCOUNTADMIN') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'gamelens_wh') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'gamelens') }}"
+      schema: "{{ env_var('SNOWFLAKE_SCHEMA', 'mart') }}"
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      threads: 4
+      client_session_keep_alive: false
+      # Sans delai de reprise, une coupure reseau passagere fait echouer un run
+      # entier. Deux tentatives suffisent a absorber ce que l'on a observe.
+      connect_retries: 2
+      connect_timeout: 30
+
+    ci:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'ACCOUNTADMIN') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'gamelens_wh') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE') }}"
+      schema: "{{ env_var('SNOWFLAKE_SCHEMA', 'mart') }}"
+      # Le replace n'est pas de la superstition : certains gestionnaires de
+      # secrets restituent les sauts de ligne echappes, et le decodage PEM
+      # echoue alors sur un message trompeur parlant du format de la cle.
+      # entrepot/connexion.py fait la meme correction, pour la meme raison.
+      private_key: '{{ env_var("SNOWFLAKE_PRIVATE_KEY") | replace("\\n", "\n") }}'
+      threads: 4
+      client_session_keep_alive: false
+      connect_retries: 2
+      connect_timeout: 30

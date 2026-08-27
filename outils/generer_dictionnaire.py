@@ -224,9 +224,13 @@ def rendre_snowflake() -> str:
         "`FOREIGN KEY`, `PRIMARY KEY` et `UNIQUE` sont des metadonnees. Seuls\n",
         "`NOT NULL`, le type et la longueur sont opposables. Les contraintes ne\n",
         "figurent donc pas dans ce dictionnaire : elles y seraient trompeuses.\n",
-        "L'integrite reelle est portee par `entrepot/verifier_gold.py`, rejoue par\n",
-        "la chaine d'integration continue, et le comportement du moteur est lui-meme\n",
-        "verifie a chaque push (voir `entrepot/recette_ci.py`).\n",
+        "L'integrite reelle est portee par deux filets, tous deux rejoues a chaque\n",
+        "push : les contrats declaratifs du projet dbt (`dbt/models/gold/`), ou\n",
+        "chaque `relationships` est une clef etrangere que le moteur ignore, et les\n",
+        "controles applicatifs de `entrepot/verifier_gold.py`. Le comportement du\n",
+        "moteur est lui-meme verifie a chaque push, et les deux filets sont\n",
+        "confrontes au meme jeu de donnees fautif pour verifier qu'ils restent\n",
+        "d'accord (voir `entrepot/recette_ci.py`).\n",
     ]
     corps = "".join(lignes)
     bilan = f"\n---\n\nColonnes de tables sans description : **{manquantes}**.\n"

@@ -1,0 +1,30 @@
+# ============================================================================
+# Contrat du seul modele dont dbt a la propriete.
+# ============================================================================
+version: 2
+
+models:
+  - name: v_popularity_dashboard
+    # Ce texte est POUSSE dans le catalogue Snowflake par persist_docs, puis
+    # relu par outils/generer_dictionnaire.py pour produire l'annexe que la CI
+    # verifie. Il doit rester identique, au caractere pres, a celui que porte
+    # sql/schema_gold_snowflake.sql : toute retouche fait echouer la chaine.
+    description: "Vue de lecture agregee pour les tableaux de bord, sans acces direct aux tables de faits sous-jacentes."
+
+    data_tests:
+      # Une vue construite par jointure peut se mettre a rendre plus de lignes
+      # que la table de faits sans qu'aucune des deux tables soit fautive : il
+      # suffit d'un doublon de game_id dans dim_games pour que la jointure
+      # duplique chaque journee. Ce test surveille la JOINTURE elle-meme, ce
+      # qu'aucun test pose sur les sources ne fait.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_id, day]
+
+    columns:
+      - name: game_id
+        data_tests: [not_null]
+      - name: day
+        data_tests: [not_null]
+      - name: unified_name
+        data_tests: [not_null]

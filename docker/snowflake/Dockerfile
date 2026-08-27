@@ -24,6 +24,13 @@ RUN pip install --no-cache-dir -r /tmp/requirements-snowflake.txt
 
 # dbt cherche son profil dans ~/.dbt par defaut ; il est fourni par le depot.
 ENV DBT_PROFILES_DIR=/projet/dbt
+# Et son projet dans le repertoire courant, qui est /projet et non /projet/dbt.
+# Sans cette ligne, tout appel a dbt depuis ce conteneur echoue sur
+# "No dbt_project.yml found at expected path /projet/dbt_project.yml".
+# Les appels programmes passent en plus --project-dir explicitement : la CI
+# installe dbt sur le runner et non dans cette image, elle n'herite donc de
+# rien d'ici.
+ENV DBT_PROJECT_DIR=/projet/dbt
 ENV PYTHONPATH=/projet/entrepot:/projet/ingestion
 ENV PYTHONUNBUFFERED=1
 

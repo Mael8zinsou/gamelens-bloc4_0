@@ -14,20 +14,30 @@ garde-fou refuse de demarrer si la base visee porte un nom protege. La
 precaution n'est pas theorique : `sql/schema_gold_snowflake.sql` contient des
 CREATE OR REPLACE TABLE qui detruiraient les donnees de soutenance.
 
-Sept etapes, dont deux tests negatifs :
+Dix etapes, dont trois tests negatifs :
 
   1. creation de la base jetable ;
   2. application du schema Gold, redirige vers cette base ;
   3. chargement d'un jeu de donnees deterministe ;
-  4. controles d'integrite, attendus tous au vert ;
-  5. calcul distribue Snowpark, resultat compare a des valeurs calculees a la
+  4. controles d'integrite applicatifs, attendus tous au vert ;
+  5. materialisation des modeles dbt sur cette base ;
+  6. contrats dbt (29 tests), attendus tous au vert ;
+  7. calcul distribue Snowpark, resultat compare a des valeurs calculees a la
      main, et non simplement "la requete passe" ;
-  6. mise a l'epreuve des contraintes : on verifie que Snowflake laisse encore
+  8. mise a l'epreuve des contraintes : on verifie que Snowflake laisse encore
      passer ce que l'on a documente comme non applique, et rejette ce qu'il
      applique reellement ;
-  7. controles d'integrite a nouveau, cette fois attendus EN ECHEC : les
+  9. controles d'integrite a nouveau, cette fois attendus EN ECHEC : les
      violations que le moteur a laisse entrer doivent etre rattrapees par le
-     filet applicatif. Un controle qui ne sait pas echouer ne prouve rien.
+     filet applicatif. Un controle qui ne sait pas echouer ne prouve rien ;
+ 10. contrats dbt a nouveau, egalement attendus EN ECHEC, et sur les cinq
+     tests nommes a l'avance et non sur n'importe lesquels.
+
+Les etapes 9 et 10 eprouvent DEUX filets sur le meme jeu de donnees fautif.
+C'est deliberé : la plateforme en garde deux, l'un applicatif et l'autre
+declaratif, et leur coexistence n'a de valeur que si on verifie qu'ils
+restent d'accord. Le jour ou l'un rattrape ce que l'autre laisse passer, la
+recette s'arrete plutot que de laisser la divergence s'installer.
 
 Usage :
     docker compose run --rm snowflake-cli python entrepot/recette_ci.py
@@ -37,7 +47,9 @@ Usage :
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -46,6 +58,7 @@ from pathlib import Path
 from connexion import connexion, mode_authentification
 
 RACINE = Path(__file__).resolve().parent.parent
+DOSSIER_DBT = RACINE / "dbt"
 
 # Bases que la recette refuse de viser, quelle que soit la configuration.
 # gamelens porte la couche de demonstration presentee a la soutenance.
@@ -129,6 +142,32 @@ COMPORTEMENT_ATTENDU = [
         False,
     ),
 ]
+
+
+# ----------------------------------------------------------------------------
+# Les contrats dbt qui doivent tomber, et eux seuls, une fois les violations
+# ci-dessus entrees dans la base. Deduits ligne a ligne du tableau precedent :
+#
+#   prix negatif             -> expression_is_true price > 0
+#   game_id inexistant       -> relationships fact_prices.game_id
+#   (game_id, day) doublon   -> unicite du grain, ET la vue qui les joint,
+#                               car un doublon de fait duplique chaque journee
+#                               au travers de la jointure
+#   steam_appid doublon      -> unique dim_games.steam_appid
+#
+# Exiger un ensemble exact, et pas seulement un code de sortie non nul, est ce
+# qui separe "la suite a echoue" de "la suite a echoue pour la bonne raison".
+# Un test qui tomberait ici sans figurer dans cette liste serait un signal, pas
+# un detail : il voudrait dire que le jeu de recette est devenu invalide sur un
+# point que personne n'a voulu.
+# ----------------------------------------------------------------------------
+ATTENDU_ECHECS_DBT = {
+    "dbt_utils_source_expression_is_true_gold_fact_prices_price___0",
+    "source_relationships_gold_fact_prices_game_id__game_id__source_gold_dim_games_",
+    "dbt_utils_source_unique_combination_of_columns_gold_fact_popularity_history_game_id__day",
+    "dbt_utils_unique_combination_of_columns_v_popularity_dashboard_game_id__day",
+    "source_unique_gold_dim_games_steam_appid",
+}
 
 
 def titre(numero: int, libelle: str) -> None:
@@ -388,6 +427,188 @@ def eprouver_contraintes(base: str) -> None:
     )
 
 
+def _cible_dbt() -> str:
+    """Deduit la cible dbt du mode d'authentification, plutot que la demander.
+
+    dbt-snowflake refuse private_key et private_key_path renseignes ensemble,
+    et un env_var() vide compte comme renseigne : les deux modes doivent donc
+    vivre dans deux cibles distinctes de dbt/profiles.yml. Laisser l'appelant
+    choisir aurait suffi a ce qu'un jour la CI vise la cible locale et echoue
+    sur un fichier de cle absent, avec un message parlant de PEM.
+    """
+    return "local" if os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH") else "ci"
+
+
+def _executable_dbt() -> list[str]:
+    """Localise dbt, installe selon le contexte comme binaire ou comme module.
+
+    Sur le runner, pip depose l'executable sur le PATH. Dans l'image
+    d'outillage aussi, mais l'appel par module reste un repli utile si le
+    PATH d'un futur environnement est plus avare.
+    """
+    binaire = shutil.which("dbt")
+    return [binaire] if binaire else [sys.executable, "-m", "dbt.cli.main"]
+
+
+def _lancer_dbt(commande: str, base: str, *arguments: str) -> subprocess.CompletedProcess:
+    environnement = dict(
+        os.environ,
+        SNOWFLAKE_DATABASE=base,
+        SNOWFLAKE_SCHEMA="mart",
+        DBT_TARGET=_cible_dbt(),
+    )
+    return subprocess.run(
+        [
+            *_executable_dbt(),
+            commande,
+            "--project-dir",
+            str(DOSSIER_DBT),
+            "--profiles-dir",
+            str(DOSSIER_DBT),
+            *arguments,
+        ],
+        env=environnement,
+        cwd=str(RACINE),
+        capture_output=True,
+        text=True,
+    )
+
+
+def _resultats_dbt() -> dict[str, str]:
+    """Lit le verdict de chaque test dans run_results.json.
+
+    Le fichier plutot que la sortie console : celle-ci est faite pour etre lue
+    par un humain, tronque les noms longs par des points de suite et change de
+    forme d'une version a l'autre. En tirer un jeu d'assertions serait le
+    genre de test qui casse pour une raison sans rapport avec ce qu'il verifie.
+    """
+    chemin = DOSSIER_DBT / "target" / "run_results.json"
+    donnees = json.loads(chemin.read_text(encoding="utf-8"))
+    # unique_id a la forme test.<paquet>.<nom>.<empreinte>
+    return {r["unique_id"].split(".")[2]: r["status"] for r in donnees["results"]}
+
+
+def construire_modeles_dbt(base: str) -> None:
+    """Installe les paquets dbt puis materialise la vue de tableau de bord.
+
+    Le run vise la base jetable, donc la vue y est creee de zero : c'est aussi
+    la seule facon d'eprouver que le modele est bien portable, la version SQL
+    d'origine nommant gamelens.mart. en dur.
+    """
+    for commande, arguments in (("deps", ()), ("run", ())):
+        resultat = _lancer_dbt(commande, base, *arguments)
+        if resultat.returncode != 0:
+            print(resultat.stdout[-2000:])
+            print(resultat.stderr[-800:])
+            raise SystemExit(f"dbt {commande} a echoue : recette interrompue.")
+
+    etats = _resultats_dbt()
+    for nom, etat in etats.items():
+        print(f"   [{'PASS' if etat == 'success' else 'FAIL'}] modele {nom:<32} {etat}")
+    print(f"   -> {len(etats)} modele(s) materialise(s) sur {base}")
+    verifier_vue_dbt(base)
+
+
+def verifier_vue_dbt(base: str) -> None:
+    """Verifie ce que le remplacement d'une vue detruit en silence sur Snowflake.
+
+    Deux proprietes que CREATE OR REPLACE VIEW emporte avec lui, et dont
+    l'absence ne provoque aucune erreur :
+
+    Les droits. Un dbt run sans la configuration grants retirerait au tableau
+    de bord l'acces qu'il avait. Rien ne le signalerait : la vue existe, elle
+    est correcte, elle est simplement devenue invisible pour le seul role qui
+    la consultait. Le symptome arriverait plus tard, sous la forme d'un
+    panneau Grafana vide.
+
+    Le commentaire. outils/generer_dictionnaire.py le lit dans le catalogue
+    pour produire docs/annexes/, et la CI compare le resultat au depot. Une
+    vue recreee sans son commentaire ferait echouer la chaine sur un message
+    parlant du dictionnaire, jamais de dbt.
+
+    Les deux etaient des risques identifies avant d'ecrire le modele. Les
+    verifier ici les transforme en proprietes tenues.
+    """
+    conn = connexion()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SHOW GRANTS ON VIEW mart.v_popularity_dashboard")
+            beneficiaires = {ligne[5].upper() for ligne in cur.fetchall()}
+
+            cur.execute(
+                "SELECT comment FROM information_schema.views "
+                "WHERE table_schema = 'MART' AND table_name = 'V_POPULARITY_DASHBOARD'"
+            )
+            ligne = cur.fetchone()
+            commentaire = ligne[0] if ligne else None
+    finally:
+        conn.close()
+
+    attendu = "GAMELENS_DASHBOARD_VIEWER"
+    if attendu not in beneficiaires:
+        raise SystemExit(
+            f"La vue reconstruite par dbt n'accorde plus rien a {attendu}. "
+            f"Beneficiaires trouves : {', '.join(sorted(beneficiaires)) or 'aucun'}. "
+            "Verifier la configuration grants du modele."
+        )
+    print(f"   [PASS] droits preserves          SELECT accorde a {attendu.lower()}")
+
+    if not commentaire:
+        raise SystemExit(
+            "La vue reconstruite par dbt a perdu son COMMENT. Le dictionnaire "
+            "genere divergerait du catalogue et la CI echouerait ailleurs, sur "
+            "un message sans rapport. Verifier persist_docs et la description "
+            "portee par dbt/models/gold/_models.yml."
+        )
+    print(f"   [PASS] commentaire preserve      {commentaire[:52]}...")
+
+
+def contrats_dbt(base: str, attendu_au_vert: bool) -> set[str]:
+    """Execute les tests dbt et confronte les ECHECS NOMMES a un attendu.
+
+    Appele deux fois, comme controles_integrite, et pour la meme raison : une
+    suite de tests qui n'a jamais echoue ne prouve rien sur les fois ou elle
+    reussit. La difference est dans l'exigence. Au second appel, on ne se
+    contente pas d'un code de sortie non nul : on verifie que ce sont
+    exactement les cinq tests attendus qui tombent, ceux qui correspondent aux
+    quatre violations que le moteur a laisse entrer a l'etape precedente. Un
+    filet qui se declenche pour la mauvaise raison n'est pas un filet.
+    """
+    resultat = _lancer_dbt("test", base)
+    etats = _resultats_dbt()
+    echecs = {nom for nom, etat in etats.items() if etat != "pass"}
+
+    au_vert = resultat.returncode == 0
+    if au_vert is not attendu_au_vert:
+        print(resultat.stdout[-2500:])
+        raise SystemExit(
+            f"Contrats dbt {'au vert' if au_vert else 'en echec'} alors qu'ils "
+            f"etaient attendus {'au vert' if attendu_au_vert else 'en echec'}."
+        )
+
+    if attendu_au_vert:
+        print(f"   -> {len(etats)} contrats dbt, 0 violation : conforme")
+        return echecs
+
+    for nom in sorted(echecs):
+        print(f"   [PASS] violation rattrapee par {nom[:70]}")
+
+    if echecs != ATTENDU_ECHECS_DBT:
+        manquants = ATTENDU_ECHECS_DBT - echecs
+        surnumeraires = echecs - ATTENDU_ECHECS_DBT
+        detail = []
+        if manquants:
+            detail.append("violations NON detectees : " + ", ".join(sorted(manquants)))
+        if surnumeraires:
+            detail.append("echecs inattendus : " + ", ".join(sorted(surnumeraires)))
+        raise SystemExit(
+            "Les contrats dbt ne tombent pas sur les violations attendues. " + " ; ".join(detail)
+        )
+
+    print(f"   -> {len(echecs)} contrats en echec, exactement ceux attendus : conforme")
+    return echecs
+
+
 def main(argv: list[str] | None = None) -> int:
     parseur = argparse.ArgumentParser(description="Recette de la couche Gold Snowflake")
     parseur.add_argument(
@@ -435,14 +656,30 @@ def main(argv: list[str] | None = None) -> int:
         titre(4, "Controles d'integrite sur donnees saines, attendus au vert")
         controles_integrite(base, attendu_au_vert=True)
 
-        titre(5, "Calcul distribue Snowpark, confronte aux valeurs attendues")
+        titre(5, "Materialisation des modeles dbt")
+        construire_modeles_dbt(base)
+
+        titre(6, "Contrats dbt sur donnees saines, attendus au vert")
+        contrats_dbt(base, attendu_au_vert=True)
+
+        titre(7, "Calcul distribue Snowpark, confronte aux valeurs attendues")
         calcul_distribue(base)
 
-        titre(6, "Mise a l'epreuve des contraintes du moteur")
+        titre(8, "Mise a l'epreuve des contraintes du moteur")
         eprouver_contraintes(base)
 
-        titre(7, "Controles d'integrite apres violations, attendus EN ECHEC")
+        titre(9, "Controles d'integrite apres violations, attendus EN ECHEC")
         controles_integrite(base, attendu_au_vert=False)
+
+        titre(10, "Contrats dbt apres violations, attendus EN ECHEC")
+        contrats_dbt(base, attendu_au_vert=False)
+        # Les deux filets viennent d'etre eprouves sur EXACTEMENT le meme jeu
+        # de donnees fautif, l'un apres l'autre. C'est la seule facon de garder
+        # les deux sans que leur coexistence devienne un pari : le jour ou l'un
+        # rattrape une violation que l'autre laisse passer, la recette s'arrete
+        # ici plutot que de laisser la divergence s'installer en silence.
+        print("\n   Concordance : le filet applicatif et les contrats dbt ont")
+        print("   tous deux rattrape les violations laissees par le moteur.")
 
         print(f"\nRecette Snowflake au vert en {time.time() - depart:.0f} s.")
         return 0

@@ -10,9 +10,13 @@ relationnelles mais ne les applique pas a l'ecriture : `CHECK`,
 `FOREIGN KEY`, `PRIMARY KEY` et `UNIQUE` sont des metadonnees. Seuls
 `NOT NULL`, le type et la longueur sont opposables. Les contraintes ne
 figurent donc pas dans ce dictionnaire : elles y seraient trompeuses.
-L'integrite reelle est portee par `entrepot/verifier_gold.py`, rejoue par
-la chaine d'integration continue, et le comportement du moteur est lui-meme
-verifie a chaque push (voir `entrepot/recette_ci.py`).
+L'integrite reelle est portee par deux filets, tous deux rejoues a chaque
+push : les contrats declaratifs du projet dbt (`dbt/models/gold/`), ou
+chaque `relationships` est une clef etrangere que le moteur ignore, et les
+controles applicatifs de `entrepot/verifier_gold.py`. Le comportement du
+moteur est lui-meme verifie a chaque push, et les deux filets sont
+confrontes au meme jeu de donnees fautif pour verifier qu'ils restent
+d'accord (voir `entrepot/recette_ci.py`).
 
 ### `mart.v_popularity_dashboard` (vue)
 Vue de lecture agregee pour les tableaux de bord, sans acces direct aux tables de faits sous-jacentes.

@@ -1,0 +1,157 @@
+# ============================================================================
+# Les quatre tables de la couche Gold, declarees en SOURCES et non en modeles.
+# ----------------------------------------------------------------------------
+# Distinction essentielle, et c'est le choix de conception de tout ce dossier :
+# une source, pour dbt, est une table qu'il LIT sans l'avoir construite. C'est
+# exactement le statut de mart.dim_games et des trois autres, produites par
+# entrepot/snowpark_promotion.py. dbt ne prend donc la propriete de rien ; il
+# n'ajoute qu'un filet par-dessus le travail de Snowpark, et la competence
+# C4.2.2 methode 3 reste ou elle est.
+#
+# Pourquoi ce filet existe, et pourquoi il n'est pas une precaution de plus :
+# Snowflake accepte la declaration des contraintes relationnelles et ne les
+# APPLIQUE pas. Verifie empiriquement le 20/08/2026, resultats consignes dans
+# sql/verify_snowflake_constraints.sql. Sont appliquees les contraintes que la
+# colonne porte seule (NOT NULL, type, longueur) ; ne le sont pas celles qui
+# portent sur une relation entre lignes ou entre tables (CHECK, FOREIGN KEY,
+# PRIMARY KEY, UNIQUE). Les tests ci-dessous ne doublent donc pas le moteur :
+# sur cette plateforme, ils le REMPLACENT. Chaque `relationships` est une clef
+# etrangere ecrite dans le schema et jamais verifiee par lui.
+#
+# Sur les descriptions, volontairement absentes au niveau des colonnes : le
+# dictionnaire de donnees est GENERE depuis les COMMENT ON du catalogue
+# Snowflake (outils/generer_dictionnaire.py, verifie par la CI). Redecrire
+# ici les memes colonnes creerait une seconde autorite sur le meme fait, qui
+# divergerait un jour sans que rien ne le signale. Ce fichier documente donc
+# ce que dbt seul sait : l'intention des tests.
+# Voir docs/annexes/dictionnaire_gold_snowflake.md pour le sens des colonnes.
+# ============================================================================
+version: 2
+
+sources:
+  - name: gold
+    database: "{{ target.database }}"
+    schema: mart
+    description: >
+      Couche Gold de GameLens, alimentee par la promotion Snowpark depuis la
+      couche Silver speed. Les tests portes ici sont les contraintes que le
+      moteur Snowflake declare mais n'applique pas.
+
+    tables:
+      - name: dim_games
+        description: "Referentiel unifie des jeux. Grain : un enregistrement par jeu."
+        columns:
+          - name: game_id
+            data_tests: [not_null, unique]
+
+          - name: unified_name
+            data_tests: [not_null]
+
+          - name: steam_appid
+            # Unicite et non NOT NULL : un jeu peut legitimement ne pas etre
+            # publie sur Steam. Le test `unique` de dbt ignore les NULL, ce qui
+            # est ici le comportement voulu et non une tolerance subie.
+            data_tests: [unique]
+
+          - name: metacritic_score
+            data_tests:
+              - dbt_utils.expression_is_true:
+                  arguments:
+                    expression: "between 0 and 100"
+                  # Le CHECK equivalent existe dans schema_gold.sql cote
+                  # PostgreSQL, ou il est applique. Cote Snowflake il est
+                  # declare et ignore : ce test est son seul equivalent reel.
+                  config:
+                    where: "metacritic_score is not null"
+
+      - name: dim_stores
+        description: "Boutiques suivies pour la tarification."
+        columns:
+          - name: store_id
+            data_tests: [not_null, unique]
+
+          - name: name
+            data_tests: [not_null, unique]
+
+          - name: source_type
+            # Le commentaire porte par la colonne dans le schema annonce
+            # nommement ce test : "valeur controlee par test dbt
+            # accepted_values". Il existe enfin.
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ["api", "scraping"]
+
+      - name: fact_prices
+        description: "Tarifs par jeu et par boutique. Grain : jeu, boutique, date de collecte."
+        data_tests:
+          # Le grain declare par uq_fact_prices_grain dans le schema. Test au
+          # niveau de la table et non de la colonne, parce que l'unicite porte
+          # sur une combinaison : c'est ce qu'aucun test du coeur de dbt ne
+          # sait exprimer, et la premiere des deux raisons de prendre dbt_utils.
+          - dbt_utils.unique_combination_of_columns:
+              arguments:
+                combination_of_columns: [game_id, store_id, collected_at]
+        columns:
+          - name: price_id
+            data_tests: [not_null, unique]
+
+          - name: game_id
+            data_tests:
+              - not_null
+              # La clef etrangere du schema, ecrite et jamais appliquee.
+              - relationships:
+                  arguments:
+                    to: source('gold', 'dim_games')
+                    field: game_id
+
+          - name: store_id
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('gold', 'dim_stores')
+                    field: store_id
+
+          - name: price
+            data_tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  arguments:
+                    expression: "> 0"
+
+          - name: currency
+            data_tests: [not_null]
+
+      - name: fact_popularity_history
+        description: "Agregats journaliers de popularite. Grain : un jeu, un jour."
+        data_tests:
+          # La PRIMARY KEY (game_id, day) du schema. Declaree, non appliquee :
+          # Snowflake laisse inserer deux fois le meme couple sans broncher.
+          # C'est ce que la promotion Snowpark evite par un MERGE, et ce test
+          # est ce qui le prouve plutot que de l'affirmer.
+          - dbt_utils.unique_combination_of_columns:
+              arguments:
+                combination_of_columns: [game_id, day]
+        columns:
+          - name: game_id
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('gold', 'dim_games')
+                    field: game_id
+
+          - name: day
+            data_tests: [not_null]
+
+          - name: avg_player_count
+            data_tests:
+              - dbt_utils.expression_is_true:
+                  arguments:
+                    expression: ">= 0"
+                  # Une popularite peut etre inconnue pour un jour donne, elle
+                  # ne peut pas etre negative. Le NULL est donc exclu du test
+                  # plutot qu'interdit par lui.
+                  config:
+                    where: "avg_player_count is not null"
