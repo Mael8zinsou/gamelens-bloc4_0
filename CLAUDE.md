@@ -97,7 +97,8 @@ Mis à jour le 27/08/2026 en fin de session 6.
 | **C4.2.3 pipeline CI/CD** | ✅ **Exécuté, 6 étages verts** sur `Mael8zinsou/gamelens-bloc4_0` (privé). Qualité, tests, intégrité du DAG, intégration sur infrastructure jetable, **recette Snowflake sur base jetable**, publication d'image sur `ghcr.io` avec double étiquetage `latest` et SHA. Le premier run avait échoué : défaut dans l'assertion, pas dans l'infra (OBS-22). |
 | Recette automatisée de l'entrepôt | ✅ **Exécutée sur le runner** (run 32954104664, 41 s). Base Snowflake créée pour le run, schéma livré appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles d'intégrité vérifiés en positif **et en négatif**, base supprimée. |
 | **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. |
-| Documentation technique / feuille de route | 🟡 `README.md`, les trois documents de suivi et le cahier de recettes. **Feuille de route d'exploitation (C4.3.2) reste à écrire.** |
+| **C4.3.2 feuille de route d'exploitation** | ✅ **Écrite** : `docs/feuille_route_exploitation.md`, 10 sections. Tâches quotidiennes à trimestrielles, planification de maintenance, 11 points de vigilance dont 2 datés, durées d'incident mesurées, procédures d'intervention éprouvées avant d'être prescrites. |
+| Documentation technique (C4.3.3) | 🟡 `README.md`, les trois documents de suivi et le cahier de recettes. Reste à consolider. |
 | Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **44 PASS, 0 partiel, 0 en attente**. |
 | Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-008 s'y ajoutent comme incidents secondaires. |
 
@@ -190,36 +191,36 @@ Mis à jour le 27/08/2026 en fin de session 6.
 
 ## Prochaine étape immédiate
 
-**Les trois compétences éliminatoires sont couvertes par des briques réellement
-exécutées, et la chaîne est désormais autonome de bout en bout.** Le trou
-d'ordonnancement constaté le 26/08 est comblé : les cinq alertes ouvertes se
-sont refermées d'elles-mêmes, sans écriture manuelle dans `speed.alertes`.
+**Les trois compétences éliminatoires sont couvertes, la chaîne est autonome de
+bout en bout, et l'architecture Medallion est complète depuis l'ajout de la
+couche Bronze.** Le dernier livrable entièrement absent, la feuille de route
+d'exploitation, a été écrit le 27/08.
 
-1. **Écrire la feuille de route d'exploitation (C4.3.2).** Dernier livrable
-   entièrement absent. La matière est maintenant réelle et chiffrée :
-   - durées d'ouverture d'alerte mesurées : `fraicheur_frequentation`
-     6 j 20 h 26 min, les trois autres 1 j 00 h 34 min ;
-   - expiration du compte Snowflake à 120 jours, point de vigilance daté ;
-   - `GAMELENS_SERVICE` en `ACCOUNTADMIN`, écart au moindre privilège assumé
-     mais non corrigé, à inscrire comme dette ;
-   - politique de conservation de la couche Bronze : elle croît d'environ
-     41 Mo par an et rien ne la purge aujourd'hui.
-2. Consolider la documentation technique (C4.3.3) à partir du `README.md` et
-   des documents de suivi.
+1. **Consolider la documentation technique (C4.3.3)** à partir du `README.md`,
+   des trois documents de suivi et de la feuille de route.
+2. **Préparer le support de soutenance** (30 min de présentation). C'est
+   désormais le poste le plus rentable : tout ce qui doit être montré existe et
+   a été exécuté.
 3. Brancher dbt sur Snowflake pour porter les contrôles d'intégrité de
    `entrepot/verifier_gold.py` en tests dbt, ce que le Bloc 1 annonçait. Le
    répertoire `dbt/` est vide à ce jour. La recette de CI fournit le banc
-   d'essai : une base jetable où faire tourner les tests sans risque.
-4. Préparer le support de soutenance (30 min de présentation).
+   d'essai.
+4. A4.1, rapport d'analyse : s'appuie largement sur le Bloc 1.
 
-Deux corrections courtes, à faire quand l'occasion se présente, mais qui ne
-bloquent rien :
+Corrections courtes identifiées, aucune ne bloque, toutes sont documentées
+comme points de vigilance dans la feuille de route :
 
-- créer un rôle Snowflake dédié à la recette (`CREATE DATABASE` et rien de
-  plus) au lieu d'`ACCOUNTADMIN` ;
-- la latence p95 ne reflète pas les messages restés longtemps dans Kafka
-  (constaté à 42 s alors qu'une collecte avait attendu 7 jours) : la vue
-  `v_indicateur_latence` mérite d'être relue.
+- **V-02, aucun canal de notification.** L'écart le plus important entre cette
+  plateforme et une plateforme exploitée : les alertes sont persistées, mais
+  rien ne prévient un humain. Chiffré : la fraîcheur est restée en alerte
+  6 j 20 h en août, détectée en 90 minutes.
+- **V-07, la supervision ne se surveille pas elle-même.** Son arrêt rend
+  l'absence d'alerte indiscernable du bon fonctionnement.
+- **V-03, `GAMELENS_SERVICE` en `ACCOUNTADMIN`.**
+- **V-01, expiration du compte Snowflake les 17 ou 18/12/2026.** À confirmer
+  dans Snowsight.
+- Réduire `COMPUTE_WH` et lui imposer une suspension automatique : cet entrepôt
+  jamais configuré pèse 43 % de la consommation de crédits (OBS-57).
 
 ## Conventions de travail
 

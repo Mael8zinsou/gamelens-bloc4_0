@@ -915,6 +915,7 @@ documentée d'une architecture surveillée.
 | Les surprises, fausses pistes, arbitrages | `docs/observations.md`, 46 entrées |
 | Les tests et leurs résultats réels | `docs/cahier_recettes.md`, 32 cas |
 | Les commandes réellement exécutées | `docs/commandes_successives.md` |
+| Ce qu'il faut faire tourner, surveiller et purger | `docs/feuille_route_exploitation.md` |
 | L'état d'avancement et les pièges d'environnement | `CLAUDE.md` |
 | Le pipeline temps réel | `ingestion/` |
 | L'orchestration | `dags/` |

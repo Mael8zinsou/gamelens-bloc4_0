@@ -1460,3 +1460,87 @@ docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
      FROM bronze.reponses_brutes GROUP BY source;"
 # 78 octets par frequentation, 238 par tarif, soit environ 41 Mo par an.
 ```
+
+---
+
+# Session 6 (fin), 27 août 2026 : mesures pour la feuille de route
+
+Toutes ces requêtes servent à chiffrer la feuille de route d'exploitation
+(C4.3.2) plutôt qu'à l'estimer. Elles sont reproductibles telles quelles.
+
+## Phase 12. Volumétrie et croissance (diagnostic)
+
+```bash
+# Taille par table, tous schemas confondus.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT schemaname, relname, pg_size_pretty(pg_total_relation_size(relid)),
+          n_live_tup FROM pg_stat_user_tables WHERE n_live_tup > 0
+    ORDER BY pg_total_relation_size(relid) DESC;"
+
+# Comparaison base metier / base de metadonnees Airflow.
+docker exec gamelens-postgres psql -U gamelens_app -d postgres -c \
+  "SELECT datname, pg_size_pretty(pg_database_size(datname)) FROM pg_database
+    WHERE datname IN ('gamelens','airflow');"
+# gamelens 8,6 Mo ; airflow 12 Mo. Le second est le premier poste de croissance.
+
+# Detail cote Airflow, pour comprendre d'ou vient le volume.
+docker exec gamelens-postgres psql -U airflow -d airflow -c \
+  "SELECT relname, pg_size_pretty(pg_total_relation_size(relid)), n_live_tup
+     FROM pg_stat_user_tables WHERE n_live_tup > 0
+    ORDER BY pg_total_relation_size(relid) DESC LIMIT 8;"
+```
+
+## Phase 13. Coût Snowflake (diagnostic)
+
+```bash
+docker compose --profile outillage run --rm snowflake-cli python -c "
+from connexion import connexion
+conn = connexion(avec_contexte=False)
+with conn.cursor() as cur:
+    cur.execute('''SELECT warehouse_name, round(sum(credits_used), 4)
+                     FROM snowflake.account_usage.warehouse_metering_history
+                    GROUP BY 1 ORDER BY 2 DESC''')
+    for l in cur.fetchall(): print(l)
+conn.close()
+"
+# GAMELENS_WH 0,5805 ; COMPUTE_WH 0,4372 ; CLOUD_SERVICES_ONLY 0,0004
+# L'entrepot par defaut, jamais configure, pese 43 % de la depense (OBS-57).
+```
+
+Attention : cette commande passe par `docker compose run`, qui **recrée les
+conteneurs dont dépend le service** si le fichier compose a changé depuis leur
+démarrage. Le conteneur PostgreSQL a ainsi été recréé au passage. Sans
+conséquence, le volume persiste, mais à savoir avant de la lancer en
+exploitation.
+
+## Phase 14. Durées d'incident (diagnostic)
+
+```bash
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT regle, severite, count(*),
+          max(coalesce(resolue_le, now()) - declenchee_le) AS duree_max,
+          avg(coalesce(resolue_le, now()) - declenchee_le) AS duree_moyenne
+     FROM speed.alertes GROUP BY regle, severite ORDER BY 4 DESC;"
+# fraicheur_frequentation : 6 j 20 h 27 min au maximum.
+```
+
+## Phase 15. Vérification des procédures prescrites (procédure)
+
+Une feuille de route qui prescrit des commandes non éprouvées ne vaut rien.
+Les deux commandes d'exploitation ont donc été exécutées avant d'être écrites.
+
+```bash
+# Rejeu d'une journee passee par parametre, sans toucher au code.
+docker exec gamelens-airflow-scheduler airflow dags trigger \
+    gamelens_promotion_gold --conf '{"jour": "2026-08-26"}' --run-id rejeu-jour-passe
+# Verification que le parametre a bien ete pris en compte :
+docker exec gamelens-airflow-scheduler sh -c \
+  'cat "/opt/airflow/logs/dag_id=gamelens_promotion_gold/run_id=rejeu-jour-passe/task_id=verifier_fraicheur_silver/attempt=1.log"'
+# -> parameters: ('2026-08-26',) puis refus de la porte de fraicheur, la
+#    journee etant reellement vide. Comportement attendu.
+
+# Purge des metadonnees Airflow, en simulation.
+docker exec gamelens-airflow-scheduler airflow db clean \
+    --clean-before-timestamp "2026-05-29" --dry-run --yes
+# -> parcourt chaque table et rend le decompte, sans rien supprimer.
+```

@@ -1190,3 +1190,80 @@ raconte mieux le fonctionnement de la vue qu'un 100 % lisse.
 Le nettoyage de la couche Bronze est un sujet réel, mais il s'appelle politique
 de conservation, il se décide à l'avance, et il s'applique par ancienneté et
 non par convenance.
+
+## OBS-57. L'entrepôt qu'on n'a pas configuré coûte presque autant que celui qu'on a optimisé
+
+Relevé de consommation Snowflake, du 20 au 27/08/2026 :
+
+| Entrepôt virtuel | Crédits | Part |
+|---|---|---|
+| `GAMELENS_WH` | 0,5805 | 57 % |
+| `COMPUTE_WH` | 0,4372 | **43 %** |
+| `CLOUD_SERVICES_ONLY` | 0,0004 | traces |
+
+`GAMELENS_WH` a été dimensionné en XS avec suspension automatique à 60
+secondes, choix défendu depuis le Bloc 1 comme une mesure d'économie.
+`COMPUTE_WH` est l'entrepôt par défaut du compte, que personne n'a configuré et
+qui sert aux sessions Snowsight ouvertes à la main. Il a consommé presque
+autant.
+
+Autrement dit, l'optimisation soignée a porté sur 57 % de la dépense, et les
+43 % restants venaient d'un objet qu'on n'avait jamais regardé parce qu'on ne
+l'avait pas créé.
+
+C'est une leçon d'exploitation générale : **le poste de coût qu'on optimise
+n'est pas toujours celui qui coûte**. Le réflexe à prendre est de mesurer la
+répartition avant d'optimiser, pas après. Trois minutes de requête auraient
+suffi et personne ne les avait passées, faute d'avoir eu la curiosité de
+regarder ailleurs que sur l'objet dont on était fier.
+
+Conséquence pratique, inscrite dans la feuille de route : la consommation n'est
+de toute façon pas le facteur limitant, c'est le calendrier des 120 jours. Mais
+le raisonnement, lui, se transpose partout.
+
+## OBS-58. Le premier poste de croissance n'appartient à personne
+
+Mesures de volumétrie du 27/08/2026 :
+
+| Base | Taille | Contenu |
+|---|---|---|
+| `gamelens` | 8,6 Mo | Silver, Gold et Bronze, toute la donnée du produit |
+| `airflow` | **12 Mo** | métadonnées d'orchestration, aucune donnée du produit |
+
+La base de métadonnées d'Airflow est **plus grosse que la base métier**, et
+c'est de loin le premier poste de croissance : environ 486 instances de tâches
+par jour à 4,6 Ko de métadonnées chacune, soit 2,2 Mo par jour, environ 0,8 Go
+par an. À comparer aux 41 Mo par an de la couche Bronze, qui avait pourtant
+suscité une objection de volume.
+
+L'intérêt de ce constat n'est pas le chiffre, il est dans la raison pour
+laquelle personne ne l'avait vu : ce n'est ni de la donnée métier, ni un
+composant que quelqu'un revendique. L'orchestrateur est un outil, et les
+métadonnées d'un outil ne figurent sur aucune liste de ce qu'on surveille.
+
+Le remède est banal, `airflow db clean`, et il est désormais une tâche
+mensuelle. Ce qui vaut d'être retenu, c'est le mécanisme : **les postes non
+attribués sont ceux qui grossissent sans témoin.**
+
+## OBS-59. Une édition par plage de lignes a détruit une section entière
+
+Incident d'outillage, pas de plateforme, mais assez instructif pour être noté.
+
+En voulant remplacer un bloc de code dans la feuille de route, la recherche
+s'est faite sur la première occurrence de `airflow db clean`. Or cette chaîne
+apparaissait aussi, plus haut, dans une cellule de tableau décrivant la tâche
+mensuelle M-1. Le remplacement a donc démarré au mauvais endroit et effacé une
+section et demie.
+
+Le fichier n'était pas encore versionné, il n'y avait donc rien à restaurer :
+la section a dû être réécrite.
+
+Deux enseignements. Le premier est banal et coûte cher quand on l'oublie :
+committer un document long dès qu'il est écrit, avant de le retoucher. Le
+second est plus intéressant : une ancre textuelle qui semble unique ne l'est
+pas nécessairement, et le mode d'édition par plage de lignes ne prévient
+jamais, contrairement au remplacement de chaîne qui échoue proprement quand la
+correspondance n'est pas unique.
+
+C'est la même famille de problème que celle qu'on traque dans le code : une
+opération qui réussit silencieusement là où elle aurait dû refuser.

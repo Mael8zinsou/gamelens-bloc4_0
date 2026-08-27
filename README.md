@@ -78,6 +78,7 @@ n'est necessaire.
 | `docs/cahier_recettes.md` | Cahier de recettes et de tests (C4.4.1) |
 | `docs/observations.md` | Observations de session : surprises, fausses pistes, arbitrages |
 | `docs/commandes_successives.md` | Trace chronologique des commandes reellement executees |
+| `docs/feuille_route_exploitation.md` | Taches recurrentes, maintenance, points de vigilance (C4.3.2) |
 | `docs/vulgarisation/` | Deux versions vulgarisees du projet, pour un junior et pour un non-specialiste |
 | `tests/` | Tests automatises, executes par la CI |
 

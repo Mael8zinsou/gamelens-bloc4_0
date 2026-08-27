@@ -43,6 +43,8 @@ source :
 - `docs/observations.md` pour les surprises et les fausses pistes ;
 - `docs/cahier_recettes.md` pour les tests et leurs résultats réels ;
 - `docs/commandes_successives.md` pour ce qui a été tapé, dans l'ordre ;
+- `docs/feuille_route_exploitation.md` pour l'exploitation courante et les
+  points de vigilance ;
 - `CLAUDE.md` pour l'état d'avancement et les contraintes d'environnement.
 
 ## Entretien
