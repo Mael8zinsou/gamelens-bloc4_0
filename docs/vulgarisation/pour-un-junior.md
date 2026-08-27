@@ -374,28 +374,99 @@ compter les lignes de `pipeline_runs`, pas seulement les lignes collectées.
 
 ## La redirection de base, et pourquoi elle existe
 
-`sql/schema_gold_snowflake.sql` contient des `CREATE OR REPLACE TABLE` et nomme
-la base en dur, vingt-quatre fois. Un étage d'intégration continue qui aurait
-rejoué ce script à chaque push aurait vidé la couche de démonstration à chaque
-push, **sans le moindre message d'erreur**, puisque `CREATE OR REPLACE`
-réussit parfaitement.
+### Le problème
 
-La solution naïve est d'écrire un second script de schéma pour les tests. C'est
-une mauvaise idée : la CI validerait alors une copie, et pas le livrable.
+`sql/schema_gold_snowflake.sql` nomme la base **en dur, vingt-quatre fois** :
 
-La solution retenue redirige à l'exécution, sur le script livré :
+```sql
+CREATE OR REPLACE TABLE gamelens.mart.dim_games (...)
+```
+
+`CREATE OR REPLACE`, ça veut dire « détruis la table et refais-la vide ». Un
+étage d'intégration continue qui aurait rejoué ce script à chaque push aurait
+donc vidé la couche de démonstration à chaque push, **sans le moindre message
+d'erreur**, puisque l'opération réussit parfaitement.
+
+### La fausse bonne idée
+
+Écrire un second script de schéma, allégé, réservé aux tests. C'est tentant et
+c'est une mauvaise idée : la chaîne d'intégration validerait alors une copie, et
+le fichier réellement livré ne serait jamais exécuté par personne. On aurait une
+CI verte sur du code que l'on ne déploie pas.
+
+### Ce qui a été retenu
+
+Jouer **le script livré**, sans le modifier sur le disque, en remplaçant le nom
+de la base au moment de le lire. Une base jetable est créée pour la durée du
+run, puis supprimée.
+
+La version naïve de ce remplacement ne marche pas :
+
+```python
+contenu.replace("gamelens", "gamelens_ci_42")   # faux
+```
+
+Parce que le script contient quatre sortes de noms qui commencent tous par
+`gamelens`, et que deux d'entre elles ne doivent surtout pas bouger :
+
+| Dans le script | Ce que c'est | À rediriger ? |
+|---|---|---|
+| `gamelens.mart.dim_games` | la **base** | oui |
+| `CREATE DATABASE gamelens` | la **base** | oui |
+| `gamelens_wh` | l'**entrepôt virtuel** | non |
+| `gamelens_etl_service` | un **rôle** | non |
+
+L'entrepôt virtuel et les rôles sont des objets **de compte**, pas des objets
+**de base**. Ils existent en un seul exemplaire, partagé, et la base jetable
+doit les réutiliser tels quels. Le remplacement naïf produirait `gamelens_ci_42_wh`
+et `gamelens_ci_42_etl_service`, qui n'existent nulle part.
+
+D'où le motif, qui ne remplace `gamelens` que lorsque c'est un **mot entier** :
 
 ```python
 MOTIF_BASE = re.compile(r"(?<![A-Za-z0-9_])gamelens(?![A-Za-z0-9_])")
 ```
 
-La limite de mot n'est pas décorative. Elle doit atteindre `gamelens.mart` et
-`DATABASE gamelens`, sans toucher à `gamelens_wh` ni aux rôles
-`gamelens_etl_service` : l'entrepôt virtuel et les rôles sont des objets de
-**compte**, pas des objets de **base**. Les rediriger serait faux.
+Il se lit en trois morceaux :
 
-Vérifié hors ligne avant tout appel réseau : 24 redirections, entrepôt virtuel
-et rôles intacts.
+- `(?<![A-Za-z0-9_])` est un **regard arrière négatif** : le caractère qui
+  précède ne doit être ni une lettre, ni un chiffre, ni un souligné ;
+- `gamelens` est le texte cherché ;
+- `(?![A-Za-z0-9_])` est un **regard avant négatif** : même condition sur le
+  caractère qui suit.
+
+Les deux regards ne consomment aucun caractère, ils posent seulement une
+condition sur le voisinage. Dans `gamelens_wh`, le caractère suivant est `_` :
+la condition échoue, le motif ne correspond pas, le nom reste intact. Dans
+`gamelens.mart`, le suivant est `.` : la condition passe.
+
+L'effet est visible sur une seule instruction, où la base est redirigée et le
+rôle ne l'est pas :
+
+```
+GRANT USAGE ON DATABASE gamelens TO ROLE gamelens_etl_service;
+                        ^^^^^^^^         ^^^^^^^^^^^^^^^^^^^^
+                        redirige         laisse tel quel
+```
+
+### Une question légitime : pourquoi pas simplement `\b` ?
+
+`\bgamelens\b` donne exactement le même résultat, vérification faite : 24
+correspondances des deux côtés sur le vrai script. La raison est que le
+souligné compte comme un caractère de mot dans une expression régulière, donc
+`gamelens_wh` n'a pas de frontière de mot entre le `s` et le `_`.
+
+La forme explicite a été préférée parce qu'elle **dit** quels caractères
+comptent, au lieu de s'en remettre à une convention que le lecteur doit
+connaître. C'est un choix de lisibilité, pas une nécessité technique, et il
+vaut mieux le présenter comme tel.
+
+### Vérifié avant d'être utilisé
+
+Le motif a été éprouvé hors ligne, sur le vrai fichier, **avant tout appel
+réseau** : 24 redirections, entrepôt virtuel et rôles intacts. Sur une opération
+dont l'échec silencieux détruirait les données de soutenance, essayer d'abord
+pour voir n'était pas une option.
 
 ---
 
