@@ -2078,6 +2078,38 @@ c.close()"
 
 Noter l'import : `connexion_snowflake` et non `connexion`, depuis INC-009.
 
+## Phase 40. Comparer la PROFONDEUR des deux couches, pas seulement leur fraîcheur
+
+Ajoutée après coup : la phase 39 vérifie que les deux couches sont à jour, ce
+qui ne dit rien de ce qu'elles contiennent. Ce contrôle a démenti une
+affirmation écrite deux heures plus tôt (OBS-75).
+
+```bash
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens \
+  -c "SELECT day, count(*) FROM mart.fact_popularity_history GROUP BY 1 ORDER BY 1"
+# 2026-08-20 | 15
+# 2026-08-27 | 15
+# 2026-08-31 | 15
+
+docker compose --profile outillage run --rm --no-deps snowflake-cli python -c "
+import sys; sys.path.insert(0, 'entrepot')
+from connexion_snowflake import connexion
+c = connexion()
+with c.cursor() as cur:
+    cur.execute('SELECT day, count(*) FROM mart.fact_popularity_history GROUP BY 1 ORDER BY 1')
+    for d, n in cur.fetchall(): print(d, n)
+c.close()"
+# 2026-08-19 15   <- presente ici et pas la-bas
+# 2026-08-20 15
+# 2026-08-27 15
+# 2026-08-31 15
+```
+
+Les deux couches sont à jour et ne contiennent pas la même chose. Ce n'est pas
+un défaut : la promotion PostgreSQL traite une journée par exécution, celle de
+Snowpark rejoue tout l'historique disponible par MERGE, donc elle rattrape. À
+savoir avant qu'un jury ne pose la question.
+
 ## Bilan de session
 
 | Vérification | Résultat |

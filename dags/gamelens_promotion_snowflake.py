@@ -66,9 +66,13 @@ COMPOSANT = "snowpark_promotion"
     dag_id="gamelens_promotion_snowflake",
     description="Promotion journaliere de la couche Silver speed vers l'entrepot Snowflake",
     doc_md=__doc__,
-    # 03h00 UTC, une demi-heure apres gamelens_promotion_gold. Les deux couches
-    # portent ainsi la meme journee, ce qui rend leur comparaison possible : un
-    # ecart entre elles designe alors un defaut, et non un decalage d'horaire.
+    # 03h00 UTC, une demi-heure apres gamelens_promotion_gold, pour que les deux
+    # couches portent la meme journee la plus recente.
+    #
+    # Leur PROFONDEUR d'historique differe en revanche, et c'est attendu : ce DAG
+    # rejoue tout l'historique disponible par MERGE, quand la promotion
+    # PostgreSQL traite une journee par execution. Mesure du 31/08/2026 :
+    # 4 journees ici, 3 la-bas. Ne pas lire cet ecart comme un defaut.
     schedule="0 3 * * *",
     start_date=pendulum.datetime(2026, 8, 31, tz="UTC"),
     catchup=False,

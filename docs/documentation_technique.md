@@ -85,8 +85,16 @@ jours de retard au moment du constat. C'etait V-12, referme par le DAG
 `gamelens_promotion_snowflake`, decrit en DA-11.
 
 Le decalage de trente minutes entre les deux n'est pas cosmetique : il fait que
-les deux couches portent la meme journee, donc qu'un ecart entre elles designe
-un defaut et non une difference d'horaire.
+les deux couches portent la meme journee la plus recente.
+
+Leur profondeur d'historique, elle, differe legitimement, et il vaut mieux le
+savoir avant qu'on ne le demande. Les deux promotions n'ont pas la meme portee :
+celle de PostgreSQL traite **une journee par execution**, celle de Snowpark
+rejoue **tout l'historique disponible** par MERGE, ce qui la rend idempotente
+mais aussi rattrapante. Mesure du 31/08/2026 : 4 journees cote Snowflake
+(19, 20, 27, 31/08) contre 3 cote PostgreSQL, a qui manque le 19/08 faute d'une
+execution datee de ce jour-la. Ce n'est pas un defaut, c'est une consequence de
+deux strategies d'ecriture differentes.
 
 **Quatre DAG Airflow** orchestrent l'ensemble : ingestion toutes les 15 minutes,
 promotion PostgreSQL à 02h30 UTC, promotion Snowflake à 03h00, supervision

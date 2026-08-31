@@ -27,7 +27,10 @@ un incident réel et sa méthode d'investigation (C4.4.2).
   (`sql/schema_gold.sql`), gardé comme mise au point initiale et référence de comparaison.
   Les deux sont promues par un DAG depuis le 31/08/2026 : `gamelens_promotion_gold` vers
   PostgreSQL à 02h30 UTC, `gamelens_promotion_snowflake` vers Snowflake à 03h00. Elles portent
-  donc la même journée, et un écart entre elles désigne un défaut et non un décalage d'horaire.
+  donc la même journée la plus récente. Leur PROFONDEUR diffère en revanche, et c'est normal :
+  la promotion PostgreSQL traite une journée par run, la promotion Snowpark rejoue tout
+  l'historique disponible par MERGE. Mesuré le 31/08/2026 : 4 journées côté Snowflake, 3 côté
+  PostgreSQL, qui n'a jamais eu de run pour le 19/08. Ne pas lire cet écart comme un défaut.
   Avant cette date, seul le prototype était ordonnancé et la cible accusait onze jours de
   retard : c'était V-12, refermé, voir DA-11.
 - Orchestration batch : Apache Airflow. Temps réel : Apache Kafka (ou toute alternative légère

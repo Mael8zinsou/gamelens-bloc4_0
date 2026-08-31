@@ -1673,4 +1673,42 @@ Ce qu'il faut retenir : **un seuil de supervision porte une hypothèse implicite
 sur la cadence de ce qu'il surveille.** Ajouter un composant à une règle
 existante, ce n'est pas allonger une liste, c'est vérifier que l'hypothèse tient
 encore pour le nouveau venu.
+## OBS-75. Le contrôle de cohérence a démenti une phrase écrite deux heures plus tôt
+
+Le DAG de promotion Snowflake a été planifié à 03h00, une demi-heure après celui
+de PostgreSQL, et j'en ai tiré une conclusion écrite dans quatre fichiers : les
+deux couches portant la même journée, **un écart entre elles désignerait un
+défaut**.
+
+Le contrôle de cohérence qui a suivi, deux heures après, a mesuré ceci :
+
+| | PostgreSQL | Snowflake |
+|---|---|---|
+| Faits de popularité | 45 | **60** |
+| Tarifs | 120 | **165** |
+| Retard | 0 j | 0 j |
+| Journées présentes | 20, 27, 31/08 | **19**, 20, 27, 31/08 |
+
+Les deux couches sont à jour et ne contiennent pas la même chose. La raison est
+dans la stratégie d'écriture, pas dans une panne : la promotion PostgreSQL
+traite **une journée par exécution**, celle de Snowpark rejoue **tout
+l'historique disponible** par MERGE. La seconde est donc rattrapante, et elle a
+récupéré le 19/08, journée présente en couche Silver mais pour laquelle aucune
+exécution datée n'a jamais eu lieu côté PostgreSQL.
+
+Ce qui est instructif n'est pas l'erreur, qui est mineure et corrigée, mais son
+moment. La phrase était fausse au moment où je l'écrivais, et elle était
+vérifiable en deux requêtes. Elle a été écrite parce qu'elle **découlait
+proprement** du raisonnement sur le décalage horaire, et un raisonnement propre
+donne l'impression d'un fait établi.
+
+C'est la même forme qu'OBS-69, où j'avais déduit d'un principe d'architecture
+qu'un obstacle existait, sans le constater. Deux fois en une journée, la même
+faute : **une conclusion correctement déduite prend le statut d'une observation
+alors qu'elle n'en est pas une.** Le seul remède qui ait fonctionné, les deux
+fois, est la commande qui mesure.
+
+Corollaire utile pour la soutenance : les deux couches ne sont pas
+interchangeables, et une question du jury du type « les deux contiennent-elles
+la même chose ? » a une réponse précise et chiffrée, qui n'est pas oui.
 
