@@ -542,7 +542,36 @@ jargon, certains endroits résistent. Quand une explication ne passe pas, c'est
 rarement la faute du lecteur : c'est en général que la chose n'est pas
 totalement comprise, ou qu'elle est moins justifiée qu'on ne le croyait.
 
-Voici les sept endroits où je bute, énoncés franchement.
+Voici les huit endroits où je bute, énoncés franchement.
+
+### « Il y a deux cuisines, et j'ai décrit la mauvaise »
+
+C'est la faille la plus embarrassante, et elle n'a été trouvée que le
+31/08/2026, en vérifiant.
+
+J'ai décrit une chaîne qui va de la collecte jusqu'à un entrepôt spécialisé.
+C'est vrai, sauf sur un point : il existe **deux** rangements finaux, et ce
+n'est pas celui que j'ai présenté comme important qui est tenu à jour.
+
+Le premier est une réserve installée dans la cuisine elle-même. Elle est rangée
+chaque nuit, automatiquement. Le second est l'entrepôt loué à l'extérieur,
+celui dont j'ai vanté la puissance : il n'est rempli que quand quelqu'un
+s'en occupe à la main, et personne ne s'en est occupé depuis onze jours.
+
+Personne ne s'en est aperçu, et c'est le plus intéressant. Le dispositif de
+surveillance affiche « fraîcheur de l'entrepôt » et jure que tout va bien. Il
+regarde la réserve de la cuisine. L'entrepôt loué, il ne le regarde pas, et
+n'a jamais été construit pour le regarder.
+
+Autrement dit : le voyant vert ne mentait pas, il répondait à une autre
+question que celle qu'on croyait lui poser. C'est la forme de panne la plus
+désagréable, parce qu'un dispositif absent inquiète alors qu'un dispositif qui
+regarde à côté rassure.
+
+Ce que je retiens, et qui dépasse ce projet : **un nom qui recouvre deux choses
+finit toujours par en cacher une.** Ici le mot « Gold » désignait la réserve, le
+mot « entrepôt » désignait l'extérieur, et les deux ont fini par se confondre
+dans la même phrase.
 
 ### « Pourquoi une file d'attente pour quinze jeux ? »
 

@@ -59,16 +59,34 @@ outils du marché.
                     player_count_events, price_snapshots,
                     game_mapping, pipeline_runs, alertes
                                              |
-                        Airflow, promotion journaliere 02h30
-                                             |
                     +------------------------+------------------------+
+                    |                                                 |
+   Airflow, DAG gamelens_promotion_gold        entrepot/snowpark_promotion.py
+        quotidien, 02h30 UTC                        INVOQUE A LA MAIN
+                    |                            (aucun DAG ne le declenche)
                     v                                                 v
         PostgreSQL, schema mart                          Snowflake, schema mart
-        (prototype et repli)                             (cible de production)
-                                                    dim_games, dim_stores,
-                                                    fact_prices,
-                                                    fact_popularity_history
+        prototype, TENU A JOUR                      cible annoncee, FIGEE au
+        dim_games, dim_stores,                      dernier chargement manuel
+        fact_prices,                                dim_games, dim_stores,
+        fact_popularity_history                     fact_prices,
+                    |                               fact_popularity_history
+                    v                                                 |
+        speed.v_indicateur_gold                                       v
+        surveille cette branche                       29 contrats dbt + 8 controles
+        et elle seule                                 applicatifs, mais AUCUN
+                                                      indicateur de fraicheur
 ```
+
+**Le schéma dit ce que le système fait, pas ce que l'architecture voulait.**
+La version précédente montrait Airflow alimentant les deux couches Gold. C'est
+faux, et il vaut mieux le lire ici que le découvrir en séance. Seul le
+prototype PostgreSQL est promu par l'ordonnanceur ; la couche Snowflake est
+chargée à la main. Les deux divergent donc en permanence : au 31/08/2026,
+45 faits de popularité et 120 tarifs d'un côté, 30 et 75 de l'autre, ce dernier
+état datant du 20/08. C'est une dette identifiée, suivie sous V-12 et V-13, et
+non un choix d'architecture. Elle ne tient pas à un obstacle technique : l'image
+Airflow embarque déjà Snowpark 1.47 (OBS-69).
 
 **Trois DAG Airflow** orchestrent l'ensemble : ingestion toutes les 15 minutes,
 promotion à 02h30 UTC, supervision toutes les 15 minutes.
@@ -521,11 +539,11 @@ Les valeurs versionnées n'ouvrent que des conteneurs locaux. `.env`, `secrets/`
 
 | Composant | Version | Rôle | Accès |
 |---|---|---|---|
-| PostgreSQL | 16-alpine | Silver speed, Bronze, Gold prototype, métadonnées Airflow | `localhost:5433` |
+| PostgreSQL | 16-alpine | Silver speed, Bronze, Gold prototype (seul Gold tenu à jour), métadonnées Airflow | `localhost:5433` |
 | Apache Kafka | 3.9.0, mode KRaft | tampon entre collecte et écriture | `localhost:9092` |
 | Apache Airflow | 3.1.8, LocalExecutor | orchestration, 3 DAG | `localhost:8080`, `admin`/`admin` |
 | Grafana | 11.6.0 | restitution des indicateurs | `localhost:3000`, `admin`/`admin` |
-| Snowflake | compte étudiant | entrepôt Gold, calcul distribué | `RTZSXDV-PM63908` |
+| Snowflake | compte étudiant | entrepôt Gold cible, calcul distribué, contrats dbt. Chargé à la main, voir V-12 | `RTZSXDV-PM63908` |
 | Outillage Snowflake | image dédiée | Snowpark, dbt, génération du dictionnaire | `docker compose run --rm snowflake-cli` |
 
 **Kafka tourne en mode KRaft**, sans ZooKeeper et en conteneur unique. C'est bien

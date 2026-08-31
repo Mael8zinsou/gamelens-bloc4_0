@@ -86,13 +86,34 @@ du projet.
                     v
         PostgreSQL, couche Silver speed      <- la donnee recente, nettoyee
                     |
-        Airflow, promotion journaliere       <- orchestration
-                    |
-                    v
-        Snowflake, couche Gold               <- l'entrepot analytique
-        dim_games, dim_stores, fact_prices,
-        fact_popularity_history
+        +-----------+------------------------------+
+        |                                          |
+   Airflow, DAG de promotion            snowpark_promotion.py
+     quotidien, 02h30 UTC                  LANCE A LA MAIN
+        |                                          |
+        v                                          v
+   PostgreSQL, couche Gold              Snowflake, couche Gold
+   prototype, TENU A JOUR               cible annoncee, FIGEE
+                                        dim_games, dim_stores,
+                                        fact_prices,
+                                        fact_popularity_history
 ```
+
+**Une mise en garde sur ce schéma, parce qu'il a longtemps été faux.** La
+version précédente montrait l'orchestrateur alimentant directement Snowflake, et
+ne mentionnait pas la couche Gold PostgreSQL. C'était l'architecture voulue, pas
+celle qui tourne. Dans les faits, seul le prototype PostgreSQL est promu
+automatiquement ; la couche Snowflake, celle que l'architecture désigne comme la
+cible, est chargée à la main et n'a donc pas bougé depuis le 20/08/2026, soit
+onze jours au moment où ces lignes sont écrites.
+
+Retiens surtout la façon dont c'est passé inaperçu. Le DAG s'appelle
+`gamelens_promotion_gold`, l'indicateur de supervision s'appelle
+`v_indicateur_gold`, et son commentaire dans la base annonce « fraîcheur de
+l'entrepôt ». Trois noms exacts pris séparément, et un contresens une fois lus
+ensemble : « Gold » désigne ici la couche PostgreSQL, alors que « l'entrepôt »
+désigne partout ailleurs Snowflake. Il n'y a pas eu de bug. Il y a eu un
+vocabulaire qui recouvrait deux choses.
 
 ## Pourquoi trois couches, et pas une
 
@@ -961,6 +982,10 @@ Les questions qui se posent à l'échelle ne se sont donc jamais posées :
   PostgreSQL, `bronze.reponses_brutes`. L'écart avec l'architecture annoncée au
   Bloc 1 est assumé : le support change, la propriété recherchée est la même.
   Elle n'a pas de politique de conservation, et croît d'environ 41 Mo par an.
+- **La couche Gold Snowflake n'est promue par aucun ordonnanceur** et rien
+  ne surveille son retard. Deux points distincts, V-12 et V-13, et le second
+  est le plus gênant : la supervision affiche un voyant vert sur une couche
+  qu'elle ne regarde pas. Voir le schéma en partie 2 et son avertissement.
 - **Un seul environnement.** Pas de séparation développement / recette /
   production. La chaîne d'intégration crée bien une base jetable, ce qui en est
   une ébauche.

@@ -1774,3 +1774,148 @@ git diff --stat   # doit refleter le changement reel, pas la reecriture du fichi
 | Tests unitaires | `pytest tests` | 39 passed |
 | Chaîne complète | run 33080391892 | 6 étages verts |
 
+---
+
+# Session 9, 31 août 2026 : contrôle de cohérence
+
+Aucune brique construite ce jour-là. Ces commandes servent à confronter ce que
+la documentation affirme à ce que le dépôt et les bases contiennent. Elles sont
+reproductibles et méritent d'être rejouées avant la soutenance.
+
+## Phase 27. Vérifier que tout chemin cité existe (procédure)
+
+```bash
+python - <<'FIN'
+import re
+from pathlib import Path
+MOTIF = re.compile(r"`([a-zA-Z0-9_./-]+\.(?:py|sql|md|yml|yaml|json|txt))`")
+absents = {}
+for doc in list(Path("docs").rglob("*.md")) + [Path("CLAUDE.md"), Path("README.md")]:
+    for n, ligne in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
+        for c in MOTIF.findall(ligne):
+            if "/" in c and not Path(c).exists():
+                absents.setdefault(c, []).append(f"{doc}:{n}")
+print(absents or "Tous les chemins cites existent.")
+FIN
+# 31/08 : un seul, sql/test_schema_gold.sql, dont l'absence est deja documentee.
+```
+
+## Phase 28. Vérifier que tout renvoi désigne une entrée définie (procédure)
+
+Les documents se citent entre eux par identifiant : OBS-, TS-, TDBT-, DA-, V-,
+INC-. Un renvoi vers une entrée inexistante ne se voit pas à la lecture.
+
+```bash
+# Compare l'ensemble des identifiants CITES a l'ensemble des identifiants
+# DEFINIS, un identifiant etant defini quand il ouvre un titre markdown.
+# 31/08 : 147 definis, 147 cites, aucun orphelin.
+```
+
+## Phase 29. Confronter les chiffres annoncés au dépôt (procédure)
+
+```bash
+grep -c "^## T[A-Z]*-[0-9]" docs/cahier_recettes.md   # cas de recette numerotes
+grep -c "^## DA-" docs/documentation_technique.md      # decisions d architecture
+ls -1 dags/*.py | wc -l                                # DAG
+wc -l docs/annexes/*.md                                # dictionnaires generes
+python -m pytest tests -q --collect-only | tail -1     # tests unitaires
+```
+
+Le seul écart trouvé portait sur des volumes de données, et il était
+structurel : `CLAUDE.md` annonçait « 15 faits popularité, 45 faits prix » sans
+date, sur une couche alimentée chaque nuit. Un chiffre vivant cité sans date
+est faux par construction. Corrigé en datant la mesure.
+
+## Phase 30. Comparer les deux couches Gold (diagnostic ponctuel)
+
+C'est ce contrôle qui a révélé V-12. À rejouer avant toute démonstration.
+
+```bash
+# Cote PostgreSQL, alimente chaque nuit par le DAG.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc \
+  "SELECT (SELECT count(*) FROM mart.dim_games) || ' jeux, '
+       || (SELECT count(*) FROM mart.fact_popularity_history) || ' faits, '
+       || (SELECT count(*) FROM mart.fact_prices) || ' tarifs'"
+# 31/08 : 15 jeux, 45 faits, 120 tarifs
+
+# Cote Snowflake, charge a la main.
+docker compose --profile outillage run --rm --no-deps snowflake-cli python -c "
+import sys; sys.path.insert(0, 'entrepot')
+from connexion import connexion
+c = connexion()
+with c.cursor() as cur:
+    for t in ('dim_games','fact_popularity_history','fact_prices'):
+        cur.execute(f'SELECT count(*) FROM mart.{t}')
+        print(t, cur.fetchone()[0])
+    cur.execute('SELECT max(day) FROM mart.fact_popularity_history')
+    print('derniere journee :', cur.fetchone()[0])
+c.close()"
+# 31/08 : 15, 30, 75, derniere journee 2026-08-20, soit 11 jours de retard.
+
+# Et l indicateur de supervision ne voit que la premiere branche.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens \
+  -c "SELECT * FROM speed.v_indicateur_gold"
+# retard_jours = 0, alors que Snowflake accuse 11 jours. C est V-13.
+```
+
+## Phase 31. Vérifier une hypothèse plutôt que la déduire (diagnostic ponctuel)
+
+L'absence de DAG vers Snowflake semblait s'expliquer par l'isolation des
+dépendances (DA-08). Cette commande a démenti l'explication en une seconde.
+
+```bash
+docker exec gamelens-airflow-scheduler python -c "
+from importlib.metadata import distributions
+for d in sorted(distributions(), key=lambda x: x.metadata['Name'] or ''):
+    n = d.metadata['Name'] or ''
+    if 'snowflake' in n.lower() or n.lower() in ('pandas', 'pyarrow'):
+        print(f'  {n} {d.version}')"
+# apache-airflow-providers-snowflake 6.10.0
+# snowflake-snowpark-python 1.47.0
+# snowflake-connector-python 4.0.0
+# pandas 2.3.3, pyarrow 18.1.0
+#
+# Tout est deja la, herite de l image de base. Voir OBS-69.
+```
+
+## Phase 32. Relever le cycle de vie des alertes après un arrêt (procédure)
+
+```bash
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c "
+SELECT regle, declenchee_le::timestamp(0), resolue_le::timestamp(0),
+       (resolue_le - declenchee_le)::interval(0) AS duree, valeur, seuil
+FROM speed.alertes WHERE declenchee_le::date = CURRENT_DATE
+ORDER BY declenchee_le;"
+# 31/08 : 5 alertes ouvertes a 08:25:07 apres 4 jours d arret,
+# 4 refermees a 08:30:01 et la cinquieme a 08:45:01. Voir TSUP-06.
+```
+
+## Phase 33. Réappliquer un commentaire corrigé (procédure)
+
+Les scripts de `sql/` ne rejouent pas sur une instance deja initialisee. Toute
+correction de `COMMENT ON` doit donc etre appliquee a la main, puis le
+dictionnaire regenere, sinon la CI echoue sur la comparaison.
+
+```bash
+docker exec -i gamelens-postgres psql -U gamelens_app -d gamelens \
+  -v ON_ERROR_STOP=1 <<'FIN'
+COMMENT ON VIEW speed.v_indicateur_gold IS '...texte corrige...';
+FIN
+
+docker compose --profile outillage run --rm snowflake-cli \
+  python outils/generer_dictionnaire.py --cible postgres
+# genere (321 lignes, 31/08/2026 09:01 UTC)
+```
+
+## Bilan de session
+
+| Contrôle | Résultat |
+|---|---|
+| Chemins de fichiers cités | 1 absent, déjà documenté comme tel |
+| Renvois croisés | 147 cités, 147 définis, 0 orphelin |
+| Comptes vérifiables (cas, DA, V, DAG, dictionnaires, étages CI, tests) | tous conformes |
+| Volumes de données annoncés | **périmés**, non datés, corrigés |
+| Affirmations au futur dans le code | **2 devenues fausses**, corrigées |
+| Cohérence interne de `CLAUDE.md` | **une contradiction**, corrigée |
+| Schéma d'architecture | **faux sur la promotion Gold**, corrigé |
+

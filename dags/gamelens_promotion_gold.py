@@ -20,9 +20,17 @@ Deux principes de conception, tous deux defendables a l'oral :
    donc testable par la CI sans qu'Airflow soit demarre, et le meme code sert
    en ligne de commande et en orchestration.
 
-Cible actuelle : le schema `mart` de PostgreSQL. Le basculement vers Snowflake,
-prevu des que le compte d'essai sera recree, se fait en changeant la connexion
-Airflow, pas le DAG.
+Cible : le schema `mart` de PostgreSQL, et lui seul.
+
+Precision necessaire depuis que le compte Snowflake existe (20/08/2026), sans
+quoi ce DAG laisse croire qu'il alimente l'entrepot. Il ne l'alimente pas. La
+couche Gold Snowflake est chargee par entrepot/snowpark_promotion.py, invoque
+A LA MAIN depuis le conteneur d'outillage : aucun DAG ne la vise.
+
+Les deux couches Gold divergent donc, et c'est visible : PostgreSQL suit la
+collecte du jour, Snowflake porte l'etat du dernier chargement manuel. Ce
+n'est pas un choix d'architecture, c'est une dette, suivie sous V-12 dans la
+feuille de route d'exploitation.
 """
 
 from __future__ import annotations
@@ -205,9 +213,11 @@ def promotion_gold():
         et fait echouer le pipeline en cas de violation, plutot que d'etre
         constatee plus tard par un analyste devant un tableau de bord faux.
 
-        Ce sont les memes assertions que celles qui seront confiees aux tests
-        dbt une fois la cible Snowflake en place, ou les contraintes declarees
-        ne sont pas appliquees a l'ecriture.
+        Ce sont les memes assertions que celles portees, cote Snowflake, par
+        les contrats de dbt/models/gold/ depuis le 27/08/2026. Deux ecritures
+        de la meme regle sur deux moteurs : ici PostgreSQL les applique deja
+        par ses contraintes, la-bas rien ne les applique et le controle est
+        le seul filet. Voir DA-04 et DA-10.
         """
         from airflow.providers.postgres.hooks.postgres import PostgresHook
 

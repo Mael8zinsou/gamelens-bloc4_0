@@ -128,7 +128,7 @@ SELECT
     CURRENT_DATE - (SELECT max(day) FROM mart.fact_popularity_history)     AS retard_jours;
 
 COMMENT ON VIEW speed.v_indicateur_gold IS
-    'Fraicheur de l entrepot. La collecte peut fonctionner alors que la promotion est en panne : les deux se surveillent separement.';
+    'Fraicheur de la couche Gold POSTGRESQL, et d elle seule : la couche Snowflake n a aucun indicateur (V-13). La collecte peut fonctionner alors que la promotion est en panne, les deux se surveillent separement.';
 
 -- ----------------------------------------------------------------------------
 -- Journal des alertes.

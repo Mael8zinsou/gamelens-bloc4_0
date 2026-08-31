@@ -541,6 +541,40 @@ Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt privé
 | `integration` | Socle Docker réel, 6 contrôles métier | ✅ |
 | `publication` | Image Airflow poussée sur `ghcr.io` | ✅ deux étiquettes |
 
+## TSUP-06. Une panne de quatre jours, détectée et refermée sans personne
+
+- **Objet** : vérifier le cycle de vie complet des alertes sur un arrêt réel et
+  non provoqué. TSUP-02 couvre déjà ce cycle, mais sur un incident déclenché
+  exprès, de durée choisie, avec un opérateur qui regarde. Celui-ci n'était pas
+  prévu du tout.
+- **Circonstance** : le poste est resté éteint du 27/08/2026 en fin
+  d'après-midi au 31/08/2026 au matin, soit **3 j 16 h**. Aucune commande n'a
+  été tapée à la reprise avant le relevé.
+- **Attendu** : à la reprise, les règles de fraîcheur, complétude, latence,
+  composant muet et retard d'entrepôt se déclenchent, puis se referment
+  d'elles-mêmes une fois la collecte rattrapée, sans intervention.
+- **Observé (31/08/2026)**, relevé dans `speed.alertes` :
+
+  | Règle | Déclenchée | Refermée | Durée | Valeur / seuil |
+  |---|---|---|---|---|
+  | `fraicheur_frequentation` | 08:25:07 | 08:30:01 | 4 min 53 s | 5 350,1 min / 90 |
+  | `completude_collecte` | 08:25:07 | 08:30:01 | 4 min 53 s | 0,0 % / 100 |
+  | `latence_pipeline` | 08:25:07 | 08:30:01 | 4 min 53 s | seuil 300 s |
+  | `composant_muet` | 08:25:07 | 08:30:01 | 4 min 53 s | 2 / 0 |
+  | `retard_entrepot_gold` | 08:25:07 | 08:45:01 | 19 min 54 s | 4 j / 1 |
+
+- **Verdict** : **PASS**. Cinq déclenchements, cinq fermetures automatiques,
+  zéro intervention.
+- **Ce que l'observation apprend en plus** : les cinq alertes ne se referment
+  pas ensemble. L'écart de quinze minutes entre les quatre premières et la
+  cinquième n'est pas un défaut, il mesure la cadence de ce qui est surveillé,
+  la collecte reprenant au quart d'heure quand la promotion suit son propre
+  rythme. Voir OBS-71.
+- **Réserve à énoncer plutôt qu'à taire** : ces cinq alertes se sont ouvertes et
+  refermées sans que personne ne soit prévenu. Si elles ne s'étaient pas
+  refermées, rien n'aurait changé pour l'exploitant. C'est V-02, chiffré une
+  fois de plus.
+
 ## Orchestration de l'ingestion temps réel (session 6)
 
 ## TING-01. Les trois DAG sont enregistrés, et le contrôle sait échouer
@@ -912,6 +946,7 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 |---|---|---|
 | Popularité diffusée (Twitch) | Non branchée | Colonnes présentes mais nulles |
 | Catalogue RAWG | Non branché | `dim_games` alimentée depuis la watchlist |
+| Fraîcheur de la couche Gold **Snowflake** | Non surveillée | `v_indicateur_gold` ne lit que PostgreSQL. Au 31/08/2026, 11 jours de retard côté Snowflake sans qu'aucune règle puisse le voir. V-13 |
 | Alertes vers un canal externe | Non construit | Les alertes sont persistées et remontées par Airflow, mais aucune notification par courriel ou messagerie n'est configurée |
 
 ---
@@ -923,11 +958,11 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 | Fonctionnels | 5 | 0 | 0 |
 | Structurels | 19 | 0 | 0 |
 | Sécurité | 3 | 0 | 0 |
-| Supervision | 5 | 0 | 0 |
+| Supervision | 6 | 0 | 0 |
 | Ingestion orchestrée | 6 | 0 | 0 |
 | Couche Bronze | 6 | 0 | 0 |
 | Contrats dbt | 6 | 0 | 0 |
-| **Total** | **50** | **0** | **0** |
+| **Total** | **51** | **0** | **0** |
 
 Le cloisonnement des rôles est décrit par 3 cas de la section Sécurité et par
 TBRZ-04, compté avec la couche Bronze. À l'exécution, ces quatre cas se
@@ -965,7 +1000,7 @@ dans trois cas sur cinq ici, le défaut était dans le test.
 | C4.2.3 CI/CD | section 5 complète, TS-14, TS-19 |
 | C4.2.1 intégrité applicative | TS-16, TS-17, TS-18 |
 | C4.2.1 intégrité déclarative (dbt) | TDBT-01 à TDBT-06 |
-| C4.3.1 supervision | TSUP-01 à TSUP-05, TING-06 |
+| C4.3.1 supervision | TSUP-01 à TSUP-06, TING-06 |
 | C4.2.2 ingestion orchestrée | TING-01 à TING-05 |
 | Sécurité transverse | TSEC-01 à TSEC-03, TBRZ-04 |
 | Couche Bronze (A4.1, Medallion) | TBRZ-01 à TBRZ-06 |

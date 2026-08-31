@@ -21,11 +21,13 @@ un incident réel et sa méthode d'investigation (C4.4.2).
 ## Continuité avec les Blocs 1 à 3 (à respecter, ne pas contredire)
 
 - Architecture Medallion + Lambda hybride : Bronze (S3), Silver batch (Snowflake), Silver speed
-  (PostgreSQL), Gold (Snowflake mart). **Compte d'essai Snowflake à recréer** (constaté le
-  19/08/2026, recréation volontairement différée, voir la note de calendrier en fin de fichier) :
-  le Gold cible Snowflake (`sql/schema_gold_snowflake.sql`), le prototype PostgreSQL
-  (`sql/schema_gold.sql`) reste comme mise au point initiale et référence de comparaison, et sert
-  de cible provisoire tant que Snowflake n'est pas disponible.
+  (PostgreSQL), Gold (Snowflake mart). Le compte Snowflake **existe depuis le 20/08/2026**
+  (voir la note de calendrier en fin de fichier, réécrite le 31/08). Les deux couches Gold sont
+  construites : la cible Snowflake (`sql/schema_gold_snowflake.sql`) et le prototype PostgreSQL
+  (`sql/schema_gold.sql`), gardé comme mise au point initiale et référence de comparaison.
+  **Attention, l'usage réel est l'inverse de l'intention** : seul le prototype PostgreSQL est
+  alimenté par un ordonnanceur, la cible Snowflake l'est à la main. Constaté le 31/08/2026,
+  suivi sous V-12 et V-13, et à dire plutôt qu'à laisser découvrir.
 - Orchestration batch : Apache Airflow. Temps réel : Apache Kafka (ou toute alternative légère
   équivalente si Kafka est trop lourd à faire tourner en local — à documenter comme un choix assumé).
   Calcul distribué : **Snowpark** (choisi le 19/08/2026 plutôt que PySpark local, pour un calcul
@@ -84,7 +86,7 @@ un incident réel et sa méthode d'investigation (C4.4.2).
 
 ## État d'avancement
 
-Mis à jour le 27/08/2026 en fin de session 8.
+Mis à jour le 31/08/2026 en fin de session 9 (contrôle de cohérence).
 
 | Élément | Statut |
 |---|---|
@@ -95,15 +97,15 @@ Mis à jour le 27/08/2026 en fin de session 8.
 | **C4.2.2 méthode 1, pipeline temps réel** | ✅ **Exécuté et désormais orchestré** : Steam vers Kafka vers PostgreSQL. Idempotence prouvée par rejeu. DAG `gamelens_ingestion_temps_reel` toutes les 15 min, porte de sortie, test négatif broker coupé et reprise automatique vérifiée. |
 | **C4.2.2 méthode 2, orchestrateur** | ✅ **Exécuté** : Airflow 3.1.8 en conteneurs, DAG `gamelens_promotion_gold`, 6 tâches, 3 runs réels en succès. Test négatif de la porte de fraîcheur réussi, reprise automatique observée. |
 | **C4.2.2 méthode 3, calcul distribué** | ✅ **Exécuté** : Snowpark, MERGE idempotents et calcul analytique (fenêtre glissante 7 j, classement par genre). Nature distribuée prouvée par le SQL généré et l'historique de session. |
-| Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté** : 15 dim_games, 15 faits popularité, 45 faits prix |
-| Schéma Gold Snowflake (cible finale) | ✅ **Exécuté** sur `RTZSXDV-PM63908` (AWS_EU_WEST_3) : 27 instructions, 0 erreur. Couche alimentée, 8 contrôles d'intégrité au vert. |
+| Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté quotidiennement** par le DAG de promotion. Volumes au 31/08/2026 : 15 dim_games, 45 faits popularité, 120 faits prix. Chiffres datés : ils croissent à chaque nuit. |
+| Schéma Gold Snowflake (cible finale) | ✅ **Exécuté** sur `RTZSXDV-PM63908` (AWS_EU_WEST_3) : 27 instructions, 0 erreur. 8 contrôles au vert. ⚠️ **Alimentée à la main uniquement**, dernier chargement le 20/08/2026 : 15 dim_games, 30 faits popularité, 75 faits prix. Voir V-12. |
 | **C4.2.3 pipeline CI/CD** | ✅ **Exécuté, 6 étages verts** sur `Mael8zinsou/gamelens-bloc4_0` (privé). Qualité, tests, intégrité du DAG, intégration sur infrastructure jetable, **recette Snowflake sur base jetable**, publication d'image sur `ghcr.io` avec double étiquetage `latest` et SHA. Le premier run avait échoué : défaut dans l'assertion, pas dans l'infra (OBS-22). |
 | Recette automatisée de l'entrepôt | ✅ **Exécutée sur le runner** (run 32954104664, 41 s). Base Snowflake créée pour le run, schéma livré appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles d'intégrité et contrats dbt vérifiés en positif **et en négatif** sur le même jeu fautif, base supprimée. |
 | **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. |
-| **C4.3.2 feuille de route d'exploitation** | ✅ **Écrite** : `docs/feuille_route_exploitation.md`, 10 sections. Tâches quotidiennes à trimestrielles, planification de maintenance, 11 points de vigilance dont 2 datés, durées d'incident mesurées, procédures d'intervention éprouvées avant d'être prescrites. |
-| **C4.3.3 documentation technique** | ✅ **Écrite** : `docs/documentation_technique.md`, 600 lignes. Point d'entrée, 10 décisions d'architecture datées avec leur contrepartie, traçabilité champ par champ, référence de configuration, matrice de droits, plus **2 annexes générées** depuis le catalogue et vérifiées par la CI. |
+| **C4.3.2 feuille de route d'exploitation** | ✅ **Écrite** : `docs/feuille_route_exploitation.md`, 10 sections. Tâches quotidiennes à trimestrielles, planification de maintenance, 13 points de vigilance dont 2 datés, durées d'incident mesurées, procédures d'intervention éprouvées avant d'être prescrites. |
+| **C4.3.3 documentation technique** | ✅ **Écrite** : `docs/documentation_technique.md`. Point d'entrée, 10 décisions d'architecture datées avec leur contrepartie, traçabilité champ par champ, référence de configuration, matrice de droits, plus **2 annexes générées** depuis le catalogue et vérifiées par la CI. |
 | **dbt sur Snowflake** | ✅ **Construit et exécuté** : 29 contrats déclaratifs sur 4 sources, 1 modèle (la vue de tableau de bord, sortie d'un script SQL non rejouable). Éprouvés en positif et en négatif, sur base jetable et sur la couche de démonstration. |
-| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **50 PASS, 0 partiel, 0 en attente**. |
+| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **51 PASS, 0 partiel, 0 en attente**. |
 | Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-008 s'y ajoutent comme incidents secondaires. |
 
 ## Faits d'environnement à ne pas redécouvrir
@@ -146,6 +148,18 @@ Mis à jour le 27/08/2026 en fin de session 8.
 - **`python -m venv` ne fonctionne pas sur ce poste** : le module `venv` de
   l'installation Python est vide. Ne pas perdre de temps à chercher pourquoi, passer
   par un conteneur.
+- **Deux couches Gold existent, une seule est alimentée automatiquement.**
+  `gamelens_promotion_gold` vise **PostgreSQL** et lui seul, chaque nuit à
+  02h30 UTC. La couche Snowflake est chargée par
+  `entrepot/snowpark_promotion.py`, invoqué à la main : aucun DAG ne la vise.
+  Les deux divergent donc en permanence. Avant toute démonstration sur
+  Snowflake, relancer la promotion, ou annoncer la date de l'état montré.
+- **L'image Airflow embarque déjà l'outillage Snowflake**, hérité de
+  `apache/airflow:3.1.8` sans qu'aucune ligne du Dockerfile ne l'installe :
+  `apache-airflow-providers-snowflake` 6.10.0, `snowflake-snowpark-python`
+  1.47.0, `snowflake-connector-python` 4.0.0, `pandas`, `pyarrow`. L'isolation
+  des dépendances de DA-08 ne s'oppose donc pas à orchestrer la promotion
+  Snowflake. Vérifié le 31/08/2026 (OBS-69), ne pas re-supposer le contraire.
 - **`sql/schema_gold_snowflake.sql` contient des `CREATE OR REPLACE TABLE`** et
   nomme la base en dur, 24 fois. Ne jamais le rejouer sans redirection : il
   détruirait la couche de démonstration sans message d'erreur. Utiliser
@@ -253,6 +267,12 @@ corriger le commentaire.
 Corrections courtes identifiées, aucune ne bloque, toutes sont documentées
 comme points de vigilance dans la feuille de route :
 
+- **V-12 et V-13, la couche Gold Snowflake n'est alimentée par aucun
+  ordonnanceur, et rien ne surveille son retard.** Constaté le 31/08/2026 :
+  11 jours de retard, invisible pour la supervision, qui ne regarde que le
+  Gold PostgreSQL. L'obstacle supposé n'existe pas, l'image Airflow embarque
+  déjà Snowpark 1.47 (OBS-69). C'est l'écart le plus important entre ce que
+  l'architecture décrit et ce que le système fait.
 - **V-02, aucun canal de notification.** L'écart le plus important entre cette
   plateforme et une plateforme exploitée : les alertes sont persistées, mais
   rien ne prévient un humain. Chiffré : la fraîcheur est restée en alerte
@@ -307,16 +327,24 @@ chose d'inexact avec assurance. Deux affirmations y sont aujourd'hui datées et
 deviendront fausses dès qu'elles seront traitées : l'ingestion temps réel n'est
 planifiée par rien, et `GAMELENS_SERVICE` tourne en `ACCOUNTADMIN`.
 
-### Note de calendrier sur le compte d'essai Snowflake
+### Note de calendrier sur le compte Snowflake
 
-Un compte d'essai Snowflake a une durée de vie limitée (30 jours, crédits
-plafonnés). Le recréer avant d'en avoir l'usage immédiat consommerait la fenêtre
-d'essai pendant une période où rien ne l'utilise, avec le risque qu'elle soit
-expirée le jour de la soutenance. La recréation est donc **volontairement
-différée** jusqu'au moment où les modèles dbt et le DAG de promotion seront
-prêts à être pointés dessus.
+Réécrite le 31/08/2026. La version précédente décrivait un compte **à recréer**,
+un essai de 30 jours et une création volontairement différée. Les trois points
+étaient faux depuis le 20/08, et contredisaient la section des faits
+d'environnement du même fichier, quarante lignes plus haut. Un fichier de
+consignes qui se contredit lui-même est pire qu'incomplet : il fait perdre du
+temps à qui le lit et il fait prendre de mauvaises décisions à qui le croit.
 
-Conséquence de conception à respecter d'ici là : tout ce qui est construit vers
-la couche Gold doit l'être derrière une frontière de configuration, de sorte que
-le basculement PostgreSQL vers Snowflake soit un changement de connexion et non
-une réécriture.
+**État réel.** Compte étudiant `RTZSXDV-PM63908`, créé les 19 ou 20/08/2026,
+**120 jours et 400 dollars de crédits** et non un essai de 30 jours. Expiration
+attendue les **17 ou 18/12/2026**, à confirmer dans Snowsight : c'est V-01, le
+seul point de vigilance bloquant.
+
+**Ce que la contrainte d'alors a produit, et qui vaut d'être gardé.** Tant que
+le compte n'existait pas, la règle était que tout ce qui vise la couche Gold
+soit construit derrière une frontière de configuration. Cette contrainte a été
+tenue, et elle a payé deux fois plutôt qu'une : la bascule vers Snowflake s'est
+faite sans réécrire la logique de promotion, puis la recette d'intégration
+continue a pu viser une base jetable sans modifier une ligne des scripts de
+contrôle. Voir DA-05. La contrainte n'a plus de raison d'être, la règle si.

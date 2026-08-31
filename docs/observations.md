@@ -1469,3 +1469,139 @@ contient. La conséquence pratique dépasse l'esthétique du diff : une revue qu
 voit un fichier entièrement réécrit ne lit pas le changement, elle le survole.
 Un bruit de cette nature n'est pas neutre, il annule la relecture.
 
+# Session 9, 31 août 2026 : contrôle de cohérence
+
+## OBS-69. L'obstacle que j'avais déduit n'existait pas
+
+En cherchant pourquoi aucun DAG n'alimente la couche Gold Snowflake, la réponse
+m'a paru évidente avant d'être vérifiée : DA-08 isole les jeux de dépendances,
+Snowpark exige `snowflake-connector-python` 4.x qui entre en conflit avec le
+reste, donc l'image Airflow ne peut pas l'embarquer, donc orchestrer la
+promotion supposerait un `DockerOperator` ou une image remaniée. Un raisonnement
+propre, appuyé sur un principe d'architecture réel et documenté.
+
+Il est faux. L'image Airflow contient déjà :
+
+| Paquet | Version |
+|---|---|
+| `apache-airflow-providers-snowflake` | 6.10.0 |
+| `snowflake-snowpark-python` | 1.47.0 |
+| `snowflake-connector-python` | 4.0.0 |
+| `pandas` | 2.3.3 |
+| `pyarrow` | 18.1.0 |
+
+Aucune ligne du `Dockerfile` ne les installe. Ils viennent de l'image de base
+`apache/airflow:3.1.8`, qui embarque un large jeu de fournisseurs.
+
+Ce qui rend l'erreur intéressante, c'est sa forme. Je n'ai pas ignoré un fait :
+j'ai **déduit une contrainte à partir d'un principe** au lieu de la constater.
+Le principe était juste, le conflit de dépendances est réel et documenté, mais
+il ne s'appliquait pas ici parce que quelqu'un d'autre l'avait déjà résolu en
+amont. Une déduction correcte à partir d'une prémisse vraie peut donner un
+résultat faux quand la prémisse ne couvre pas le cas.
+
+La commande qui a tranché tient en une ligne, et elle aurait dû venir avant le
+raisonnement :
+
+```bash
+docker exec gamelens-airflow-scheduler python -c "
+from importlib.metadata import distributions
+print([d.metadata['Name'] for d in distributions()
+       if 'snowflake' in (d.metadata['Name'] or '').lower()])"
+```
+
+## OBS-70. Un mot dans un commentaire a fabriqué un angle mort
+
+La vue `speed.v_indicateur_gold` portait ce commentaire dans le catalogue :
+« Fraîcheur de **l'entrepôt**. » Et la règle d'alerte associée émettait :
+« **L'entrepôt Gold** accuse N jours de retard. »
+
+Or cette vue lit `mart.*` de **PostgreSQL**, que l'architecture désigne partout
+comme le *prototype*. L'entrepôt, dans le vocabulaire du projet, c'est
+Snowflake. Deux textes, écrits sans intention de tromper, ont suffi à faire
+croire pendant onze jours que la couche cible était surveillée.
+
+La démonstration est involontaire et datée. Le 31/08/2026 à 08h25, la règle
+s'est déclenchée sur **4 jours** de retard côté PostgreSQL et s'est refermée
+seule à 08h45. Au même instant, la couche Snowflake accusait **11 jours** de
+retard. Rien ne l'a signalé : aucun indicateur ne la regarde.
+
+Le défaut n'est pas dans le code, qui fait exactement ce qu'il dit faire. Il est
+dans un nom. C'est la même famille qu'OBS-32, où une assertion par comptage
+passait au vert sans rien prouver : un dispositif qui a l'air de couvrir plus
+qu'il ne couvre est plus dangereux qu'un dispositif absent, parce que son
+silence est lu comme une bonne nouvelle.
+
+## OBS-71. Quatre jours d'arrêt ont produit la meilleure preuve de supervision du projet
+
+Entre le 27/08 en fin d'après-midi et le 31/08 au matin, le poste est resté
+éteint. Personne ne l'avait prévu comme un test, et c'en est un meilleur que
+ceux qu'on organise : les tests provoqués ont une durée choisie et un opérateur
+qui regarde.
+
+Ce que la plateforme a fait toute seule, relevé dans `speed.alertes` :
+
+| Heure | Événement |
+|---|---|
+| 08:25:07 | 5 règles se déclenchent d'un coup à la reprise |
+| 08:30:01 | 4 se referment, soit **4 min 53 s** après |
+| 08:45:01 | la cinquième se referme, soit **19 min 54 s** après |
+
+La règle de fraîcheur a mesuré **5 350,1 minutes** depuis la dernière collecte,
+pour un seuil de 90, soit 3 jours 17 heures. La complétude est tombée à 0 %,
+deux composants ont été déclarés muets, et le retard de la couche Gold est monté
+à 4 jours.
+
+Aucune intervention humaine. Aucune commande tapée. Les alertes se sont ouvertes
+sur constat et refermées sur rattrapage.
+
+**Le détail qui apprend quelque chose**, et qui aurait été invisible dans un
+test provoqué : les cinq alertes ne se referment pas ensemble. Quatre se ferment
+en cinq minutes, celle du retard d'entrepôt met vingt minutes. L'écart n'est pas
+un défaut, il **mesure la cadence de ce qui est surveillé** : la collecte
+reprend au quart d'heure, la promotion vers Gold suit son propre rythme. Le
+temps de fermeture d'une alerte renseigne donc sur la chose surveillée autant
+que sur le dispositif qui surveille.
+
+Une réserve, et elle est sérieuse : ces cinq alertes se sont ouvertes et
+refermées sans que personne ne soit prévenu. Si elles ne s'étaient pas
+refermées, rien n'aurait changé dans l'expérience de l'exploitant. C'est V-02,
+chiffré une fois de plus.
+
+## OBS-72. Le fichier écrit pour éviter les redécouvertes se contredisait lui-même
+
+`CLAUDE.md` existe pour qu'on ne redécouvre pas ce qui a déjà été établi. Au
+31/08, il contenait deux affirmations incompatibles, à environ quarante lignes
+l'une de l'autre :
+
+- section « Faits d'environnement » : compte Snowflake `RTZSXDV-PM63908`,
+  **120 jours et 400 dollars de crédits**, en service ;
+- section « Note de calendrier » : compte d'essai **à recréer**, essai de
+  **30 jours**, recréation **volontairement différée** jusqu'à ce que les
+  modèles dbt soient prêts.
+
+La seconde était vraie le 19/08 et fausse depuis le 20. Elle a survécu à huit
+sessions et à une dizaine de mises à jour du même fichier.
+
+La cause est mécanique et vaut d'être retenue : **un fichier de référence ne se
+lit jamais en entier.** On y ajoute une section, on corrige celle qu'on
+consulte, et les paragraphes qu'on ne consulte pas vieillissent sans que rien
+ne les touche. La discipline de mise à jour à chaque session, réelle ici, ne
+protège que les parties qu'on relit.
+
+C'est le même mécanisme qu'OBS-63, où deux documents décrivaient une procédure
+dans deux ordres différents, et qu'OBS-64, où un composant annoncé passait pour
+construit. Trois occurrences du même défaut en trois sessions, sur trois
+supports différents. La réponse qui a fonctionné jusqu'ici est la génération
+(DA-09) et la règle d'arbitrage écrite ; celle qui manque encore est un contrôle
+mécanique de cohérence interne, du genre de ceux passés ici à la main.
+
+**Une confirmation immédiate, pendant la correction elle-même.** `CLAUDE.md`
+annonçait « `documentation_technique.md`, 600 lignes » quand le fichier en
+faisait 679. Le chiffre corrigé à 679 était faux vingt minutes plus tard, à 697,
+du seul fait des corrections en cours. Il a donc été **supprimé** plutôt que mis
+à jour : la structure d'un document se décrit, sa taille se mesure. C'est la
+règle d'OBS-62, où un fichier généré devait exclure sa propre date de
+génération, appliquée cette fois à de la prose. Tout ce qui varie sans que le
+sujet varie doit sortir de ce qu'on affirme.
+

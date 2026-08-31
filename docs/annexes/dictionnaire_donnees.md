@@ -187,7 +187,7 @@ Age de la donnee la plus recente par flux. Indicateur principal de la plateforme
 | `evenements_24h` | `bigint` | oui |  |  |
 
 ### `speed.v_indicateur_gold` (vue)
-Fraicheur de l entrepot. La collecte peut fonctionner alors que la promotion est en panne : les deux se surveillent separement.
+Fraicheur de la couche Gold POSTGRESQL, et d elle seule : la couche Snowflake n a aucun indicateur (V-13). La collecte peut fonctionner alors que la promotion est en panne, les deux se surveillent separement.
 
 | Colonne | Type | Nul | Defaut | Description |
 |---|---|---|---|---|

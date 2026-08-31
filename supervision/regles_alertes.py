@@ -87,7 +87,7 @@ REGLES: list[Regle] = [
         requete="SELECT retard_jours FROM speed.v_indicateur_gold",
         seuil=1,
         comparateur="sup",
-        message="L entrepot Gold accuse {valeur} jour(s) de retard (seuil {seuil}). Le DAG de promotion a-t-il tourne ?",
+        message="La couche Gold PostgreSQL accuse {valeur} jour(s) de retard (seuil {seuil}). Le DAG de promotion a-t-il tourne ?",
     ),
     Regle(
         nom="echecs_composants",

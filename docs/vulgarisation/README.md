@@ -82,4 +82,17 @@ Un manque a été **ajouté** à cette occasion plutôt que retiré :
 la dérive. C'est le même écart entre l'annoncé et le réel que celui refermé
 cette session, en plus petit, et il est signalé plutôt que corrigé en silence.
 
-Dernière mise à jour : 27/08/2026, fin de session 8.
+Revu en session 9 (31/08/2026), non pour une brique ajoutée mais pour une
+explication devenue fausse, ce que la règle ci-dessus prévoit aussi. Un contrôle
+de cohérence a montré que le schéma d'architecture des deux documents décrivait
+l'intention et non le système : seule la couche Gold PostgreSQL est promue
+automatiquement, la couche Snowflake est chargée à la main et rien ne surveille
+son retard. Le schéma du document pour un junior est corrigé et porte désormais
+son avertissement ; la version Feynman gagne une huitième faille, placée en tête
+de sa section 9 parce que c'est la plus embarrassante des huit.
+
+C'est exactement le cas que cette page redoutait en ouverture : un document de
+vulgarisation faux est pire qu'absent, puisqu'il enseigne une chose inexacte
+avec assurance. Il l'a été onze jours.
+
+Dernière mise à jour : 31/08/2026, fin de session 9.
