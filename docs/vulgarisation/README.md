@@ -12,8 +12,13 @@ documents-ci font l'inverse : ils partent du lecteur.
 
 | Document | Pour qui | Ce à quoi il répond | Durée |
 |---|---|---|---|
-| [`pour-un-junior.md`](pour-un-junior.md) | Un data engineer fraîchement diplômé. Il a le vocabulaire, il n'a pas encore l'expérience de la production. | « Pourquoi as-tu fait ça comme ça, et pas autrement ? » | ~25 min |
-| [`explique-simplement.md`](explique-simplement.md) | Quelqu'un qui sait ce qu'est un programme, une base de données, une API, mais pour qui « pipeline », « idempotence » ou « couche Gold » ne veulent rien dire. | « C'est quoi, ton truc ? » | ~12 min |
+| [`pour-un-junior.md`](pour-un-junior.md) | Un data engineer fraîchement diplômé. Il a le vocabulaire, il n'a pas encore l'expérience de la production. | « Pourquoi as-tu fait ça comme ça, et pas autrement ? » | ~45 min |
+| [`explique-simplement.md`](explique-simplement.md) | Quelqu'un qui sait ce qu'est un programme, une base de données, une API, mais pour qui « pipeline », « idempotence » ou « couche Gold » ne veulent rien dire. | « C'est quoi, ton truc ? » | ~30 min |
+
+Les durées sont recalculées sur le nombre de mots à chaque révision, sinon elles
+vieillissent en silence : au 31/08/2026, 8 356 mots pour la version junior et
+5 835 pour la version simple. Elles avaient été annoncées à 25 et 12 minutes
+quand les documents faisaient à peu près la moitié de cette taille.
 
 La ligne de partage est volontairement franche, sinon les deux documents
 seraient le même à quelques mots près.
@@ -39,13 +44,18 @@ ensuite le détail des choix.
 Ils ne remplacent rien. Quand ils simplifient, ils le disent et renvoient à la
 source :
 
+- `docs/rapport_analyse.md` pour les besoins d'origine, la comparaison avec les
+  outils du marché, la dépendance fournisseur et les coûts mesurés ;
+- `docs/documentation_technique.md` pour les décisions d'architecture datées et
+  la traçabilité champ par champ ;
 - `docs/journal_incidents.md` pour les incidents au format complet ;
 - `docs/observations.md` pour les surprises et les fausses pistes ;
 - `docs/cahier_recettes.md` pour les tests et leurs résultats réels ;
 - `docs/commandes_successives.md` pour ce qui a été tapé, dans l'ordre ;
 - `docs/feuille_route_exploitation.md` pour l'exploitation courante et les
   points de vigilance ;
-- `CLAUDE.md` pour l'état d'avancement et les contraintes d'environnement.
+- `CLAUDE.md` pour l'état d'avancement, les contraintes d'environnement et la
+  liste des écarts connus laissés ouverts.
 
 ## Entretien
 
@@ -58,43 +68,68 @@ Règle retenue : à chaque session qui **ajoute ou retire une brique**, ou qui
 **invalide une explication donnée ici**, les deux documents sont relus et mis à
 jour dans la même session. Une correction de détail ne le justifie pas.
 
-Points connus à revoir lors de la prochaine mise à jour :
+La règle a une conséquence qu'il faut assumer dans les deux sens : elle
+autorise aussi à **ne rien changer**, et il faut alors le dire, sinon rien ne
+distingue un document relu d'un document oublié.
+
+### Points connus à revoir
 
 - `GAMELENS_SERVICE` tourne en `ACCOUNTADMIN`, signalé comme une incohérence
   assumée dans les deux documents. Le jour où un rôle dédié le remplacera, ces
-  passages deviendront faux.
-- Le seuil de fraîcheur est écrit à deux endroits, ce que la version Feynman
-  admet dans sa section finale. Une source unique le rendrait caduc.
+  passages deviendront faux. C'est V-03 sur la liste des écarts gelés.
+- Le seuil de fraîcheur est écrit à deux endroits, `sql/schema_supervision.sql`
+  et `supervision/regles_alertes.py`, ce que la version Feynman admet dans sa
+  section finale. Vérifié encore vrai le 31/08/2026 : la valeur 90 figure bien
+  aux deux endroits. Une source unique rendrait ce passage caduc.
+- Aucun canal de notification n'est branché (V-02). Les deux documents décrivent
+  des alertes qui se déclenchent et se referment toutes seules, ce qui est exact,
+  mais un lecteur peut en déduire que quelqu'un est prévenu. Ce n'est pas le cas.
 
-Traité en session 6 (27/08/2026) : l'ingestion temps réel est désormais
-planifiée, et la couche Bronze est construite. Les deux documents ont été
-corrigés en conséquence plutôt que d'effacer la mention, l'écart entre le
-constat et la correction faisant partie de l'histoire du projet.
+### Journal des révisions
 
-Traité en session 8 (27/08/2026) : dbt est branché sur Snowflake. Le document
-pour un junior gagne une décision 3.9 et perd la faiblesse « dbt installé, pas
-encore branché » ; la version Feynman gagne le passage sur les deux contrôleurs
-et leur mise d'accord. Même règle que ci-dessus : les mentions résolues restent,
-datées.
+**Session 6 (27/08/2026).** L'ingestion temps réel est désormais planifiée, et
+la couche Bronze est construite. Les deux documents ont été corrigés en
+conséquence plutôt que d'effacer la mention, l'écart entre le constat et la
+correction faisant partie de l'histoire du projet.
+
+**Session 8 (27/08/2026).** dbt est branché sur Snowflake. Le document pour un
+junior gagne une décision 3.9 et perd la faiblesse « dbt installé, pas encore
+branché » ; la version Feynman gagne le passage sur les deux contrôleurs et leur
+mise d'accord. Même règle que ci-dessus : les mentions résolues restent, datées.
 
 Un manque a été **ajouté** à cette occasion plutôt que retiré :
 `dim_games.critical_tier` est vide alors que le schéma annonce qu'un modèle dbt
 la dérive. C'est le même écart entre l'annoncé et le réel que celui refermé
-cette session, en plus petit, et il est signalé plutôt que corrigé en silence.
+cette session-là, en plus petit, et il est signalé plutôt que corrigé en silence.
 
-Revu en session 9 (31/08/2026), non pour une brique ajoutée mais pour une
-explication devenue fausse, ce que la règle ci-dessus prévoit aussi. Un contrôle
-de cohérence a montré que le schéma d'architecture des deux documents décrivait
-l'intention et non le système : seule la couche Gold PostgreSQL est promue
-automatiquement, la couche Snowflake était chargée à la main et rien ne
-surveillait son retard. Corrigé le jour même, session 10 : un second automate
+**Sessions 9 et 10 (31/08/2026).** Révision déclenchée non par une brique
+ajoutée mais par une explication devenue fausse, ce que la règle prévoit aussi.
+Un contrôle de cohérence a montré que le schéma d'architecture des deux
+documents décrivait l'intention et non le système : seule la couche Gold
+PostgreSQL était promue automatiquement, la couche Snowflake était chargée à la
+main et rien ne surveillait son retard. Corrigé le jour même : un second automate
 s'en charge, et les deux documents portent désormais l'histoire complète, écart
-inclus, plutôt que la seule version corrigée. Le schéma du document pour un junior est corrigé et porte désormais
-son avertissement ; la version Feynman gagne une huitième faille, placée en tête
-de sa section 9 parce que c'est la plus embarrassante des huit.
+inclus, plutôt que la seule version corrigée. Le schéma du document pour un
+junior est corrigé et porte son avertissement ; la version Feynman gagne une
+huitième faille, placée en tête de sa section 9 parce que c'est la plus
+embarrassante des huit.
 
 C'est exactement le cas que cette page redoutait en ouverture : un document de
 vulgarisation faux est pire qu'absent, puisqu'il enseigne une chose inexacte
 avec assurance. Il l'a été onze jours.
 
-Dernière mise à jour : 31/08/2026, fin de session 9.
+**Session 11 (31/08/2026), relu et laissé en l'état.** La session a produit le
+rapport d'analyse `docs/rapport_analyse.md` et remis à plat `CLAUDE.md` et le
+`README.md` de la racine. Aucune brique n'a été ajoutée ni retirée : un rapport
+est un document, pas un composant. Les deux documents ont été relus contre les
+mesures de coût que le rapport a produites, qu'ils ne citent nulle part, et
+contre la liste des écarts gelés, qu'ils décrivent déjà correctement. Rien à
+corriger, donc rien de corrigé.
+
+Seule cette page change, sur trois points : les durées de lecture, périmées
+d'un facteur deux depuis que les documents ont grossi ; le renvoi vers le
+rapport d'analyse, ajouté à la liste des sources ; et l'absence de canal de
+notification, ajoutée aux points à revoir parce qu'un lecteur peut déduire des
+deux documents qu'une alerte prévient quelqu'un.
+
+Dernière mise à jour : 31/08/2026, fin de session 11.

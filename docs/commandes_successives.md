@@ -1494,7 +1494,7 @@ docker exec gamelens-postgres psql -U airflow -d airflow -c \
 
 ```bash
 docker compose --profile outillage run --rm snowflake-cli python -c "
-from connexion import connexion
+from connexion_snowflake import connexion
 conn = connexion(avec_contexte=False)
 with conn.cursor() as cur:
     cur.execute('''SELECT warehouse_name, round(sum(credits_used), 4)
@@ -1733,7 +1733,7 @@ docker compose --profile outillage run --rm snowflake-cli \
 # Et les droits sont intacts sur la base de demonstration.
 docker compose --profile outillage run --rm --no-deps snowflake-cli python -c "
 import sys; sys.path.insert(0, 'entrepot')
-from connexion import connexion
+from connexion_snowflake import connexion
 c = connexion()
 with c.cursor() as cur:
     cur.execute('SHOW GRANTS ON VIEW mart.v_popularity_dashboard')
@@ -1838,10 +1838,13 @@ docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc \
        || (SELECT count(*) FROM mart.fact_prices) || ' tarifs'"
 # 31/08 : 15 jeux, 45 faits, 120 tarifs
 
-# Cote Snowflake, charge a la main.
+# Cote Snowflake, promu chaque nuit par gamelens_promotion_snowflake
+# depuis le 31/08. Le commentaire disait "charge a la main" jusque la,
+# et l'import ci-dessous visait entrepot/connexion.py, renomme par INC-009 :
+# rejoue tel quel, ce bloc echouait a l'import.
 docker compose --profile outillage run --rm --no-deps snowflake-cli python -c "
 import sys; sys.path.insert(0, 'entrepot')
-from connexion import connexion
+from connexion_snowflake import connexion
 c = connexion()
 with c.cursor() as cur:
     for t in ('dim_games','fact_popularity_history','fact_prices'):

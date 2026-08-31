@@ -69,41 +69,93 @@ un incident réel et sa méthode d'investigation (C4.4.2).
 
 ## Référentiel Bloc 4 — ce qui doit être livré
 
-**3 compétences éliminatoires (priorité absolue) :**
-- **C4.2.1** — Concevoir l'architecture d'entrepôt (schéma de données). ✅ Fait : `sql/schema_gold.sql`,
-  exécuté et testé (contraintes CHECK/FK/PK, cloisonnement des rôles vérifié).
-- **C4.2.2** — Mettre en place et orchestrer des pipelines temps réel ou asynchrones. Le référentiel
-  exige **3 méthodes distinctes** : un pipeline temps réel (SQL/Python), un orchestrateur (Airflow),
-  un calcul distribué (Spark). À faire.
-- **C4.2.3** — Automatiser l'intégration et le déploiement (CI/CD, DevOps). À faire.
+Tout est livré. Cette section ne dit plus l'avancement, qui est dans le tableau
+juste en dessous : elle dit **où se trouve la preuve**, parce que c'est la
+question que le jury pose ("montrez-moi") et qu'il faut pouvoir y répondre sans
+chercher.
+
+Réécrite le 31/08/2026. La version précédente portait encore « À faire » sur
+C4.2.2 et C4.2.3, deux compétences éliminatoires exécutées et vertes en CI
+depuis plusieurs jours, que le tableau d'avancement quarante lignes plus bas
+donnait pour terminées. Même défaut que la note de calendrier : un fichier de
+consignes qui se contredit fait perdre du temps à qui le lit.
+
+**3 compétences éliminatoires :**
+
+- **C4.2.1** — Concevoir l'architecture d'entrepôt (schéma de données).
+  ✅ Deux couches Gold construites et exécutées : la cible
+  `sql/schema_gold_snowflake.sql` sur `RTZSXDV-PM63908`, et le prototype
+  `sql/schema_gold.sql` sur PostgreSQL, gardé comme référence de comparaison.
+  Le prototype applique CHECK, FK, PK et UNIQUE ; la cible ne les applique pas,
+  ce qui est vérifié empiriquement par `sql/verify_snowflake_constraints.sql`
+  et compensé par deux filets rejoués à chaque push. Cloisonnement des 4 rôles
+  testé des deux côtés, dictionnaires de données générés en annexe.
+- **C4.2.2** — Mettre en place et orchestrer des pipelines temps réel ou
+  asynchrones. Le référentiel exige **3 méthodes distinctes**, les trois sont
+  exécutées :
+  1. *pipeline temps réel* (SQL/Python) : Steam vers Kafka vers PostgreSQL,
+     `ingestion/`, idempotence prouvée par rejeu des offsets ;
+  2. *orchestrateur* : Airflow 3.1.8 en conteneurs, 4 DAG dans `dags/`, tests
+     négatifs de porte de fraîcheur réussis sur les deux promotions ;
+  3. *calcul distribué* : **Snowpark et non Spark**, choix assumé du
+     19/08/2026, `entrepot/snowpark_promotion.py`. Le référentiel cite Spark en
+     exemple, l'exigence porte sur le calcul distribué. Snowpark pousse
+     l'exécution sur le compute Snowflake là où un Spark local aurait tourné en
+     mono-machine. La question « en quoi est-ce distribué ? » est à attendre :
+     la preuve est le SQL généré et l'historique de session, pas la brochure.
+- **C4.2.3** — Automatiser l'intégration et le déploiement (CI/CD, DevOps).
+  ✅ `.github/workflows/ci.yml`, 6 étages verts sur
+  `Mael8zinsou/gamelens-bloc4_0` : qualité, tests, intégrité des DAG,
+  intégration sur infrastructure jetable, recette Snowflake sur base jetable,
+  publication d'image sur `ghcr.io`.
 
 **Autres livrables attendus (non éliminatoires mais notés) :**
-- Rapport d'analyse et présentation des composants (A4.1). ✅ Écrit : `docs/rapport_analyse.md`.
-- Système de supervision et alertes (C4.3.1).
-- Feuille de route d'exploitation (C4.3.2) — tâches, échéances, maintenance, points de vigilance.
-- Documentation technique (C4.3.3).
-- Cahier de recettes et de tests (C4.4.1). Format retenu : PASS/FAIL vérifié sur un résultat
-  attendu, pas seulement "la requête s'exécute sans erreur". Le test d'idempotence de la session 1
-  (rejeu des offsets Kafka, 0 inséré sur 15 relus) est le premier cas conforme à ce format.
-  Note : `sql/test_schema_gold.sql`, référencé par une version antérieure de ce fichier, n'existe
-  pas dans le dépôt.
-- Méthodologie d'investigation et de traitement d'un incident réel (C4.4.2).
+
+- **A4.1**, rapport d'analyse et présentation des composants.
+  ✅ `docs/rapport_analyse.md`. Deux parties calquées sur les deux livrables de
+  la grille, dépendance fournisseur analysée composant par composant, coûts
+  **mesurés** sur l'historique de facturation et non estimés.
+- **C4.3.1**, système de supervision et alertes.
+  ✅ `sql/schema_supervision.sql` (5 vues d'indicateurs, seuils portés par le
+  SQL), `supervision/regles_alertes.py` (6 règles à cycle de vie complet), DAG
+  `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné
+  comme code.
+- **C4.3.2**, feuille de route d'exploitation.
+  ✅ `docs/feuille_route_exploitation.md`, 10 sections, 13 points de vigilance
+  dont 2 datés, procédures éprouvées avant d'être prescrites.
+- **C4.3.3**, documentation technique.
+  ✅ `docs/documentation_technique.md`, 11 décisions d'architecture datées avec
+  leur contrepartie, traçabilité champ par champ, matrice de droits, plus
+  2 annexes générées depuis le catalogue et vérifiées par la CI.
+- **C4.4.1**, cahier de recettes et de tests.
+  ✅ `docs/cahier_recettes.md`, **55 PASS, 0 partiel, 0 en attente**. Format
+  retenu : PASS/FAIL vérifié sur un résultat attendu, pas seulement "la requête
+  s'exécute sans erreur". Le test d'idempotence de la session 1 (rejeu des
+  offsets Kafka, 0 inséré sur 15 relus) est le premier cas conforme à ce
+  format. Note : `sql/test_schema_gold.sql`, référencé par une version
+  antérieure de ce fichier, n'existe pas dans le dépôt.
+- **C4.4.2**, méthodologie d'investigation et de traitement d'un incident réel.
+  ✅ `docs/journal_incidents.md`. **INC-004 est l'incident retenu** : il couvre
+  les quatre rubriques exigées, y compris la communication aux parties
+  prenantes, souvent oubliée. INC-001 à INC-003 et INC-005 à INC-009 s'y
+  ajoutent comme incidents secondaires, tous réellement vécus.
 
 ## État d'avancement
 
-Mis à jour le 31/08/2026 en fin de session 10 (DAG de promotion Snowflake).
+Mis à jour le 31/08/2026 en fin de session 11 : rapport d'analyse A4.1, puis
+remise à plat de la section de référentiel ci-dessus et des trois README.
 
 | Élément | Statut |
 |---|---|
 | Dépôt git dédié, structure, .gitignore | ✅ Fait (dépôt local, décision 2b) |
-| Socle Docker (PostgreSQL 16 + Kafka 3.9 KRaft) | ✅ 6 conteneurs, tous *healthy* |
+| Socle Docker (PostgreSQL 16 + Kafka 3.9 KRaft) | ✅ **7 conteneurs** au démarrage, tous *healthy* : 2 de socle, 4 Airflow, 1 Grafana. `snowflake-cli` reste hors compte, profil `outillage`, lancé à la demande. |
 | **Couche Bronze** | ✅ **Construite et alimentée** : `bronze.reponses_brutes`, archivage de tout appel abouti ou non, vue de santé des sources. Écart assumé avec le S3 du Bloc 1. |
 | Schéma Silver speed PostgreSQL | ✅ Construit, initialisé automatiquement |
 | **C4.2.2 méthode 1, pipeline temps réel** | ✅ **Exécuté et désormais orchestré** : Steam vers Kafka vers PostgreSQL. Idempotence prouvée par rejeu. DAG `gamelens_ingestion_temps_reel` toutes les 15 min, porte de sortie, test négatif broker coupé et reprise automatique vérifiée. |
 | **C4.2.2 méthode 2, orchestrateur** | ✅ **Exécuté** : Airflow 3.1.8 en conteneurs, **4 DAG**. `gamelens_promotion_gold` (6 tâches), `gamelens_promotion_snowflake`, `gamelens_ingestion_temps_reel`, `gamelens_supervision`. Tests négatifs de porte de fraîcheur réussis sur les deux promotions. |
 | **C4.2.2 méthode 3, calcul distribué** | ✅ **Exécuté et désormais orchestré** : Snowpark, MERGE idempotents et calcul analytique (fenêtre glissante 7 j, classement par genre). Nature distribuée prouvée par le SQL généré et l'historique de session. DAG `gamelens_promotion_snowflake` quotidien depuis le 31/08/2026. |
 | Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté quotidiennement** par le DAG de promotion. Volumes au 31/08/2026 : 15 dim_games, 45 faits popularité, 120 faits prix. Chiffres datés : ils croissent à chaque nuit. |
-| Schéma Gold Snowflake (cible finale) | ✅ **Exécuté** sur `RTZSXDV-PM63908` (AWS_EU_WEST_3) : 27 instructions, 0 erreur. 8 contrôles au vert. ⚠️ **Alimentée à la main uniquement**, dernier chargement le 20/08/2026 : 15 dim_games, 30 faits popularité, 75 faits prix. Voir V-12. |
+| Schéma Gold Snowflake (cible finale) | ✅ **Exécuté** sur `RTZSXDV-PM63908` (AWS_EU_WEST_3) : 27 instructions, 0 erreur, 8 contrôles au vert. **Alimentée quotidiennement** par `gamelens_promotion_snowflake` depuis le 31/08/2026, V-12 refermé. Volumes mesurés le 31/08/2026 : 15 dim_games, 60 faits popularité sur 4 journées, 165 faits prix. Plus profonde que la couche PostgreSQL, et c'est attendu : la promotion Snowpark rejoue tout l'historique par MERGE. |
 | **C4.2.3 pipeline CI/CD** | ✅ **Exécuté, 6 étages verts** sur `Mael8zinsou/gamelens-bloc4_0` (privé). Qualité, tests, intégrité du DAG, intégration sur infrastructure jetable, **recette Snowflake sur base jetable**, publication d'image sur `ghcr.io` avec double étiquetage `latest` et SHA. Le premier run avait échoué : défaut dans l'assertion, pas dans l'infra (OBS-22). |
 | Recette automatisée de l'entrepôt | ✅ **Exécutée sur le runner** (run 32954104664, 41 s). Base Snowflake créée pour le run, schéma livré appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles d'intégrité et contrats dbt vérifiés en positif **et en négatif** sur le même jeu fautif, base supprimée. |
 | **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. |
@@ -112,7 +164,7 @@ Mis à jour le 31/08/2026 en fin de session 10 (DAG de promotion Snowflake).
 | **C4.3.3 documentation technique** | ✅ **Écrite** : `docs/documentation_technique.md`. Point d'entrée, 11 décisions d'architecture datées avec leur contrepartie, traçabilité champ par champ, référence de configuration, matrice de droits, plus **2 annexes générées** depuis le catalogue et vérifiées par la CI. |
 | **dbt sur Snowflake** | ✅ **Construit et exécuté** : 29 contrats déclaratifs sur 4 sources, 1 modèle (la vue de tableau de bord, sortie d'un script SQL non rejouable). Éprouvés en positif et en négatif, sur base jetable et sur la couche de démonstration. |
 | Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **55 PASS, 0 partiel, 0 en attente**. |
-| Incident réel documenté | ✅ **INC-004 retenu**. INC-005 à INC-008 s'y ajoutent comme incidents secondaires. |
+| Incident réel documenté | ✅ **INC-004 retenu** pour le C4.4.2. 9 incidents au total, INC-001 à INC-009, tous réellement vécus. Le dernier, INC-009, est né de la correction de V-12. |
 
 ## Faits d'environnement à ne pas redécouvrir
 
@@ -253,34 +305,31 @@ Mis à jour le 31/08/2026 en fin de session 10 (DAG de promotion Snowflake).
 
 **Tous les livrables du Bloc 4 sont écrits, et dbt est branché.** Les trois
 compétences éliminatoires sont couvertes par des briques exécutées, la chaîne
-est autonome de bout en bout, l'architecture Medallion est complète, et le
-dernier écart connu entre ce que l'architecture annonçait et ce que le dépôt
-contenait a été refermé le 27/08 (session 8, DA-10).
-
-Il ne reste que le support oral et une amélioration non éliminatoire.
+est autonome de bout en bout, l'architecture Medallion est complète.
 
 **Il ne reste que le support de soutenance** (30 min de présentation). Tout ce
 qui doit être montré existe, a été exécuté, et laisse des traces consultables.
 
 Décision prise le 31/08/2026 : **gel du dépôt**. Tout écart trouvé à partir de
-maintenant va sur une liste, pas dans un commit. Le critère pour rouvrir :
-est-ce que cela change ce qui sera dit ou montré pendant les 45 minutes ?
+maintenant va sur la liste ci-dessous, pas dans un commit. Le critère pour
+rouvrir : est-ce que cela change ce qui sera dit ou montré pendant les
+45 minutes ?
 
 Refermé le 31/08/2026 : V-12 et V-13, la couche Gold Snowflake est
 désormais promue par son propre DAG et son arrêt est visible de la
 supervision (DA-11). Coût de l'opération : un incident, INC-009.
 
-Piste identifiée pendant la session 8, non traitée et sans urgence :
-`dim_games.critical_tier` est vide, et le commentaire de la colonne annonce
-qu'elle est « dérivée de metacritic_score par le modèle dbt ». Ce modèle
-n'existe pas, et il ne pourrait rien dériver aujourd'hui puisque
-`metacritic_score` est vide lui aussi, faute de catalogue RAWG branché. C'est
-le même genre d'écart entre l'annoncé et le réel que celui qu'a refermé
-DA-10, en plus petit. Le traiter suppose soit de brancher RAWG, soit de
-corriger le commentaire.
+### Écarts connus, gelés
 
-Corrections courtes identifiées, aucune ne bloque, toutes sont documentées
-comme points de vigilance dans la feuille de route :
+Aucun ne bloque. Les cinq premiers sont aussi des points de vigilance de la
+feuille de route ; les deux derniers sont des écarts entre l'annoncé et le réel,
+du même genre que celui qu'a refermé DA-10, en plus petit.
+
+Attention à la tentation de les refermer un par un : elle est exactement le
+mécanisme qui produit du travail justifié mais hors priorité. Aucun ne change ce
+qui sera dit pendant les 45 minutes, et V-02 comme V-07 valent mieux assumés à
+l'oral que corrigés en silence : nommer une limite de sa propre plateforme est
+un exercice que le jury cherche à provoquer.
 
 - **V-02, aucun canal de notification.** L'écart le plus important entre cette
   plateforme et une plateforme exploitée : les alertes sont persistées, mais
@@ -290,12 +339,28 @@ comme points de vigilance dans la feuille de route :
   l'absence d'alerte indiscernable du bon fonctionnement.
 - **V-03, `GAMELENS_SERVICE` en `ACCOUNTADMIN`.**
 - **V-01, expiration du compte Snowflake les 17 ou 18/12/2026.** À confirmer
-  dans Snowsight.
+  dans Snowsight. Seul point de vigilance réellement bloquant : c'est la date
+  qui contraint, pas le budget, mesuré à une vingtaine de crédits sur 400 pour
+  les 108 jours restants.
 - Réduire `COMPUTE_WH` et lui imposer une suspension automatique : cet entrepôt
   jamais configuré pesait 43 % de la consommation au 27/08/2026 et **32 % au
   31/08** (0,4372 puis 0,6899 crédit). La part recule parce que l'entrepôt du
   projet sert davantage, pas parce que le problème se résorbe. Citer la mesure
   datée, jamais le pourcentage seul (OBS-57).
+- **`dim_games.critical_tier` est vide** alors que le commentaire de la colonne
+  annonce qu'elle est « dérivée de metacritic_score par le modèle dbt ». Ce
+  modèle n'existe pas, et il ne pourrait rien dériver aujourd'hui puisque
+  `metacritic_score` est vide lui aussi, faute de catalogue RAWG branché. Le
+  traiter suppose soit de brancher RAWG, soit de corriger le commentaire.
+  Identifié en session 8.
+- **Le commentaire de `fact_prices` dans `sql/schema_gold.sql` annonce encore
+  « Alimentee par le scraping GOG »**, alors que GOG est hors périmètre depuis
+  l'arbitrage du Bloc 3 et que la tarification passe par l'API Steam. Le
+  commentaire remonte tel quel dans `docs/annexes/dictionnaire_donnees.md`,
+  qu'un jury peut ouvrir. La cible Snowflake, elle, est juste : c'est
+  `sql/commentaires_gold_snowflake.sql` qui l'a corrigée de son côté.
+  Identifié en session 11. Correction : deux lignes plus
+  `python outils/generer_dictionnaire.py`.
 
 ## Conventions de travail
 
