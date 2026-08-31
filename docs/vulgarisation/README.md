@@ -86,8 +86,10 @@ Revu en session 9 (31/08/2026), non pour une brique ajoutée mais pour une
 explication devenue fausse, ce que la règle ci-dessus prévoit aussi. Un contrôle
 de cohérence a montré que le schéma d'architecture des deux documents décrivait
 l'intention et non le système : seule la couche Gold PostgreSQL est promue
-automatiquement, la couche Snowflake est chargée à la main et rien ne surveille
-son retard. Le schéma du document pour un junior est corrigé et porte désormais
+automatiquement, la couche Snowflake était chargée à la main et rien ne
+surveillait son retard. Corrigé le jour même, session 10 : un second automate
+s'en charge, et les deux documents portent désormais l'histoire complète, écart
+inclus, plutôt que la seule version corrigée. Le schéma du document pour un junior est corrigé et porte désormais
 son avertissement ; la version Feynman gagne une huitième faille, placée en tête
 de sa section 9 parce que c'est la plus embarrassante des huit.
 

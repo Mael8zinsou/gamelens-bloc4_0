@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import sys
 
-from connexion import ConfigurationManquante, mode_authentification, parametres
+from connexion_snowflake import ConfigurationManquante, mode_authentification, parametres
 
 
 def ligne(libelle: str, valeur) -> None:

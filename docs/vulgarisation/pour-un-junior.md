@@ -88,32 +88,45 @@ du projet.
                     |
         +-----------+------------------------------+
         |                                          |
-   Airflow, DAG de promotion            snowpark_promotion.py
-     quotidien, 02h30 UTC                  LANCE A LA MAIN
+   DAG promotion_gold                   DAG promotion_snowflake
+     quotidien, 02h30 UTC                 quotidien, 03h00 UTC
         |                                          |
         v                                          v
    PostgreSQL, couche Gold              Snowflake, couche Gold
-   prototype, TENU A JOUR               cible annoncee, FIGEE
+   prototype et repli                   cible de production
                                         dim_games, dim_stores,
                                         fact_prices,
                                         fact_popularity_history
 ```
 
-**Une mise en garde sur ce schéma, parce qu'il a longtemps été faux.** La
-version précédente montrait l'orchestrateur alimentant directement Snowflake, et
-ne mentionnait pas la couche Gold PostgreSQL. C'était l'architecture voulue, pas
-celle qui tourne. Dans les faits, seul le prototype PostgreSQL est promu
+**Ce schéma a été faux pendant onze jours, et l'histoire vaut mieux que le
+schéma.** Jusqu'au 31/08/2026 il montrait l'orchestrateur alimentant directement
+Snowflake, sans mentionner la couche PostgreSQL. C'était l'architecture voulue,
+pas celle qui tournait. Dans les faits, seul le prototype PostgreSQL était promu
 automatiquement ; la couche Snowflake, celle que l'architecture désigne comme la
-cible, est chargée à la main et n'a donc pas bougé depuis le 20/08/2026, soit
-onze jours au moment où ces lignes sont écrites.
+cible, était chargée à la main et n'avait pas bougé depuis le 20/08.
 
-Retiens surtout la façon dont c'est passé inaperçu. Le DAG s'appelle
+Retiens surtout la façon dont c'est passé inaperçu. Le DAG s'appelait
 `gamelens_promotion_gold`, l'indicateur de supervision s'appelle
-`v_indicateur_gold`, et son commentaire dans la base annonce « fraîcheur de
+`v_indicateur_gold`, et son commentaire dans la base annonçait « fraîcheur de
 l'entrepôt ». Trois noms exacts pris séparément, et un contresens une fois lus
-ensemble : « Gold » désigne ici la couche PostgreSQL, alors que « l'entrepôt »
+ensemble : « Gold » désignait ici la couche PostgreSQL, alors que « l'entrepôt »
 désigne partout ailleurs Snowflake. Il n'y a pas eu de bug. Il y a eu un
 vocabulaire qui recouvrait deux choses.
+
+Depuis le 31/08, un second DAG promeut vers Snowflake, une demi-heure après le
+premier pour que les deux couches portent la même journée. Deux DAG et non un
+seul, délibérément : Snowflake est un service tiers facturé dont une
+indisponibilité n'a aucune raison d'emporter la promotion locale.
+
+Et la correction a coûté une panne, ce qui est instructif. Monter le répertoire
+`entrepot/` dans les conteneurs de l'orchestrateur y a rendu visible un fichier
+nommé `connexion.py`. Or `connexion` est aussi le nom d'une bibliothèque
+qu'Airflow utilise pour son authentification. Notre fichier l'a masquée,
+l'interface web a cessé de démarrer, et rien ne l'a signalé pendant douze
+minutes. La leçon tient en une phrase : **ajouter un répertoire au chemin de
+recherche des modules n'est pas une opération qui ne fait qu'ajouter.** Voir
+INC-009.
 
 ## Pourquoi trois couches, et pas une
 
@@ -342,7 +355,7 @@ contrainte de conception posée à ce moment-là est la suivante : **tout ce qui
 vise l'entrepôt doit passer par une frontière de configuration, pour que la
 bascule soit un changement de connexion et non une réécriture.**
 
-C'est le rôle d'`entrepot/connexion.py`. Un seul module sait comment on se
+C'est le rôle d'`entrepot/connexion_snowflake.py`. Un seul module sait comment on se
 connecte. Tout le reste demande une connexion et ignore où elle mène.
 
 Le dividende s'est encaissé deux fois, et la deuxième était imprévue.
@@ -982,10 +995,6 @@ Les questions qui se posent à l'échelle ne se sont donc jamais posées :
   PostgreSQL, `bronze.reponses_brutes`. L'écart avec l'architecture annoncée au
   Bloc 1 est assumé : le support change, la propriété recherchée est la même.
   Elle n'a pas de politique de conservation, et croît d'environ 41 Mo par an.
-- **La couche Gold Snowflake n'est promue par aucun ordonnanceur** et rien
-  ne surveille son retard. Deux points distincts, V-12 et V-13, et le second
-  est le plus gênant : la supervision affiche un voyant vert sur une couche
-  qu'elle ne regarde pas. Voir le schéma en partie 2 et son avertissement.
 - **Un seul environnement.** Pas de séparation développement / recette /
   production. La chaîne d'intégration crée bien une base jetable, ce qui en est
   une ébauche.

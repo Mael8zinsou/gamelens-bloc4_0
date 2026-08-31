@@ -34,7 +34,7 @@ import sys
 
 import pandas as pd
 import psycopg2
-from connexion import parametres
+from connexion_snowflake import parametres
 from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
 from snowflake.snowpark.window import Window

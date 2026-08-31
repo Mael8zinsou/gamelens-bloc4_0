@@ -577,20 +577,25 @@ Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt privé
 
 ## Orchestration de l'ingestion temps réel (session 6)
 
-## TING-01. Les trois DAG sont enregistrés, et le contrôle sait échouer
+## TING-01. Tous les DAG sont enregistrés, et le contrôle sait échouer
 
 - **Objet** : l'étage d'intégrité de la CI ne vérifiait qu'un DAG sur trois.
 - **Procédure** : image Airflow du projet, dossier `dags/` monté, base de
   métadonnées éphémère, `airflow dags reserialize` puis recherche de chaque nom
   attendu dans `airflow dags list`.
-- **Résultat attendu** : les trois noms trouvés, code de sortie 0.
-- **Résultat observé** :
+- **Résultat attendu** : tous les noms trouvés, code de sortie 0.
+- **Résultat observé (31/08/2026, quatre DAG depuis DA-11)** :
   ```
   PASS: aucune erreur d import
   PASS: gamelens_promotion_gold est enregistre
+  PASS: gamelens_promotion_snowflake est enregistre
   PASS: gamelens_supervision est enregistre
   PASS: gamelens_ingestion_temps_reel est enregistre
   ```
+- **Ce que le format de ce contrôle a évité** : la liste étant explicite et non
+  un comptage, l'ajout du quatrième DAG a demandé une modification consciente
+  du fichier de CI. Un comptage se serait ajusté tout seul et n'aurait rien
+  vérifié (OBS-32).
 - **Test négatif** : même contrôle avec `gamelens_dag_inexistant` dans la liste
   attendue. Observé : `ECHEC: gamelens_dag_inexistant absent de la liste`,
   **code de sortie 1**.
@@ -783,6 +788,104 @@ Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt privé
 - **Verdict** : PASS. Le chiffre alimente la politique de conservation de la
   feuille de route (C4.3.2).
 
+## Promotion ordonnancée vers Snowflake (session 10)
+
+Ces quatre cas couvrent la fermeture de V-12 et V-13, constatés le matin même :
+la couche Gold Snowflake, désignée comme la cible par toute la documentation,
+n'était alimentée par aucun ordonnanceur et accusait onze jours de retard.
+
+## TSNW-01. La promotion vers l'entrepôt est ordonnancée et s'exécute
+
+- **Objet** : vérifier que le DAG `gamelens_promotion_snowflake` promeut
+  réellement, et qu'il est déclenché par l'ordonnanceur et non seulement à la
+  main.
+- **Méthode** : mise en service, puis observation des exécutions réelles.
+- **Attendu** : au moins un run planifié par Airflow, sans déclenchement
+  manuel, et une couche Snowflake ramenée à jour.
+- **Observé (31/08/2026)** : **3 runs en succès**, dont un
+  `scheduled__2026-08-31T03:00:00+00:00` créé par l'ordonnanceur seul. Durée
+  des runs manuels : **40 s et 38 s**. Neuf instances de tâche, toutes en
+  succès, `try_number = 1` partout, donc aucune reprise nécessaire.
+- **Effet mesuré sur l'entrepôt** :
+
+  | | Avant (20/08) | Après (31/08) |
+  |---|---|---|
+  | `fact_popularity_history` | 30 | 60 |
+  | `fact_prices` | 75 | 165 |
+  | Dernière journée | 2026-08-20 | 2026-08-31 |
+  | Retard | **11 j** | **0 j** |
+
+- **Verdict** : **PASS**.
+
+## TSNW-02. La porte de fraîcheur refuse une journée vide, et l'aval ne démarre pas
+
+- **Objet** : la promotion Snowpark procède par MERGE. Une source vide ne
+  produirait donc aucune erreur, aucune ligne, et un run vert. C'est le mode de
+  défaillance le plus coûteux parce qu'il est silencieux.
+- **Méthode** : déclenchement avec `{"jour": "2020-01-01"}`, journée pour
+  laquelle la couche Silver ne contient rien.
+- **Attendu** : la première tâche échoue avec un message explicite, épuise ses
+  reprises, et les deux tâches suivantes ne s'exécutent jamais.
+- **Observé (31/08/2026)** :
+
+  | Tâche | État | Tentatives |
+  |---|---|---|
+  | `verifier_fraicheur_silver` | **failed** | 3 |
+  | `promouvoir_vers_snowflake` | **upstream_failed** | 0 |
+  | `controler_entrepot_snowflake` | **upstream_failed** | 0 |
+
+  Message relevé dans le journal de la tâche : `ValueError: Aucun evenement de
+  frequentation pour le 2020-01-01. Le pipeline temps reel a-t-il tourne ?
+  Promotion Snowflake interrompue.`
+- **Verdict** : **PASS**. Le run entier est en échec, et surtout aucune écriture
+  n'a atteint l'entrepôt.
+
+## TSNW-03. Le contrôle relit l'entrepôt au lieu de croire l'étape précédente
+
+- **Objet** : une promotion peut se terminer sans erreur et n'avoir rien écrit.
+  La porte d'entrée ne peut pas le garantir, puisqu'elle regarde la source et
+  non la destination.
+- **Méthode** : la tâche `controler_entrepot_snowflake` ouvre sa propre
+  connexion à Snowflake, exige que la journée promue y soit présente, puis
+  délègue les huit contrôles d'intégrité à `entrepot/verifier_gold.py`.
+- **Attendu** : un décompte non nul pour la journée du run, et huit contrôles
+  au vert.
+- **Observé (31/08/2026)** : la tâche rend
+  `[PASS] 15 faits de popularite pour le 2026-08-31, 15 jeux au referentiel,
+  derniere journee 2026-08-31`, suivie des huit contrôles sans violation.
+- **Verdict** : **PASS**. L'assertion porte sur la cible, pas sur le code de
+  retour de l'étape d'avant : c'est la même exigence qu'en TS-14, où le schéma
+  livré est appliqué plutôt qu'une copie simplifiée.
+
+## TSNW-04. L'arrêt de la promotion devient visible de la supervision
+
+- **Objet** : V-13 signalait que rien ne surveillait la couche Snowflake.
+  Ordonnancer la promotion ne suffit pas : encore faut-il que son **arrêt** se
+  voie. C'est la leçon d'INC-007, où un composant tournait sans laisser de
+  trace.
+- **Méthode** : la tâche de promotion est tracée dans `speed.pipeline_runs`
+  sous le composant `snowpark_promotion`, par le même gestionnaire de contexte
+  que l'ingestion. La règle `composant_muet` a été étendue pour l'attendre.
+- **Reprise nécessaire de la règle** : elle portait une fenêtre unique de 24 h,
+  ce qui convenait tant que tous les composants attendus tournaient au quart
+  d'heure. Pour un composant quotidien, dont deux exécutions sont espacées
+  d'exactement 24 h, elle se serait déclenchée chaque jour sur un système sain.
+  La fenêtre est désormais portée par chaque composant.
+- **Observé (31/08/2026)**, la règle évaluée dans les deux sens :
+
+  | Situation | Composants muets | Attendu |
+  |---|---|---|
+  | Fenêtres réelles, les 4 composants ont tourné | **0** | 0 |
+  | Fenêtre ramenée à 1 seconde pour `snowpark_promotion` | **1** | 1 |
+
+- **Verdict** : **PASS**, positif et négatif. La seconde ligne est la seule qui
+  prouve quelque chose : elle montre que la règle sait désigner ce composant
+  précis, et pas seulement rendre zéro.
+- **Ce qui reste non couvert, et qui est dit plutôt que tu** : ces mécanismes
+  voient le traitement, pas la donnée. Une suppression de lignes dans Snowflake
+  par un autre chemin resterait invisible jusqu'à la promotion suivante, qui la
+  rattraperait silencieusement par MERGE.
+
 ## Contrats dbt sur Snowflake (session 8)
 
 Ces six cas couvrent une bascule et non un ajout : l'intégrité de la couche
@@ -946,7 +1049,6 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 |---|---|---|
 | Popularité diffusée (Twitch) | Non branchée | Colonnes présentes mais nulles |
 | Catalogue RAWG | Non branché | `dim_games` alimentée depuis la watchlist |
-| Fraîcheur de la couche Gold **Snowflake** | Non surveillée | `v_indicateur_gold` ne lit que PostgreSQL. Au 31/08/2026, 11 jours de retard côté Snowflake sans qu'aucune règle puisse le voir. V-13 |
 | Alertes vers un canal externe | Non construit | Les alertes sont persistées et remontées par Airflow, mais aucune notification par courriel ou messagerie n'est configurée |
 
 ---
@@ -962,7 +1064,8 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 | Ingestion orchestrée | 6 | 0 | 0 |
 | Couche Bronze | 6 | 0 | 0 |
 | Contrats dbt | 6 | 0 | 0 |
-| **Total** | **51** | **0** | **0** |
+| Promotion Snowflake | 4 | 0 | 0 |
+| **Total** | **55** | **0** | **0** |
 
 Le cloisonnement des rôles est décrit par 3 cas de la section Sécurité et par
 TBRZ-04, compté avec la couche Bronze. À l'exécution, ces quatre cas se
@@ -995,7 +1098,7 @@ dans trois cas sur cinq ici, le défaut était dans le test.
 |---|---|
 | C4.2.1 schéma de données | TS-08, TS-09, TS-13, TF-04, TF-05 |
 | C4.2.2 temps réel | TF-01, TF-02, TS-01 |
-| C4.2.2 orchestrateur | TS-02, TS-03, TS-04, TS-05, TS-06 |
+| C4.2.2 orchestrateur | TS-02, TS-03, TS-04, TS-05, TS-06, TSNW-01 à TSNW-04 |
 | C4.2.2 calcul distribué | TS-10, TS-11, TS-12, TS-15 |
 | C4.2.3 CI/CD | section 5 complète, TS-14, TS-19 |
 | C4.2.1 intégrité applicative | TS-16, TS-17, TS-18 |

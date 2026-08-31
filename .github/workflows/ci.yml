@@ -114,6 +114,7 @@ jobs:
         env:
           ATTENDUS: >-
             gamelens_promotion_gold
+            gamelens_promotion_snowflake
             gamelens_supervision
             gamelens_ingestion_temps_reel
         run: |

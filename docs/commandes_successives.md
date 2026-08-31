@@ -1919,3 +1919,174 @@ docker compose --profile outillage run --rm snowflake-cli \
 | Cohérence interne de `CLAUDE.md` | **une contradiction**, corrigée |
 | Schéma d'architecture | **faux sur la promotion Gold**, corrigé |
 
+---
+
+# Session 10, 31 août 2026 : ordonnancement de la promotion Snowflake
+
+## Phase 34. Ouvrir Snowflake à l'ordonnanceur (procédure)
+
+Trois choses manquaient aux conteneurs Airflow : le code de la promotion, la
+clef privée, et les variables de connexion. Ajoutées dans `docker-compose.yml`,
+au bloc commun `x-airflow-commun`.
+
+```yaml
+    PYTHONPATH: /opt/gamelens/ingestion:/opt/gamelens/supervision:/opt/gamelens/entrepot
+    SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT:-}
+    SNOWFLAKE_USER: ${SNOWFLAKE_USER:-}
+    SNOWFLAKE_PRIVATE_KEY_PATH: /opt/gamelens/secrets/snowflake_key.p8
+  volumes:
+    - ./entrepot:/opt/gamelens/entrepot:ro
+    - ./secrets:/opt/gamelens/secrets:ro
+```
+
+Le chemin de la clef est ABSOLU et non celui de `.env`, qui est relatif au
+répertoire de travail. Une tâche Airflow ne garantit pas lequel c'est.
+
+```bash
+docker compose config --quiet        # valide le fichier avant de recreer
+docker compose up -d airflow-scheduler airflow-dag-processor \
+                    airflow-apiserver airflow-triggerer
+```
+
+## Phase 35. Éprouver l'exécution avant d'écrire l'orchestration (procédure)
+
+Étape à ne pas sauter. Elle sépare un problème d'exécution d'un problème
+d'orchestration, et elle a répondu à la seule vraie inconnue : le code
+fonctionne-t-il sur la version de Snowpark que porte l'image Airflow, 1.47.0,
+alors que la chaîne d'intégration éprouve la 1.54.0 ?
+
+```bash
+MSYS_NO_PATHCONV=1 docker exec gamelens-airflow-scheduler \
+  python /opt/gamelens/entrepot/snowpark_promotion.py
+# 165 lignes fusionnees, 15 lignes de classement, MERGE sur GAMELENS_WH.
+```
+
+`MSYS_NO_PATHCONV=1` est obligatoire depuis Git Bash, sinon le chemin devient
+`/opt/airflow/C:/Program Files/Git/opt/...`. C'est INC-002.
+
+## Phase 36. Diagnostiquer la panne de l'interface (diagnostic ponctuel)
+
+Douze minutes après la phase 34, l'interface web ne démarrait plus.
+
+```bash
+# Le journal nommait le fichier fautif entre parentheses :
+#   cannot import name 'FlaskApi' from 'connexion'
+#   (/opt/gamelens/entrepot/connexion.py)
+
+# 1. Le paquet masque existe-t-il vraiment ?
+docker exec gamelens-airflow-scheduler python -c \
+  "from importlib.metadata import version; print(version('connexion'))"
+# 2.14.2
+
+# 2. Qui depend de ce nom chez nous ?
+grep -rn "^from connexion import" --include=*.py .
+# cinq fichiers, tous dans entrepot/
+
+# 3. Quels conteneurs sont touches ?
+docker ps --format "{{.Names}}\t{{.Status}}" | grep airflow
+# scheduler sain, api-server en redemarrage permanent
+```
+
+Correction retenue, renommer plutôt que contourner. Voir INC-009.
+
+```bash
+git mv entrepot/connexion.py entrepot/connexion_snowflake.py
+# puis les cinq imports, puis :
+docker compose restart airflow-apiserver airflow-scheduler airflow-dag-processor
+docker exec gamelens-airflow-scheduler airflow dags list-import-errors
+# No data found
+```
+
+## Phase 37. Mettre en service et éprouver le DAG (procédure)
+
+```bash
+# L'analyseur ne rescanne le dossier que toutes les 5 minutes.
+docker exec gamelens-airflow-scheduler airflow dags reserialize
+docker exec gamelens-airflow-scheduler airflow dags list | grep gamelens
+
+# Positif.
+docker exec gamelens-airflow-scheduler airflow dags trigger gamelens_promotion_snowflake
+
+# Negatif : une journee sans donnee, la porte doit refuser.
+MSYS_NO_PATHCONV=1 docker exec gamelens-airflow-scheduler \
+  airflow dags trigger gamelens_promotion_snowflake --conf '{"jour": "2020-01-01"}'
+```
+
+En Airflow 3, `airflow dags list-runs` n'accepte plus la syntaxe d'Airflow 2.
+L'état se lit directement dans la base de métadonnées, qui est sur la **même**
+instance PostgreSQL que la couche Silver.
+
+```bash
+docker exec gamelens-postgres psql -U airflow -d airflow -c "
+SELECT dr.state AS run, ti.task_id, ti.state AS tache, ti.try_number
+FROM dag_run dr JOIN task_instance ti ON ti.run_id=dr.run_id AND ti.dag_id=dr.dag_id
+WHERE dr.dag_id='gamelens_promotion_snowflake' ORDER BY ti.start_date DESC;"
+```
+
+Résultat du test négatif : `verifier_fraicheur_silver` en `failed` après
+3 tentatives, les deux tâches suivantes en `upstream_failed`, jamais exécutées.
+
+Le journal d'une tâche se lit depuis le conteneur, jamais depuis l'hôte : les
+noms de dossier contiennent des `:`, illisibles par un client Windows.
+
+```bash
+MSYS_NO_PATHCONV=1 docker exec gamelens-airflow-scheduler bash -c \
+  "find /opt/airflow/logs -path '*promotion_snowflake*' -name '*.log' -newermt '-8 minutes'"
+```
+
+## Phase 38. Éprouver la règle de supervision dans les deux sens (procédure)
+
+La règle `composant_muet` a été étendue au nouveau composant. Elle se teste sans
+attendre 26 heures, en réduisant la fenêtre pour simuler une absence.
+
+```bash
+# Positif : fenetres reelles, les quatre composants ont tourne. Attendu 0.
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -tAc "
+SELECT count(*) FROM (VALUES ('steam_producer', INTERVAL '24 hours'),
+                             ('kafka_to_postgres', INTERVAL '24 hours'),
+                             ('steam_prices', INTERVAL '26 hours'),
+                             ('snowpark_promotion', INTERVAL '26 hours')) AS a(composant, fenetre)
+WHERE NOT EXISTS (SELECT 1 FROM speed.pipeline_runs r
+                  WHERE r.component=a.composant AND r.started_at > now() - a.fenetre)"
+# 0
+
+# Negatif : fenetre d une seconde sur snowpark_promotion. Attendu 1.
+# Meme requete, INTERVAL '1 second' sur la derniere ligne.
+# 1
+```
+
+## Phase 39. Comparer les deux couches Gold après ordonnancement (procédure)
+
+Même contrôle qu'en phase 30, qui avait révélé V-12. À rejouer avant toute
+démonstration.
+
+```bash
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens \
+  -c "SELECT * FROM speed.v_indicateur_gold"
+# retard_jours = 0
+
+docker compose --profile outillage run --rm --no-deps snowflake-cli python -c "
+import sys; sys.path.insert(0, 'entrepot')
+from connexion_snowflake import connexion
+c = connexion()
+with c.cursor() as cur:
+    cur.execute('SELECT max(day), current_date - max(day) FROM mart.fact_popularity_history')
+    print('derniere journee, retard :', cur.fetchone())
+c.close()"
+# (datetime.date(2026, 8, 31), 0)
+```
+
+Noter l'import : `connexion_snowflake` et non `connexion`, depuis INC-009.
+
+## Bilan de session
+
+| Vérification | Résultat |
+|---|---|
+| Promotion exécutée dans le conteneur Airflow | 165 lignes fusionnées, Snowpark 1.47 |
+| Runs du DAG | 3 en succès, dont 1 planifié, 38 à 40 s |
+| Retard de la couche Snowflake | 11 j → **0 j** |
+| Test négatif de la porte | `failed` après 3 essais, aval `upstream_failed` |
+| Règle `composant_muet` | 0 en positif, 1 en négatif |
+| Incident rencontré | INC-009, interface web indisponible 12 min |
+| Tests unitaires | 39 passed |
+

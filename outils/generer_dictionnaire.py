@@ -160,7 +160,7 @@ def rendre_snowflake() -> str:
     et non par des instructions COMMENT ON separees : la source est donc
     sql/schema_gold_snowflake.sql lui-meme.
     """
-    from connexion import connexion
+    from connexion_snowflake import connexion
 
     lignes: list[str] = []
     manquantes = 0

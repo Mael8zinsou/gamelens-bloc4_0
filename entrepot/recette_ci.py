@@ -55,7 +55,7 @@ import sys
 import time
 from pathlib import Path
 
-from connexion import connexion, mode_authentification
+from connexion_snowflake import connexion, mode_authentification
 
 RACINE = Path(__file__).resolve().parent.parent
 DOSSIER_DBT = RACINE / "dbt"
@@ -340,7 +340,7 @@ def calcul_distribue(base: str) -> None:
     classement par genre sont confrontes a des nombres calcules a la main, pas
     seulement a l'absence d'erreur.
     """
-    from connexion import parametres
+    from connexion_snowflake import parametres
     from snowflake.snowpark import Session
     from snowpark_promotion import calculer_classement
 

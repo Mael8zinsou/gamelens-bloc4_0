@@ -547,21 +547,23 @@ Voici les huit endroits où je bute, énoncés franchement.
 ### « Il y a deux cuisines, et j'ai décrit la mauvaise »
 
 C'est la faille la plus embarrassante, et elle n'a été trouvée que le
-31/08/2026, en vérifiant.
+31/08/2026, en vérifiant. Elle est corrigée depuis le même jour, mais le
+raisonnement mérite d'être gardé entier.
 
-J'ai décrit une chaîne qui va de la collecte jusqu'à un entrepôt spécialisé.
-C'est vrai, sauf sur un point : il existe **deux** rangements finaux, et ce
-n'est pas celui que j'ai présenté comme important qui est tenu à jour.
+J'avais décrit une chaîne qui va de la collecte jusqu'à un entrepôt spécialisé.
+C'était vrai, sauf sur un point : il existe **deux** rangements finaux, et ce
+n'était pas celui que je présentais comme important qui était tenu à jour.
 
-Le premier est une réserve installée dans la cuisine elle-même. Elle est rangée
-chaque nuit, automatiquement. Le second est l'entrepôt loué à l'extérieur,
-celui dont j'ai vanté la puissance : il n'est rempli que quand quelqu'un
-s'en occupe à la main, et personne ne s'en est occupé depuis onze jours.
+Le premier est une réserve installée dans la cuisine elle-même. Elle était
+rangée chaque nuit, automatiquement. Le second est l'entrepôt loué à
+l'extérieur, celui dont j'ai vanté la puissance : il n'était rempli que quand
+quelqu'un s'en occupait à la main, et personne ne s'en était occupé depuis onze
+jours.
 
-Personne ne s'en est aperçu, et c'est le plus intéressant. Le dispositif de
-surveillance affiche « fraîcheur de l'entrepôt » et jure que tout va bien. Il
-regarde la réserve de la cuisine. L'entrepôt loué, il ne le regarde pas, et
-n'a jamais été construit pour le regarder.
+Personne ne s'en était aperçu, et c'est le plus intéressant. Le dispositif de
+surveillance affichait « fraîcheur de l'entrepôt » et jurait que tout allait
+bien. Il regardait la réserve de la cuisine. L'entrepôt loué, il ne le regardait
+pas, et n'avait jamais été construit pour le regarder.
 
 Autrement dit : le voyant vert ne mentait pas, il répondait à une autre
 question que celle qu'on croyait lui poser. C'est la forme de panne la plus
@@ -572,6 +574,21 @@ Ce que je retiens, et qui dépasse ce projet : **un nom qui recouvre deux choses
 finit toujours par en cacher une.** Ici le mot « Gold » désignait la réserve, le
 mot « entrepôt » désignait l'extérieur, et les deux ont fini par se confondre
 dans la même phrase.
+
+**Ce qui a été fait le jour même.** Un second automate remplit maintenant
+l'entrepôt loué chaque nuit, une demi-heure après celui qui range la réserve, de
+sorte que les deux contiennent la même journée. Et la surveillance regarde
+désormais le bon endroit, non pas en allant inspecter l'entrepôt en permanence,
+ce qui coûterait cher puisqu'il est facturé à l'usage, mais en vérifiant à
+chaque livraison que la marchandise est bien arrivée.
+
+**Et la correction a cassé autre chose**, ce qui est presque toujours le cas.
+Pour que l'automate puisse appeler le programme de livraison, il a fallu lui
+donner accès au dossier qui le contient. Ce dossier contenait un fichier portant
+le même nom qu'une pièce interne de l'automate lui-même. L'automate a pris notre
+fichier pour le sien, et son écran de contrôle a cessé de s'allumer pendant
+douze minutes. Personne n'a été prévenu : la surveillance regarde la chaîne de
+production, pas l'écran qui permet de la regarder.
 
 ### « Pourquoi une file d'attente pour quinze jeux ? »
 

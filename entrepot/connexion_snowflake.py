@@ -1,5 +1,13 @@
 """Connexion a Snowflake, frontiere de configuration de la couche Gold.
 
+NE PAS RENOMMER CE MODULE EN `connexion`. Il s'est appele ainsi jusqu'au
+31/08/2026, et ce nom entrait en collision avec le paquet PyPI `connexion`,
+la bibliotheque OpenAPI dont Airflow se sert pour son gestionnaire
+d'authentification. Tant que `entrepot/` n'etait pas sur le PYTHONPATH
+d'Airflow, la collision dormait. Le jour ou le DAG de promotion Snowflake l'y
+a mis, `from connexion import FlaskApi` a commence a viser ce fichier et
+l'api-server a cesse de demarrer. Voir INC-009.
+
 Ce module est la seule chose a changer pour basculer la couche Gold de
 PostgreSQL vers Snowflake. C'est la contrainte de conception posee dans
 CLAUDE.md pendant que le compte d'essai n'existait pas : tout ce qui vise

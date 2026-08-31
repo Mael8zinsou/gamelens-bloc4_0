@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import sys
 
-from connexion import connexion
+from connexion_snowflake import connexion
 
 VOLUMETRIE = [
     "mart.dim_games",

@@ -1,7 +1,7 @@
 # ============================================================================
 # Profil de connexion dbt. Ne contient AUCUN secret : uniquement des renvois
 # vers l'environnement, exactement les memes variables que lit
-# entrepot/connexion.py. C'est deliberé : deux chemins d'identifiants
+# entrepot/connexion_snowflake.py. C'est deliberé : deux chemins d'identifiants
 # divergent tot ou tard, et le jour ou ils divergent, l'un des deux est faux
 # sans que rien ne le signale.
 #
@@ -54,7 +54,7 @@ gamelens:
       # Le replace n'est pas de la superstition : certains gestionnaires de
       # secrets restituent les sauts de ligne echappes, et le decodage PEM
       # echoue alors sur un message trompeur parlant du format de la cle.
-      # entrepot/connexion.py fait la meme correction, pour la meme raison.
+      # connexion_snowflake.py fait la meme correction, pour la meme raison.
       private_key: '{{ env_var("SNOWFLAKE_PRIVATE_KEY") | replace("\\n", "\n") }}'
       threads: 4
       client_session_keep_alive: false

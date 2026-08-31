@@ -61,35 +61,36 @@ outils du marché.
                                              |
                     +------------------------+------------------------+
                     |                                                 |
-   Airflow, DAG gamelens_promotion_gold        entrepot/snowpark_promotion.py
-        quotidien, 02h30 UTC                        INVOQUE A LA MAIN
-                    |                            (aucun DAG ne le declenche)
+   DAG gamelens_promotion_gold              DAG gamelens_promotion_snowflake
+        quotidien, 02h30 UTC                        quotidien, 03h00 UTC
+        SQL, hook PostgreSQL                     appelle snowpark_promotion.py
+                    |                                                 |
                     v                                                 v
         PostgreSQL, schema mart                          Snowflake, schema mart
-        prototype, TENU A JOUR                      cible annoncee, FIGEE au
-        dim_games, dim_stores,                      dernier chargement manuel
-        fact_prices,                                dim_games, dim_stores,
-        fact_popularity_history                     fact_prices,
-                    |                               fact_popularity_history
-                    v                                                 |
-        speed.v_indicateur_gold                                       v
-        surveille cette branche                       29 contrats dbt + 8 controles
-        et elle seule                                 applicatifs, mais AUCUN
-                                                      indicateur de fraicheur
+        prototype et repli                                 cible de production
+        dim_games, dim_stores,                      dim_games, dim_stores,
+        fact_prices,                                fact_prices,
+        fact_popularity_history                     fact_popularity_history
+                    |                                                 |
+                    v                                                 v
+        speed.v_indicateur_gold                     controle en fin de DAG, plus
+        retard en jours                             29 contrats dbt en CI et
+                                                    8 controles applicatifs
 ```
 
-**Le schéma dit ce que le système fait, pas ce que l'architecture voulait.**
-La version précédente montrait Airflow alimentant les deux couches Gold. C'est
-faux, et il vaut mieux le lire ici que le découvrir en séance. Seul le
-prototype PostgreSQL est promu par l'ordonnanceur ; la couche Snowflake est
-chargée à la main. Les deux divergent donc en permanence : au 31/08/2026,
-45 faits de popularité et 120 tarifs d'un côté, 30 et 75 de l'autre, ce dernier
-état datant du 20/08. C'est une dette identifiée, suivie sous V-12 et V-13, et
-non un choix d'architecture. Elle ne tient pas à un obstacle technique : l'image
-Airflow embarque déjà Snowpark 1.47 (OBS-69).
+**Les deux branches sont ordonnancees depuis le 31/08/2026.** Jusque-la, seule
+la branche PostgreSQL l'etait, et la couche Snowflake, que l'architecture
+designe pourtant comme la cible, etait chargee a la main : elle accusait onze
+jours de retard au moment du constat. C'etait V-12, referme par le DAG
+`gamelens_promotion_snowflake`, decrit en DA-11.
 
-**Trois DAG Airflow** orchestrent l'ensemble : ingestion toutes les 15 minutes,
-promotion à 02h30 UTC, supervision toutes les 15 minutes.
+Le decalage de trente minutes entre les deux n'est pas cosmetique : il fait que
+les deux couches portent la meme journee, donc qu'un ecart entre elles designe
+un defaut et non une difference d'horaire.
+
+**Quatre DAG Airflow** orchestrent l'ensemble : ingestion toutes les 15 minutes,
+promotion PostgreSQL à 02h30 UTC, promotion Snowflake à 03h00, supervision
+toutes les 15 minutes.
 
 **Deux architectures croisées.** Medallion pour les couches (Bronze, Silver,
 Gold), Lambda pour les chemins (rapide et batch). Le raisonnement est en
@@ -187,7 +188,7 @@ hypothèse qui périme.
 **Date** : session 1, alors que le compte Snowflake n'existait pas encore.
 
 **Décision** : un seul module sait comment on se connecte à l'entrepôt
-(`entrepot/connexion.py`). Tout le reste demande une connexion et ignore où elle
+(`entrepot/connexion_snowflake.py`). Tout le reste demande une connexion et ignore où elle
 mène.
 
 **Dividende encaissé deux fois** : la bascule PostgreSQL vers Snowflake s'est
@@ -344,6 +345,69 @@ de colonnes ne s'expriment pas avec les seuls tests du cœur de dbt. S'en passer
 reviendrait à les réécrire en SQL à la main, c'est-à-dire à retomber sur ce que
 ce chantier remplace.
 
+## DA-11 Un DAG distinct pour la promotion vers Snowflake
+
+**Date** : 31/08/2026, session 10.
+
+**Ce qui a déclenché la décision** : un contrôle de cohérence, et non une
+panne. La couche Gold Snowflake, désignée comme la cible par toute la
+documentation, n'était alimentée par aucun ordonnanceur. Elle était chargée à
+la main et accusait onze jours de retard pendant que le prototype PostgreSQL
+était promu chaque nuit. Le système faisait l'inverse de ce que l'architecture
+décrivait, et personne ne l'avait vu parce que rien ne le disait.
+
+**Décision** : un DAG `gamelens_promotion_snowflake`, quotidien à 03h00 UTC,
+qui appelle `entrepot/snowpark_promotion.py` sans en réécrire une ligne.
+
+**Alternative écartée** : ajouter des tâches à `gamelens_promotion_gold`. Les
+deux promotions lisent la même source, ce qui plaide pour les réunir. Trois
+raisons de ne pas le faire, et la première suffirait.
+
+1. **Domaines de panne distincts.** Snowflake est un service tiers, facturé,
+   dont le compte expire (V-01) et dont les crédits s'épuisent. PostgreSQL est
+   un conteneur local. Réunies, une indisponibilité de Snowflake emporterait la
+   promotion PostgreSQL, qui n'a aucune raison d'en dépendre.
+2. **Coûts d'exécution différents.** Rejouer la promotion locale est gratuit ;
+   rejouer celle-ci consomme des crédits.
+3. **Lisibilité de la supervision.** Deux composants distincts dans
+   `speed.pipeline_runs` donnent deux verdicts. Fondus en un, un échec côté
+   Snowflake se lirait comme un échec de la promotion tout court.
+
+**L'obstacle supposé n'existait pas.** L'absence de ce DAG semblait s'expliquer
+par l'isolation des jeux de dépendances de DA-08. C'était une déduction, pas un
+constat : l'image `apache/airflow:3.1.8` embarque déjà
+`snowflake-snowpark-python` 1.47.0, `snowflake-connector-python` 4.0.0, le
+fournisseur Snowflake, `pandas` et `pyarrow`. Voir OBS-69.
+
+**Divergence de version assumée.** L'image Airflow porte Snowpark 1.47.0 quand
+`requirements-snowflake.txt` épingle 1.54.0. Le même code tourne donc sur deux
+versions. C'est un risque, et c'est aussi une couverture : la CI éprouve la
+1.54, l'ordonnanceur éprouve la 1.47. Une incompatibilité future apparaîtra
+d'un côté avant l'autre plutôt que partout à la fois.
+
+**Contrepartie payée comptant.** Monter `entrepot/` dans les conteneurs Airflow
+a fait tomber l'interface web : le module alors nommé `entrepot/connexion.py`
+masquait le paquet PyPI `connexion`, dont Airflow se sert pour son
+authentification. Il s'appelle `connexion_snowflake.py` depuis. Voir INC-009. La leçon dépasse
+ce cas : **ajouter un répertoire au `PYTHONPATH` n'est pas une opération
+additive**, elle peut retirer l'accès à des modules qui fonctionnaient.
+
+**Ce que la décision referme sur la supervision.** V-13 signalait que rien ne
+regardait la fraîcheur de la couche Snowflake. Trois mécanismes s'en chargent
+désormais, sans qu'aucun n'interroge Snowflake en continu :
+
+| Défaillance | Ce qui la détecte |
+|---|---|
+| La promotion échoue | `echecs_composants`, sur la trace en base |
+| La promotion ne tourne plus | `composant_muet`, fenêtre de 26 h |
+| La promotion réussit sans rien écrire | la tâche de contrôle du DAG, qui **relit Snowflake** et exige la journée promue |
+
+**Pourquoi pas un indicateur de fraîcheur interrogeant Snowflake**, symétrique
+de `v_indicateur_gold` : le moteur d'alertes tourne toutes les 15 minutes, soit
+96 requêtes par jour sur un entrepôt facturé à l'usage, pour surveiller un
+traitement quotidien. La vérification a donc lieu au moment de la promotion,
+là où la connexion est déjà ouverte et où le coût est déjà payé.
+
 ## 3.1 Fréquentation
 
 | Étape | Objet | Transformation appliquée |
@@ -448,7 +512,7 @@ connexion, ce qui égare le diagnostic.
 | `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE` | aucun | vide, la clef n'est pas chiffrée |
 | `SNOWFLAKE_PASSWORD` | aucun | mise au point seulement, inutilisable en pratique (voir 4.4) |
 
-`entrepot/connexion.py` choisit dans cet ordre : chemin de clef, puis contenu
+`entrepot/connexion_snowflake.py` choisit dans cet ordre : chemin de clef, puis contenu
 PEM, puis mot de passe. Le premier renseigné gagne.
 
 ## 4.4 Pourquoi la clef et non le mot de passe
@@ -541,9 +605,9 @@ Les valeurs versionnées n'ouvrent que des conteneurs locaux. `.env`, `secrets/`
 |---|---|---|---|
 | PostgreSQL | 16-alpine | Silver speed, Bronze, Gold prototype (seul Gold tenu à jour), métadonnées Airflow | `localhost:5433` |
 | Apache Kafka | 3.9.0, mode KRaft | tampon entre collecte et écriture | `localhost:9092` |
-| Apache Airflow | 3.1.8, LocalExecutor | orchestration, 3 DAG | `localhost:8080`, `admin`/`admin` |
+| Apache Airflow | 3.1.8, LocalExecutor | orchestration, 4 DAG | `localhost:8080`, `admin`/`admin` |
 | Grafana | 11.6.0 | restitution des indicateurs | `localhost:3000`, `admin`/`admin` |
-| Snowflake | compte étudiant | entrepôt Gold cible, calcul distribué, contrats dbt. Chargé à la main, voir V-12 | `RTZSXDV-PM63908` |
+| Snowflake | compte étudiant | entrepôt Gold cible, calcul distribué, contrats dbt. Promu quotidiennement depuis le 31/08/2026 (DA-11) | `RTZSXDV-PM63908` |
 | Outillage Snowflake | image dédiée | Snowpark, dbt, génération du dictionnaire | `docker compose run --rm snowflake-cli` |
 
 **Kafka tourne en mode KRaft**, sans ZooKeeper et en conteneur unique. C'est bien
@@ -560,7 +624,7 @@ lancement manuel. Partir du fichier compose officiel de la version exacte.
 | Répertoire | Contenu |
 |---|---|
 | `ingestion/` | pipeline temps réel, collecte tarifaire, archivage Bronze |
-| `dags/` | trois DAG Airflow |
+| `dags/` | quatre DAG Airflow |
 | `entrepot/` | tout ce qui vise Snowflake : connexion, exécution SQL, Snowpark, contrôles, recette de CI |
 | `supervision/` | règles d'alerte et vérification du tableau de bord |
 | `sql/` | schémas et documentation des colonnes |
@@ -646,7 +710,7 @@ fréquente soit aussi la plus rapide à détecter.
 |---|---|
 | Qualité | lint et format sur cinq répertoires |
 | Tests unitaires | 39 tests, sans infrastructure |
-| Intégrité des DAG | les trois DAG s'analysent et sont enregistrés, vérifié par leur nom |
+| Intégrité des DAG | les quatre DAG s'analysent et sont enregistrés, vérifié par leur nom |
 | Intégration | socle Docker neuf, pipeline complet, sécurité, idempotence, Bronze, dictionnaire |
 | Recette de l'entrepôt | base Snowflake jetable, schéma appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles en positif **et en négatif** |
 | Publication | image poussée avec double étiquetage |

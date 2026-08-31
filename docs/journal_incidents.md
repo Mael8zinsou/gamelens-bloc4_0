@@ -426,3 +426,149 @@ ne s'est pas arrete au premier resultat satisfaisant. La tache Airflow etait
 rouge, ce qui suffisait a valider « la chaine echoue bruyamment ». C'est la
 verification suivante, celle du journal, qui a revele que le bruit n'arrivait
 pas jusqu'a la supervision.
+
+---
+
+## INC-009 Un module du projet masquait une bibliotheque d'Airflow
+
+- **Date de detection** : 31/08/2026, pendant le cablage du DAG de promotion
+  vers Snowflake.
+- **Detecte par / comment** : par l'interface web d'Airflow, devenue
+  inaccessible dans la minute qui a suivi l'ajout de `entrepot/` au
+  `PYTHONPATH` des conteneurs.
+- **Severite** : bloquant pour l'interface, sans effet sur les traitements.
+  Latent depuis la creation du module, en session 2.
+
+### Nature du probleme
+
+Le DAG de promotion Snowflake a besoin d'appeler `entrepot/snowpark_promotion.py`.
+Le repertoire `entrepot/` a donc ete monte dans les conteneurs Airflow et ajoute
+a leur `PYTHONPATH`. Le montage est correct, la promotion a fonctionne du
+premier coup.
+
+Quelques secondes plus tard, le journal du planificateur affichait ceci :
+
+```
+cannot import name 'FlaskApi' from 'connexion' (/opt/gamelens/entrepot/connexion.py)
+cannot load CLI commands from auth manager: The object could not be loaded.
+Auth manager is not configured and api-server will not be able to start.
+```
+
+Le module `entrepot/connexion.py`, qui porte la connexion a Snowflake et qui
+s'appelle `connexion_snowflake.py` depuis la resolution de cet incident, portait
+aussi le nom d'un paquet PyPI reel et largement utilise : **`connexion`**, la
+bibliotheque OpenAPI dont Airflow se sert pour son gestionnaire
+d'authentification FAB. Version installee dans l'image : 2.14.2.
+
+Les entrees de `PYTHONPATH` sont examinees **avant** `site-packages`. A partir
+du moment ou `entrepot/` y figurait, tout `import connexion` du processus, y
+compris ceux d'Airflow lui-meme, atteignait notre fichier.
+
+La collision existait depuis toujours. Elle dormait parce qu'aucun processus
+susceptible d'importer la vraie bibliotheque n'avait ce repertoire sur son
+chemin de recherche.
+
+### Consequence reelle
+
+L'interface web a cesse de demarrer pendant environ douze minutes. Les
+traitements, eux, n'ont rien vu : le planificateur n'a pas besoin du
+gestionnaire d'authentification, et le DAG de promotion a tourne correctement
+pendant l'indisponibilite.
+
+C'est ce qui rend l'incident interessant. La panne ne touchait pas la donnee,
+elle touchait le seul moyen humain de regarder la donnee.
+
+**Et rien ne l'a signale.** Verification faite apres coup :
+
+```sql
+SELECT regle, declenchee_le FROM speed.alertes
+WHERE declenchee_le > '2026-08-31 09:30';
+-- (0 rows)
+```
+
+Zero alerte. La supervision surveille le pipeline, pas la couche web de
+l'ordonnanceur qui l'execute. C'est la meme famille que V-07 : le dispositif
+ne se surveille pas lui-meme.
+
+### Investigation menee
+
+Courte, parce que le message d'erreur etait exemplaire : il nommait le fichier
+fautif entre parentheses. Trois verifications ont suffi.
+
+```bash
+# 1. Le paquet existe-t-il vraiment, ou l'import est-il simplement casse ?
+docker exec gamelens-airflow-scheduler python -c \
+  "from importlib.metadata import version; print(version('connexion'))"
+# 2.14.2  -> c'est bien un paquet installe que l'on masque.
+
+# 2. Qui, chez nous, depend de ce nom ?
+grep -rn "^from connexion import" --include=*.py .
+# cinq fichiers, tous dans entrepot/
+
+# 3. Le planificateur est-il affecte, ou seulement l'interface ?
+docker ps --format "{{.Names}}\t{{.Status}}" | grep airflow
+# scheduler sain, api-server en redemarrage permanent
+```
+
+### Scenarios envisages et action retenue
+
+**Scenario 1, retirer `entrepot/` du `PYTHONPATH`** et importer le module par
+son chemin dans la tache, avec `importlib`. Repare l'interface. Ecarte : la
+collision reste entiere, prete a se declencher au prochain qui ajoutera ce
+repertoire quelque part, et le code de la tache devient obscur.
+
+**Scenario 2, faire de `entrepot/` un paquet** avec un `__init__.py` et importer
+`entrepot.connexion`. Techniquement propre. Ecarte pour son cout de bordure :
+il faudrait changer le `PYTHONPATH` de la CI, celui de l'image d'outillage
+Snowflake, et les cinq imports, sans supprimer la cause pour autant, puisque le
+nom `connexion` resterait disponible a quiconque pointerait directement le
+repertoire.
+
+**Scenario 3, retenu : renommer le module** en `connexion_snowflake.py`. Cinq
+imports a corriger, aucune bordure a toucher, et la cause disparait. Le nom
+gagne au passage en precision : ce module ne connecte pas a n'importe quoi,
+il connecte a Snowflake.
+
+### Communication aux parties prenantes
+
+Projet a un seul intervenant : la question devient celle de la transmission a
+qui reprendra le depot, moi compris dans six mois.
+
+Trois traces posees, delibrement redondantes parce qu'elles ne seront pas lues
+dans les memes circonstances :
+
+1. Un avertissement en tete du module lui-meme, la ou se trouvera quiconque
+   sera tente de raccourcir le nom.
+2. Un fait d'environnement dans `CLAUDE.md`, la ou on cherche avant de modifier
+   la configuration des conteneurs.
+3. Le present incident, qui porte le raisonnement complet.
+
+La regle generale qui en decoule, et qui vaut d'etre dite a l'oral : **ajouter
+un repertoire au `PYTHONPATH` n'est pas une operation additive.** Elle peut
+retirer l'acces a des modules qui fonctionnaient, sans que rien ne le signale
+ailleurs que dans le composant qui en dependait.
+
+### Resultat obtenu et verification
+
+- `git mv entrepot/connexion.py entrepot/connexion_snowflake.py`, cinq imports
+  corriges, avertissement ajoute en tete du module.
+- Les quatre conteneurs Airflow sont revenus sains, api-server compris.
+- `airflow dags list-import-errors` rend `No data found`.
+- Trois executions du DAG de promotion en succes, dont une **planifiee
+  automatiquement** par l'ordonnanceur pour le creneau de 03h00.
+- La porte de fraicheur a ete eprouvee en negatif sur une journee vide et a
+  refuse avec le message attendu.
+
+### Enseignement
+
+Un nom de module local qui coincide avec celui d'un paquet installe est une
+bombe a retardement dont la meche est le **chemin de recherche**, pas le code.
+Tant que les deux ne se croisent pas, tout va bien, et rien n'avertit. Le jour
+ou un besoin sans rapport, ici appeler une promotion depuis un DAG, fait se
+croiser les deux, la panne apparait dans un composant qui n'a rien a voir avec
+le changement.
+
+Deuxieme enseignement, plus inconfortable : la panne a dure douze minutes sans
+declencher quoi que ce soit, parce qu'elle touchait l'interface et non la
+donnee. Une supervision construite autour des traitements ne voit pas
+l'indisponibilite de ce qui permet de les regarder.

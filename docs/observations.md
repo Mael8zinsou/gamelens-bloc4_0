@@ -1413,7 +1413,7 @@ pour une raison que personne n'avait formulée en la prenant.
 
 ## OBS-66. Deux modes d'authentification ne tiennent pas dans un seul profil
 
-`entrepot/connexion.py` gère les deux façons de présenter la clé privée RSA
+`entrepot/connexion_snowflake.py` gère les deux façons de présenter la clé privée RSA
 dans une seule fonction, par une cascade de `if` : chemin de fichier en local,
 contenu PEM en intégration continue. La transposition naturelle en YAML aurait
 été un bloc unique portant les deux champs, chacun renvoyant à sa variable.
@@ -1604,4 +1604,73 @@ du seul fait des corrections en cours. Il a donc été **supprimé** plutôt que
 règle d'OBS-62, où un fichier généré devait exclure sa propre date de
 génération, appliquée cette fois à de la prose. Tout ce qui varie sans que le
 sujet varie doit sortir de ce qu'on affirme.
+
+# Session 10, 31 août 2026 : ordonnancement de la promotion Snowflake
+
+## OBS-73. La panne n'a pas touché ce que le changement touchait
+
+Le changement consistait à donner aux conteneurs Airflow l'accès au répertoire
+`entrepot/`, pour qu'un DAG puisse appeler la promotion Snowpark. Le résultat
+immédiat a été conforme : exécutée à la main dans le conteneur, la promotion a
+fonctionné du premier coup, sur une version de Snowpark pourtant plus ancienne
+que celle de la chaîne d'intégration.
+
+Ce qui est tombé, douze minutes plus tard, c'est l'**interface web**.
+
+Le module `entrepot/connexion.py`, renommé `connexion_snowflake.py` depuis,
+portait le nom d'un paquet PyPI réel, `connexion`, dont Airflow se sert pour son
+authentification. Les entrées de
+`PYTHONPATH` passant avant `site-packages`, tout `import connexion` du
+processus, y compris ceux d'Airflow, atteignait désormais notre fichier. Détail
+complet en INC-009.
+
+Trois choses valent d'être retenues, et aucune n'est le bug lui-même.
+
+**La panne était orthogonale au changement.** Rien dans « appeler une promotion
+depuis un DAG » ne laisse présager « l'interface d'administration ne démarre
+plus ». Une revue de ce changement, même attentive, n'aurait pas cherché là.
+
+**Le message d'erreur était excellent.** `cannot import name 'FlaskApi' from
+'connexion' (/opt/gamelens/entrepot/connexion.py)` nomme le fichier fautif entre
+parenthèses. L'investigation a duré trois commandes. Ce n'est pas toujours le
+cas, et c'est ce qui a fait la différence entre un incident de dix minutes et
+un après-midi perdu.
+
+**Le traitement n'a rien vu.** Le planificateur n'a pas besoin du gestionnaire
+d'authentification : le DAG a tourné, la donnée est arrivée dans l'entrepôt,
+pendant que l'écran permettant de le constater refusait de s'allumer. La
+supervision, construite autour des traitements, n'a évidemment rien signalé.
+
+La règle générale qui en sort dépasse ce projet : **ajouter un répertoire au
+`PYTHONPATH` n'est pas une opération additive.** Elle peut retirer l'accès à
+des modules qui fonctionnaient, dans des composants sans rapport avec le
+changement.
+
+## OBS-74. Une règle d'alerte calibrée sur une cadence devient fausse pour une autre
+
+La règle `composant_muet` vérifiait qu'aucun composant attendu n'était resté
+silencieux plus de 24 heures. Elle a été écrite quand les trois composants
+attendus tournaient au quart d'heure, et elle était juste.
+
+Y ajouter `snowpark_promotion`, qui tourne une fois par jour, l'aurait rendue
+fausse : deux exécutions quotidiennes successives sont espacées d'exactement
+24 heures, donc la fenêtre expire juste avant que la suivante ne l'alimente. La
+règle se serait déclenchée chaque matin sur un système parfaitement sain.
+
+Le plus intéressant est la forme qu'aurait prise ce défaut. L'alerte se serait
+**refermée toute seule** au bout de quelques minutes, à l'exécution suivante.
+Elle aurait donc produit, chaque jour, une alerte brève et auto-résolue,
+strictement indiscernable d'un vrai incident passager. Pas de fausse alerte
+bruyante que l'on finit par corriger : un bruit de fond quotidien qui use
+l'attention et qui, le jour d'un vrai problème, se confond avec lui.
+
+Corrigé en portant la fenêtre sur chaque composant plutôt que sur la règle :
+24 heures pour les collectes, 26 pour les traitements quotidiens. Le même
+défaut existait déjà, non détecté, pour `steam_prices`, quotidien depuis la
+session 6 et surveillé par une fenêtre de 24 heures.
+
+Ce qu'il faut retenir : **un seuil de supervision porte une hypothèse implicite
+sur la cadence de ce qu'il surveille.** Ajouter un composant à une règle
+existante, ce n'est pas allonger une liste, c'est vérifier que l'hypothèse tient
+encore pour le nouveau venu.
 

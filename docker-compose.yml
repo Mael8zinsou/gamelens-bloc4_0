@@ -51,8 +51,27 @@ x-airflow-commun: &airflow-commun
     POSTGRES_USER: gamelens_app
     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devlocal_app}
     KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    PYTHONPATH: /opt/gamelens/ingestion:/opt/gamelens/supervision
+    PYTHONPATH: /opt/gamelens/ingestion:/opt/gamelens/supervision:/opt/gamelens/entrepot
     GAMELENS_ROOT: /opt/gamelens
+    # ------------------------------------------------------------------------
+    # Acces a Snowflake depuis l'ordonnanceur, pour le DAG de promotion vers
+    # l'entrepot. Ces variables sont les MEMES que celles lues par
+    # entrepot/connexion_snowflake.py en ligne de commande : la frontiere de
+    # configuration de DA-05 fait que le meme code sert dans les deux cas.
+    #
+    # Le chemin de la clef est ABSOLU et non celui de .env, qui est relatif au
+    # repertoire de travail. Une tache Airflow ne garantit pas lequel c'est.
+    #
+    # La clef n'entre jamais dans l'image : elle est montee en lecture seule
+    # depuis secrets/, ignore par git, exactement comme pour snowflake-cli.
+    # ------------------------------------------------------------------------
+    SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT:-}
+    SNOWFLAKE_USER: ${SNOWFLAKE_USER:-}
+    SNOWFLAKE_PRIVATE_KEY_PATH: /opt/gamelens/secrets/snowflake_key.p8
+    SNOWFLAKE_ROLE: ${SNOWFLAKE_ROLE:-ACCOUNTADMIN}
+    SNOWFLAKE_WAREHOUSE: ${SNOWFLAKE_WAREHOUSE:-gamelens_wh}
+    SNOWFLAKE_DATABASE: ${SNOWFLAKE_DATABASE:-gamelens}
+    SNOWFLAKE_SCHEMA: ${SNOWFLAKE_SCHEMA:-mart}
   volumes:
     - ./dags:/opt/airflow/dags
     - ./docker/airflow/logs:/opt/airflow/logs
@@ -64,6 +83,11 @@ x-airflow-commun: &airflow-commun
     - ./supervision:/opt/gamelens/supervision:ro
     - ./config:/opt/gamelens/config:ro
     - ./sql:/opt/gamelens/sql:ro
+    # entrepot/ porte la promotion Snowpark, appelee par le DAG de promotion
+    # vers l'entrepot. Monte en lecture seule comme le reste du code : la
+    # tache reutilise le module du depot, elle n'en heberge pas une copie.
+    - ./entrepot:/opt/gamelens/entrepot:ro
+    - ./secrets:/opt/gamelens/secrets:ro
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     postgres:

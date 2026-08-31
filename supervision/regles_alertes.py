@@ -103,12 +103,26 @@ REGLES: list[Regle] = [
         severite=AVERTISSEMENT,
         # Surveille une ABSENCE : un composant attendu qui n'a produit aucune
         # execution, ni reussie ni echouee. Voir INC-007.
-        requete="""SELECT count(*) FROM (VALUES ('steam_producer'), ('kafka_to_postgres'),
-                                                ('steam_prices')) AS attendus(composant)
+        #
+        # La fenetre est portee par CHAQUE composant et non partagee, depuis
+        # l'ajout de snowpark_promotion le 31/08/2026. Une fenetre unique de
+        # 24 h convenait tant que tous les composants attendus tournaient au
+        # quart d'heure ; elle devient piegeuse pour un composant quotidien,
+        # dont deux executions successives sont espacees d'exactement 24 h.
+        # La regle se declencherait alors chaque jour dans l'intervalle entre
+        # l'expiration de la fenetre et l'execution suivante, sur un systeme
+        # parfaitement sain. Une alerte qui crie sans raison finit par ne plus
+        # etre lue, ce qui coute plus cher que l'absence d'alerte.
+        requete="""SELECT count(*) FROM (VALUES
+                       ('steam_producer',     INTERVAL '24 hours'),
+                       ('kafka_to_postgres',  INTERVAL '24 hours'),
+                       ('steam_prices',       INTERVAL '26 hours'),
+                       ('snowpark_promotion', INTERVAL '26 hours')
+                   ) AS attendus(composant, fenetre)
                    WHERE NOT EXISTS (
                        SELECT 1 FROM speed.pipeline_runs r
                        WHERE r.component = attendus.composant
-                         AND r.started_at > now() - INTERVAL '24 hours')""",
+                         AND r.started_at > now() - attendus.fenetre)""",
         seuil=0,
         comparateur="sup",
         message="{valeur} composant(s) attendu(s) n ont produit aucune execution depuis 24h.",

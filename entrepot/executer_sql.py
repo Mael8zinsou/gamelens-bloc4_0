@@ -28,7 +28,7 @@ import re
 import sys
 from pathlib import Path
 
-from connexion import connexion
+from connexion_snowflake import connexion
 
 # Les scripts de schema nomment la base en dur (gamelens.mart.dim_games), et
 # ils contiennent des CREATE OR REPLACE TABLE. Les rejouer tels quels sur le
