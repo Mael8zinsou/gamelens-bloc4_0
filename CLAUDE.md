@@ -78,7 +78,7 @@ un incident réel et sa méthode d'investigation (C4.4.2).
 - **C4.2.3** — Automatiser l'intégration et le déploiement (CI/CD, DevOps). À faire.
 
 **Autres livrables attendus (non éliminatoires mais notés) :**
-- Rapport d'analyse et présentation des composants (A4.1) — peut largement s'appuyer sur le Bloc 1.
+- Rapport d'analyse et présentation des composants (A4.1). ✅ Écrit : `docs/rapport_analyse.md`.
 - Système de supervision et alertes (C4.3.1).
 - Feuille de route d'exploitation (C4.3.2) — tâches, échéances, maintenance, points de vigilance.
 - Documentation technique (C4.3.3).
@@ -108,6 +108,7 @@ Mis à jour le 31/08/2026 en fin de session 10 (DAG de promotion Snowflake).
 | Recette automatisée de l'entrepôt | ✅ **Exécutée sur le runner** (run 32954104664, 41 s). Base Snowflake créée pour le run, schéma livré appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles d'intégrité et contrats dbt vérifiés en positif **et en négatif** sur le même jeu fautif, base supprimée. |
 | **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. |
 | **C4.3.2 feuille de route d'exploitation** | ✅ **Écrite** : `docs/feuille_route_exploitation.md`, 10 sections. Tâches quotidiennes à trimestrielles, planification de maintenance, 13 points de vigilance dont 2 datés, durées d'incident mesurées, procédures d'intervention éprouvées avant d'être prescrites. |
+| **A4.1 rapport d'analyse** | ✅ **Écrit** : `docs/rapport_analyse.md`. Deux parties, calquées sur les deux livrables de la grille. Besoins métiers traduits en exigences, état de l'existant, contraintes, puis les composants un par un avec l'alternative écartée, l'analyse de dépendance fournisseur composant par composant, et une estimation des coûts **mesurée** sur l'historique de facturation, pas estimée. |
 | **C4.3.3 documentation technique** | ✅ **Écrite** : `docs/documentation_technique.md`. Point d'entrée, 11 décisions d'architecture datées avec leur contrepartie, traçabilité champ par champ, référence de configuration, matrice de droits, plus **2 annexes générées** depuis le catalogue et vérifiées par la CI. |
 | **dbt sur Snowflake** | ✅ **Construit et exécuté** : 29 contrats déclaratifs sur 4 sources, 1 modèle (la vue de tableau de bord, sortie d'un script SQL non rejouable). Éprouvés en positif et en négatif, sur base jetable et sur la couche de démonstration. |
 | Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **55 PASS, 0 partiel, 0 en attente**. |
@@ -258,10 +259,12 @@ contenait a été refermé le 27/08 (session 8, DA-10).
 
 Il ne reste que le support oral et une amélioration non éliminatoire.
 
-1. **Préparer le support de soutenance** (30 min de présentation). C'est
-   désormais le poste le plus rentable, et de loin : tout ce qui doit être
-   montré existe, a été exécuté, et laisse des traces consultables.
-2. A4.1, rapport d'analyse : s'appuie largement sur le Bloc 1.
+**Il ne reste que le support de soutenance** (30 min de présentation). Tout ce
+qui doit être montré existe, a été exécuté, et laisse des traces consultables.
+
+Décision prise le 31/08/2026 : **gel du dépôt**. Tout écart trouvé à partir de
+maintenant va sur une liste, pas dans un commit. Le critère pour rouvrir :
+est-ce que cela change ce qui sera dit ou montré pendant les 45 minutes ?
 
 Refermé le 31/08/2026 : V-12 et V-13, la couche Gold Snowflake est
 désormais promue par son propre DAG et son arrêt est visible de la
@@ -289,7 +292,10 @@ comme points de vigilance dans la feuille de route :
 - **V-01, expiration du compte Snowflake les 17 ou 18/12/2026.** À confirmer
   dans Snowsight.
 - Réduire `COMPUTE_WH` et lui imposer une suspension automatique : cet entrepôt
-  jamais configuré pèse 43 % de la consommation de crédits (OBS-57).
+  jamais configuré pesait 43 % de la consommation au 27/08/2026 et **32 % au
+  31/08** (0,4372 puis 0,6899 crédit). La part recule parce que l'entrepôt du
+  projet sert davantage, pas parce que le problème se résorbe. Citer la mesure
+  datée, jamais le pourcentage seul (OBS-57).
 
 ## Conventions de travail
 

@@ -20,6 +20,7 @@ Il joue donc deux rôles, et seulement ceux-là :
 | Ce que vous cherchez | Où c'est |
 |---|---|
 | Démarrer la plateforme en cinq minutes | [`README.md`](../README.md) |
+| **Pourquoi** cette architecture, ses composants, ses coûts | [`docs/rapport_analyse.md`](rapport_analyse.md) |
 | Exploiter au quotidien, maintenir, surveiller | [`docs/feuille_route_exploitation.md`](feuille_route_exploitation.md) |
 | Les tests et leurs résultats réels | [`docs/cahier_recettes.md`](cahier_recettes.md) |
 | Les incidents et leur méthode d'investigation | [`docs/journal_incidents.md`](journal_incidents.md) |
