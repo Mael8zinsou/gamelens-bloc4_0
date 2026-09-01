@@ -301,14 +301,128 @@ remise à plat de la section de référentiel ci-dessus et des trois README.
   plutôt que rejouer GOG. INC-004 remplit ce rôle et couvre les quatre rubriques exigées
   par la grille, y compris la communication aux parties prenantes, souvent oubliée.
 
+## La soutenance : ce que disent les documents de cadrage
+
+Lu le 01/09/2026 dans trois documents que le projet n'avait jamais ouverts :
+`25-26 Modalités_Evaluations_Titre ISD RNCP39586_YNOV_M2_filiere IAData.pptx`,
+`25 09 15 Réglement spécial de certification`, et surtout l'onglet
+**« Grille Eval spé Bloc 4 »** du fichier
+`24 10 10 - Grille évaluation Ingénieur en science des données (1).xlsx`.
+Tous trois sont dans `Certification/`, deux niveaux au-dessus de ce dépôt.
+
+**Date : vendredi 11/09/2026.** La fenêtre du référentiel courait du 01 au
+29/09 ; la date retenue est la plus précoce du calendrier.
+
+### Il n'y a pas de « rapport de soutenance »
+
+Règlement spécial, page 4, mot pour mot : « À l'aide d'**un support de
+présentation de son choix**, le candidat présente lors d'une soutenance orale
+de 45 min (30 min de présentation et 15 de temps d'échange avec le jury) »,
+suivi de la liste des dix livrables. Un support unique, format libre, à travers
+lequel dix choses sont présentées. Deux d'entre elles s'appellent littéralement
+« une présentation de » : les composants de l'architecture, le système de
+supervision.
+
+### Dix compétences, et non neuf : C4.1.2 existe
+
+La grille en liste dix, chacune avec un livrable et ses critères. Ce fichier
+n'en suivait que neuf, ayant fusionné les deux premières sous l'étiquette
+« A4.1 ». Or A4.1 est le nom de l'**activité** ; le jury coche des
+**compétences**, et il en coche deux là où nous en comptions une.
+
+| Compétence | Livrable attendu | |
+|---|---|---|
+| C4.1.1 | Un rapport d'analyse | |
+| **C4.1.2** | Une présentation des composants de l'architecture DATA | jamais nommée avant le 01/09 |
+| C4.2.1 | Un schéma de données | éliminatoire |
+| C4.2.2 | Des pipelines de traitement de la donnée | éliminatoire |
+| C4.2.3 | Un pipeline CI/CD | éliminatoire |
+| C4.3.1 | Une présentation du système de supervision | |
+| C4.3.2 | Une feuille de route d'exploitation | |
+| C4.3.3 | Une documentation technique | |
+| C4.4.1 | Un cahier de recettes et de tests | |
+| C4.4.2 | Une méthodologie d'investigation et de traitement d'un incident | |
+
+Le contenu de C4.1.2 existe : la partie 2 de `docs/rapport_analyse.md` couvre
+ses quatre critères (liste des composants, avantages attendus, points de
+vigilance, estimation des coûts), sections 7, 9 et 10. C'est l'étiquette qui
+manquait, pas le travail.
+
+### Le mot qui change les priorités : « présentées »
+
+Critère de C4.2.2, verbatim : « **3 méthodes de traitement de la donnée sont
+présentées.** » Pas « sont réalisées », pas « existent dans le dépôt ». Le jury
+coche sur ce qui se passe pendant les 30 minutes.
+
+Conséquence à tenir jusqu'au 11/09 : **une brique construite, testée et verte
+en CI mais non montrée peut être notée non acquise**, et pour C4.2.2 elle est
+éliminatoire. La règle « ne rien documenter qui n'ait été exécuté » reste juste
+mais ne suffit plus. Ce qui compte désormais est de rendre visible en 30 minutes
+ce qui est déjà construit, pas de construire davantage.
+
+### L'arithmétique, qui est la vraie contrainte
+
+Les dix compétences se déploient en **31 sous-critères explicites** dans la
+grille : 5 pour C4.1.1, 4 pour C4.1.2, 3 pour C4.2.1, 3 pour C4.2.2, 1 pour
+C4.2.3, 4 pour C4.3.1, 4 pour C4.3.2, 1 pour C4.3.3, 2 pour C4.4.1, 4 pour
+C4.4.2. Trente minutes pour 31 points cochables : **moins d'une minute chacun**.
+
+Le support ne peut donc pas raconter le projet chronologiquement, ni suivre
+l'ordre dans lequel il a été construit. Il doit être organisé sur la grille,
+sinon un critère passe à la trappe sans que personne s'en aperçoive.
+
+### Trois couperets qui ne dépendent pas de la qualité du travail
+
+1. **Le dépôt.** Modalités, diapositive 11 : déposer les livrable(s) **et** le
+   support sur DigiformaCertif dans le délai imparti, « à défaut, le bloc sera
+   invalidé par le jury d'évaluation ». Le règlement général, section 1.2, est
+   plus dur encore : « Tout livrable remis après la date et l'heure limites
+   fixées pour une épreuve certificative sera déclaré non recevable et
+   entraînera **automatiquement** une évaluation des compétences associées comme
+   "non acquises". » **La date limite ne figure dans aucun règlement : elle est
+   dans la convocation**, envoyée par courriel un mois avant l'épreuve, soit
+   autour du 11/08/2026.
+2. **La validation.** Bloc validé si au moins 50 % des compétences sont acquises
+   **et** aucune éliminatoire n'est non acquise. Avec dix compétences : au moins
+   cinq acquises, dont obligatoirement les trois éliminatoires.
+3. **L'accès à la salle.** Règlement général 2.1 : contrôle d'identité par la
+   convocation **et** la pièce d'identité. Sans les deux, pas d'accès à
+   l'épreuve. Seuls le candidat et les deux membres du jury sont dans la salle.
+
+### Conséquence sur la démonstration en direct
+
+Choix retenu le 01/09 : support de preuves capturées, **plus deux ou trois
+moments en direct courts et répétés**, chacun avec son repli capturé.
+
+Le règlement ne dit rien de l'équipement ni du réseau de la salle. Il faut donc
+traiter l'accès Internet comme indisponible, ce qui partage nettement les
+briques :
+
+- **Sûres hors ligne** : Grafana, l'interface Airflow et son historique de runs,
+  les requêtes sur la couche Gold PostgreSQL, les tests unitaires sans réseau.
+  Tout est local, dans des conteneurs.
+- **Impossibles hors ligne** : tout ce qui vise Snowflake (dbt, Snowpark,
+  `verifier_gold.py`, la promotion), et toute ingestion, qui appelle l'API Steam.
+
+Les moments en direct doivent donc être choisis dans la première liste, et
+Snowflake présenté par des traces capturées, sauf réseau confirmé sur place.
+
 ## Prochaine étape immédiate
 
 **Tous les livrables du Bloc 4 sont écrits, et dbt est branché.** Les trois
 compétences éliminatoires sont couvertes par des briques exécutées, la chaîne
 est autonome de bout en bout, l'architecture Medallion est complète.
 
-**Il ne reste que le support de soutenance** (30 min de présentation). Tout ce
-qui doit être montré existe, a été exécuté, et laisse des traces consultables.
+**Il ne reste que le support de soutenance** (30 min de présentation), à
+construire pour le **vendredi 11/09/2026**. Tout ce qui doit être montré existe,
+a été exécuté, et laisse des traces consultables : le travail restant est de
+rendre cela visible en trente minutes, sur le plan de la grille, pas d'ajouter
+des briques.
+
+**À vérifier d'abord, hors dépôt** : la date et l'heure limites de dépôt sur
+DigiformaCertif, qui figurent dans la convocation reçue par courriel et nulle
+part ailleurs. Un dépôt en retard rend les compétences « non acquises »
+automatiquement, quel que soit le contenu.
 
 Décision prise le 31/08/2026 : **gel du dépôt**. Tout écart trouvé à partir de
 maintenant va sur la liste ci-dessous, pas dans un commit. Le critère pour
