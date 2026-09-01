@@ -3,6 +3,10 @@
 Soutenance orale du **vendredi 11/09/2026**. 45 minutes : 30 de présentation,
 15 d'échange avec un jury de 2 professionnels externes.
 
+**Dépôt sur DigiformaCertif le mercredi 09/09/2026**, soit deux jours plus tôt.
+C'est cette date qui contraint, pas celle de l'oral : le support est gelé quand
+les dernières répétitions ont lieu.
+
 ## Ce que ce document est, et la règle qu'il applique
 
 Ce n'est pas le support. C'est le plan sur lequel le support sera construit, et
@@ -234,30 +238,59 @@ Trois minutes de direct sur 27 min 30. C'est peu, et c'est voulu : le direct ser
 
 ## 7. Les preuves à produire
 
-**Le dépôt ne contient aujourd'hui aucune capture ni aucun journal conservé.**
-La convention de travail du projet demandait pourtant de garder « les logs et
-sorties réelles des tests et des runs, ils serviront de preuve et de matière pour
-le support de soutenance ». Tout est transcrit dans les documents de `docs/`,
-mais rien n'existe sous forme montrable. C'est le principal travail matériel des
-dix jours.
+Les preuves sont de **deux natures**, et les confondre sous le mot « capture »
+conduit à mal les produire. Une sortie de terminal photographiée est une sortie
+de terminal en moins bon : illisible au vidéoprojecteur, non sélectionnable, non
+rejouable. Une interface de visualisation décrite en texte perd ce qui fait
+précisément l'objet du critère.
 
-À produire, par ordre de criticité :
+### Sorties textuelles : produites, datées, rejouables
 
-| | Preuve | Pour | Réseau |
-|---|---|---|---|
-| 1 | GitHub Actions, les 6 étages verts | critère 16, éliminatoire | requis |
-| 2 | GitHub Actions, détail de l'étage entrepôt sur base jetable | critère 16 | requis |
-| 3 | Sortie de `snowpark_promotion`, le SQL généré | critère 15, éliminatoire | requis |
-| 4 | Airflow, les 4 DAG et un graphe (repli du DIRECT 2) | critère 14 | non |
-| 5 | Grafana, les 7 panneaux (repli du DIRECT 3) | critère 19 | non |
-| 6 | Le refus de rôle en terminal (repli du DIRECT 1) | critère 11 | non |
-| 7 | `dbt test` : PASS=29 | critères 10, 12 | requis |
-| 8 | `verifier_gold.py` : 8 contrôles au vert | critères 10, 12 | requis |
-| 9 | Le schéma de données, en diagramme | critères 10 à 12 | non |
-| 10 | Snowsight, la consommation de crédits | critère 9 | requis |
+Le dépôt n'en conservait aucune au 01/09/2026, alors que les conventions de
+travail demandaient de garder « les logs et sorties réelles des tests et des
+runs » depuis la première session. Tout était transcrit dans les documents de
+`docs/`, rien n'existait sous forme de sortie réelle.
 
-Les preuves marquées « réseau requis » doivent être capturées **avant** le jour
-J, sans exception.
+`outils/capturer_preuves.py` comble ce manque et les rejoue à la demande. Neuf
+captures sont dans `docs/preuves/`, chacune avec son en-tête de provenance :
+
+| Fichier | Critères | Réseau |
+|---|---|---|
+| `c09_couts_snowflake.txt` | 9 | requis |
+| `c10_contrats_dbt.txt` | 10, 12 | requis |
+| `c11_cloisonnement_roles.txt` | 11 (repli du DIRECT 1) | non |
+| `c12_integrite_gold.txt` | 10, 12 | requis |
+| `c14_airflow_dags.txt` | 14 (repli du DIRECT 2) | non |
+| `c15_snowpark_sql_genere.txt` | 15 | requis |
+| `c16_ci_six_etages.txt` | 16 | requis |
+| `c19_supervision_indicateurs.txt` | 19, 20 | non |
+| `c26_tests_unitaires.txt` | 26, 27 | non |
+
+`c15` est la plus précieuse : le `rank() OVER (PARTITION BY "GENRE" ...)` que
+Snowpark construit et pousse sur le compute Snowflake. C'est la réponse
+matérielle à « en quoi est-ce distribué ? », et elle ne s'improvise pas à l'oral.
+
+`python outils/capturer_preuves.py --sans-reseau` rejoue les quatre captures
+locales. À lancer le matin du 11/09 pour qu'elles portent la donnée du jour.
+
+### Captures d'écran : quatre, à prendre à la main
+
+Elles visent des interfaces graphiques et ne peuvent pas être automatisées ici.
+
+| # | Où | Ce qu'il faut cadrer | Critère | Réseau |
+|---|---|---|---|---|
+| 1 | GitHub, onglet Actions | Les 6 étages d'un run vert | 16, **éliminatoire** | requis |
+| 2 | http://localhost:8080 | Les 4 DAG, puis le graphe de `gamelens_promotion_gold` | 14, **éliminatoire** | non |
+| 3 | http://localhost:3000 | Le tableau de bord entier, 7 panneaux | 19 | non |
+| 4 | Snowsight, Admin puis Usage | La consommation par entrepôt | 9 | requis |
+
+Les numéros 1 et 4 exigent le réseau : **à prendre avant le dépôt du 09/09**, pas
+le jour de la soutenance.
+
+### Reste à produire
+
+Le schéma de données en diagramme, pour les critères 10 à 12. Hors ligne, et
+c'est la dernière pièce manquante.
 
 ## 8. Les quinze minutes d'échange
 
@@ -297,9 +330,9 @@ construction du support :
 
 ## Ce qu'il reste à décider
 
-- **La date limite de dépôt sur DigiformaCertif**, qui figure dans la
-  convocation et nulle part ailleurs. Un dépôt en retard rend les compétences
-  non acquises automatiquement.
+- ~~La date limite de dépôt~~ : **mercredi 09/09/2026**, arrêtée le 01/09.
+  Elle précède la soutenance de deux jours, ce qui gèle le support avant l'oral :
+  les répétitions des 09 et 10/09 ne pourront plus le corriger.
 - **Ce qui est déposé à côté du support** : le dépôt attend « livrable(s) **et**
   support(s) ». Les dix livrables existent dans `docs/` et dans le code.
 - **Le format du support** : le règlement dit « de son choix ».

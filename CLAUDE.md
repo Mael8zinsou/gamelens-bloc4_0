@@ -419,10 +419,16 @@ a été exécuté, et laisse des traces consultables : le travail restant est de
 rendre cela visible en trente minutes, sur le plan de la grille, pas d'ajouter
 des briques.
 
-**À vérifier d'abord, hors dépôt** : la date et l'heure limites de dépôt sur
-DigiformaCertif, qui figurent dans la convocation reçue par courriel et nulle
-part ailleurs. Un dépôt en retard rend les compétences « non acquises »
-automatiquement, quel que soit le contenu.
+**Deux dates, et c'est la première qui contraint** : dépôt sur DigiformaCertif
+le **mercredi 09/09/2026**, soutenance le **vendredi 11/09/2026**. Le support est
+donc gelé deux jours avant l'oral, pendant que les répétitions ont lieu. Un dépôt
+en retard rend les compétences « non acquises » automatiquement, quel que soit le
+contenu.
+
+Les preuves textuelles sont produites : 9 captures datées dans `docs/preuves/`,
+rejouables par `outils/capturer_preuves.py`. Restent 4 captures d'écran
+d'interfaces graphiques, dont 2 exigent le réseau, plus le schéma de données en
+diagramme.
 
 Décision prise le 31/08/2026 : **gel du dépôt**. Tout écart trouvé à partir de
 maintenant va sur la liste ci-dessous, pas dans un commit. Le critère pour
