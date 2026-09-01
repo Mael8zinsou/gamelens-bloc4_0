@@ -1,0 +1,37 @@
+# Preuve c09 : Estimation des couts : consommation de credits mesuree, par entrepot
+#
+# Criteres de la grille : 9 (voir docs/plan_soutenance.md)
+# Reseau requis        : oui
+# Capture le           : 01/09/2026 08:46 UTC
+# Code de sortie       : 0
+#
+# Commande :
+#   cd '%s' && cat > sql/_preuve_couts.sql <<'FIN'
+#   SELECT warehouse_name, round(sum(credits_used), 4) AS credits,
+#          min(to_date(start_time)) AS depuis,
+#          max(to_date(start_time)) AS jusqu_a
+#     FROM snowflake.account_usage.warehouse_metering_history
+#    GROUP BY 1 ORDER BY 2 DESC;
+#   FIN
+#   MSYS_NO_PATHCONV=1 docker compose --profile outillage run --rm --no-deps snowflake-cli python /projet/entrepot/executer_sql.py /projet/sql/_preuve_couts.sql --sans-contexte 2>&1; rm -f sql/_preuve_couts.sql
+#
+# --------------------------------------------------------------------------
+
+Traceback (most recent call last):
+  File "/projet/entrepot/executer_sql.py", line 151, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/projet/entrepot/executer_sql.py", line 96, in main
+    contenu = Path(args.fichier).read_text(encoding="utf-8")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/pathlib.py", line 1027, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/projet/sql/_preuve_couts.sql'
+
+
+--- stderr ---
+/bin/bash: line 1: cd: %s: No such file or directory

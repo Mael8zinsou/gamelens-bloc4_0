@@ -1,0 +1,131 @@
+# Preuve c15 : Calcul distribue : le SQL que Snowpark genere et pousse sur le compute Snowflake
+#
+# Criteres de la grille : 15 (voir docs/plan_soutenance.md)
+# Reseau requis        : oui
+# Capture le           : 01/09/2026 08:46 UTC
+# Code de sortie       : 0
+#
+# Commande :
+#   MSYS_NO_PATHCONV=1 docker compose --profile outillage run --rm --no-deps snowflake-cli python /projet/entrepot/snowpark_promotion.py --expliquer 2>&1
+#
+# --------------------------------------------------------------------------
+
+Promotion Silver speed vers Gold, calcul distribue Snowpark
+
+1. Extraction depuis la couche Silver speed (PostgreSQL)
+  GAME_MAPPING          15 ligne(s) extraite(s)
+  DAILY_STATS           75 ligne(s) extraite(s)
+  PRICE_SNAPSHOTS      180 ligne(s) extraite(s)
+   session Snowpark ouverte | entrepot GAMELENS_WH | base GAMELENS | role ACCOUNTADMIN
+
+2. Televersement vers le schema de transit
+  GAME_MAPPING          15 ligne(s) televersee(s)
+  DAILY_STATS           75 ligne(s) televersee(s)
+  PRICE_SNAPSHOTS      180 ligne(s) televersee(s)
+
+3. Promotion vers l'entrepot Gold, executee par Snowflake
+  dim_games : 0 insertion(s), 15 mise(s) a jour
+  fact_popularity_history : 0 insertion(s), 75 mise(s) a jour
+  fact_prices : 0 insertion(s), 180 mise(s) a jour
+
+4. Calcul analytique distribue : fenetre glissante et classement
+
+  --- SQL genere par Snowpark et envoye a l'entrepot ---
+  SELECT 
+       * 
+   FROM (
+   SELECT 
+      "JEU", 
+      "GENRE", 
+      "JOUR", 
+      "JOUEURS_MOYENS", 
+      "MOYENNE_GLISSANTE_7J", 
+      rank() OVER (PARTITION BY "GENRE"  ORDER BY 
+      "JOUEURS_MOYENS" DESC NULLS LAST ) AS "RANG_DANS_LE_GENRE", 
+      round(((100 * "JOUEURS_MOYENS") / sum("JOUEURS_MOYENS") OVER (PARTITION BY "GENRE"  )), 1) AS "PART_DU_GENRE_PCT"
+   FROM (
+   SELECT 
+       * 
+   FROM (
+   SELECT 
+      "JEU", 
+      "GENRE", 
+      "JOUR", 
+      "JOUEURS_MOYENS", 
+      "GAME_ID", 
+      round(avg("JOUEURS_MOYENS") OVER (PARTITION BY "GAME_ID"  ORDER BY 
+      "JOUR" ASC NULLS FIRST  ROWS BETWEEN 6 PRECEDING  AND CURRENT ROW ), 2) AS "MOYENNE_GLISSANTE_7J"
+   FROM (
+   SELECT 
+      "UNIFIED_NAME" AS "JEU", 
+      "GENRE", 
+      "DAY" AS "JOUR", 
+      "AVG_PLAYER_COUNT" AS "JOUEURS_MOYENS", 
+      "l_0014_GAME_ID" AS "GAME_ID"
+   FROM (
+   SELECT  * 
+   FROM (
+  (
+   SELECT 
+      "GAME_ID" AS "l_0014_GAME_ID", 
+      "DAY", 
+      "AVG_PLAYER_COUNT", 
+      "MAX_PLAYER_COUNT", 
+      "AVG_VIEWER_COUNT", 
+      "MAX_VIEWER_COUNT"
+   FROM mart.fact_popularity_history
+  ) AS SNOWPARK_LEFT 
+  INNER JOIN 
+  (
+   SELECT 
+      "GAME_ID" AS "r_0015_GAME_ID", 
+      "UNIFIED_NAME", 
+      "GENRE"
+   FROM mart.dim_games
+  ) AS SNOWPARK_RIGHT
+   ON ("l_0014_GAME_ID" = "r_0015_GAME_ID")
+  )
+  )
+  )
+  )
+   WHERE 
+      ("JOUR" = DATE '2026-09-01')
+  )
+  )
+   ORDER BY 
+      "GENRE" ASC NULLS FIRST, 
+      "RANG_DANS_LE_GENRE" ASC NULLS FIRST
+  --- fin du SQL ---
+
+  15 ligne(s) de classement calculee(s) cote entrepot
+
+  jeu                  genre            joueurs   moy. 7j  rang  part %
+  ---------------------------------------------------------------------
+  Slay the Spire       Deckbuilder      5651.89   7671.65     1    51.6
+  Balatro              Deckbuilder      5296.22   6593.02     2    48.4
+  Hollow Knight        Metroidvania     4588.67   7283.77     1   100.0
+  Celeste              Plateforme       1353.44   1750.33     1   100.0
+  Undertale            RPG              1047.67   1634.71     1    54.4
+  Disco Elysium        RPG               878.33   1342.39     2    45.6
+  Hades II             Roguelike        2574.11   3527.44     1    30.8
+  Cult of the Lamb     Roguelike        2053.89   4150.28     2    24.6
+  Hades                Roguelike        1989.00   2877.65     3    23.8
+  Dead Cells           Roguelike        1733.78   2483.74     4    20.8
+  Vampire Survivors    Roguelite        4312.78   3609.03     1   100.0
+  Terraria             Sandbox         34887.89  42675.13     1   100.0
+  Stardew Valley       Simulation      45337.22  67969.94     1    58.5
+  RimWorld             Simulation      21180.22  26757.71     2    27.3
+  Factorio             Simulation      10957.56  14517.01     3    14.1
+
+5. Preuve que le calcul a bien eu lieu dans l'entrepot
+  type     entrepot       taille    cluster  octets lus   lignes  compil ms  exec ms
+  ----------------------------------------------------------------------------------
+  SELECT   GAMELENS_WH    -               0           0        0         12        0
+  SELECT   GAMELENS_WH    X-Small         1        8704       15        113       29
+  SELECT   GAMELENS_WH    X-Small         1        8704        1         64       16
+  MERGE    GAMELENS_WH    X-Small         1       14848      180        203      292
+  MERGE    GAMELENS_WH    X-Small         1        2048        1         65      177
+  MERGE    GAMELENS_WH    X-Small         1       10752       75        204      278
+
+  Chaque ligne est une requete compilee et executee par l entrepot virtuel,
+  pas par ce processus Python.

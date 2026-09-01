@@ -1,0 +1,43 @@
+# Preuve c12 : Schema de donnees : les 8 controles applicatifs, second filet d'integrite
+#
+# Criteres de la grille : 10, 12 (voir docs/plan_soutenance.md)
+# Reseau requis        : oui
+# Capture le           : 01/09/2026 08:46 UTC
+# Code de sortie       : 0
+#
+# Commande :
+#   MSYS_NO_PATHCONV=1 docker compose --profile outillage run --rm snowflake-cli python /projet/entrepot/verifier_gold.py 2>&1
+#
+# --------------------------------------------------------------------------
+
+ Container gamelens-postgres  Running
+Volumetrie de la couche Gold
+
+  mart.dim_games                      15 ligne(s)
+  mart.dim_stores                      1 ligne(s)
+  mart.fact_popularity_history        75 ligne(s)
+  mart.fact_prices                   180 ligne(s)
+
+Controles d'integrite, attendu 0 pour chacun
+
+  [PASS] dim_games sans nom unifie                      0
+  [PASS] dim_games en doublon sur steam_appid           0
+  [PASS] fact_prices avec un prix negatif ou nul        0
+  [PASS] fact_popularity_history orpheline de dim_games 0
+  [PASS] fact_prices orpheline de dim_games             0
+  [PASS] doublons sur le grain (game_id, day)           0
+  [PASS] popularite moyenne negative                    0
+  [PASS] metacritic_score hors bornes 0-100             0
+
+Extrait de la vue de restitution
+
+  Stardew Valley       2026-08-19  88561.00
+  Stardew Valley       2026-08-27  73362.40
+  Stardew Valley       2026-08-31  67225.76
+
+  3 titre(s) en promotion parmi les extraits :
+    Vampire Survivors    3.74 EUR
+    Celeste              4.74 EUR
+    Cult of the Lamb     9.19 EUR
+
+8 controles d'integrite au vert.

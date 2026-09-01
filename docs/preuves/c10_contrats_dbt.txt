@@ -1,0 +1,83 @@
+# Preuve c10 : Schema de donnees : les 29 contrats declaratifs dbt sur la couche Gold
+#
+# Criteres de la grille : 10, 12 (voir docs/plan_soutenance.md)
+# Reseau requis        : oui
+# Capture le           : 01/09/2026 08:46 UTC
+# Code de sortie       : 0
+#
+# Commande :
+#   MSYS_NO_PATHCONV=1 docker compose --profile outillage run --rm snowflake-cli dbt test --project-dir /projet/dbt --profiles-dir /projet/dbt 2>&1
+#
+# --------------------------------------------------------------------------
+
+ Container gamelens-postgres  Running
+[0m08:46:20  Running with dbt=1.12.2
+[0m08:46:22  Registered adapter: snowflake=1.12.0
+[0m08:46:24  Found 1 model, 29 data tests, 4 sources, 661 macros
+[0m08:46:24  
+[0m08:46:24  Concurrency: 4 threads (target='local')
+[0m08:46:24  
+[0m08:46:26  1 of 29 START test dbt_utils_source_expression_is_true_gold_dim_games_metacritic_score__between_0_and_100  [RUN]
+[0m08:46:26  2 of 29 START test dbt_utils_source_expression_is_true_gold_fact_popularity_history_avg_player_count___0  [RUN]
+[0m08:46:26  3 of 29 START test dbt_utils_source_expression_is_true_gold_fact_prices_price___0  [RUN]
+[0m08:46:26  4 of 29 START test dbt_utils_source_unique_combination_of_columns_gold_fact_popularity_history_game_id__day  [RUN]
+[0m08:46:27  1 of 29 PASS dbt_utils_source_expression_is_true_gold_dim_games_metacritic_score__between_0_and_100  [[32mPASS[0m in 1.05s]
+[0m08:46:27  5 of 29 START test dbt_utils_source_unique_combination_of_columns_gold_fact_prices_game_id__store_id__collected_at  [RUN]
+[0m08:46:27  3 of 29 PASS dbt_utils_source_expression_is_true_gold_fact_prices_price___0 .... [[32mPASS[0m in 1.08s]
+[0m08:46:27  6 of 29 START test dbt_utils_unique_combination_of_columns_v_popularity_dashboard_game_id__day  [RUN]
+[0m08:46:27  2 of 29 PASS dbt_utils_source_expression_is_true_gold_fact_popularity_history_avg_player_count___0  [[32mPASS[0m in 1.17s]
+[0m08:46:27  7 of 29 START test not_null_v_popularity_dashboard_day ......................... [RUN]
+[0m08:46:27  4 of 29 PASS dbt_utils_source_unique_combination_of_columns_gold_fact_popularity_history_game_id__day  [[32mPASS[0m in 1.21s]
+[0m08:46:27  8 of 29 START test not_null_v_popularity_dashboard_game_id ..................... [RUN]
+[0m08:46:27  5 of 29 PASS dbt_utils_source_unique_combination_of_columns_gold_fact_prices_game_id__store_id__collected_at  [[32mPASS[0m in 0.28s]
+[0m08:46:27  9 of 29 START test not_null_v_popularity_dashboard_unified_name ................ [RUN]
+[0m08:46:27  7 of 29 PASS not_null_v_popularity_dashboard_day ............................... [[32mPASS[0m in 0.22s]
+[0m08:46:27  6 of 29 PASS dbt_utils_unique_combination_of_columns_v_popularity_dashboard_game_id__day  [[32mPASS[0m in 0.30s]
+[0m08:46:27  10 of 29 START test source_accepted_values_gold_dim_stores_source_type__api__scraping  [RUN]
+[0m08:46:27  11 of 29 START test source_not_null_gold_dim_games_game_id ..................... [RUN]
+[0m08:46:27  8 of 29 PASS not_null_v_popularity_dashboard_game_id ........................... [[32mPASS[0m in 0.26s]
+[0m08:46:27  12 of 29 START test source_not_null_gold_dim_games_unified_name ................ [RUN]
+[0m08:46:27  9 of 29 PASS not_null_v_popularity_dashboard_unified_name ...................... [[32mPASS[0m in 0.21s]
+[0m08:46:27  13 of 29 START test source_not_null_gold_dim_stores_name ....................... [RUN]
+[0m08:46:28  11 of 29 PASS source_not_null_gold_dim_games_game_id ........................... [[32mPASS[0m in 0.23s]
+[0m08:46:28  14 of 29 START test source_not_null_gold_dim_stores_store_id ................... [RUN]
+[0m08:46:28  10 of 29 PASS source_accepted_values_gold_dim_stores_source_type__api__scraping  [[32mPASS[0m in 0.28s]
+[0m08:46:28  12 of 29 PASS source_not_null_gold_dim_games_unified_name ...................... [[32mPASS[0m in 0.20s]
+[0m08:46:28  15 of 29 START test source_not_null_gold_fact_popularity_history_day ........... [RUN]
+[0m08:46:28  16 of 29 START test source_not_null_gold_fact_popularity_history_game_id ....... [RUN]
+[0m08:46:28  13 of 29 PASS source_not_null_gold_dim_stores_name ............................. [[32mPASS[0m in 0.21s]
+[0m08:46:28  17 of 29 START test source_not_null_gold_fact_prices_currency .................. [RUN]
+[0m08:46:28  14 of 29 PASS source_not_null_gold_dim_stores_store_id ......................... [[32mPASS[0m in 0.19s]
+[0m08:46:28  18 of 29 START test source_not_null_gold_fact_prices_game_id ................... [RUN]
+[0m08:46:28  15 of 29 PASS source_not_null_gold_fact_popularity_history_day ................. [[32mPASS[0m in 0.21s]
+[0m08:46:28  16 of 29 PASS source_not_null_gold_fact_popularity_history_game_id ............. [[32mPASS[0m in 0.22s]
+[0m08:46:28  19 of 29 START test source_not_null_gold_fact_prices_price ..................... [RUN]
+[0m08:46:28  20 of 29 START test source_not_null_gold_fact_prices_price_id .................. [RUN]
+[0m08:46:28  17 of 29 PASS source_not_null_gold_fact_prices_currency ........................ [[32mPASS[0m in 0.20s]
+[0m08:46:28  21 of 29 START test source_not_null_gold_fact_prices_store_id .................. [RUN]
+[0m08:46:28  18 of 29 PASS source_not_null_gold_fact_prices_game_id ......................... [[32mPASS[0m in 0.16s]
+[0m08:46:28  22 of 29 START test source_relationships_gold_fact_popularity_history_game_id__game_id__source_gold_dim_games_  [RUN]
+[0m08:46:28  19 of 29 PASS source_not_null_gold_fact_prices_price ........................... [[32mPASS[0m in 0.23s]
+[0m08:46:28  20 of 29 PASS source_not_null_gold_fact_prices_price_id ........................ [[32mPASS[0m in 0.22s]
+[0m08:46:28  23 of 29 START test source_relationships_gold_fact_prices_game_id__game_id__source_gold_dim_games_  [RUN]
+[0m08:46:28  24 of 29 START test source_relationships_gold_fact_prices_store_id__store_id__source_gold_dim_stores_  [RUN]
+[0m08:46:28  21 of 29 PASS source_not_null_gold_fact_prices_store_id ........................ [[32mPASS[0m in 0.25s]
+[0m08:46:28  25 of 29 START test source_unique_gold_dim_games_game_id ....................... [RUN]
+[0m08:46:28  22 of 29 PASS source_relationships_gold_fact_popularity_history_game_id__game_id__source_gold_dim_games_  [[32mPASS[0m in 0.26s]
+[0m08:46:28  26 of 29 START test source_unique_gold_dim_games_steam_appid ................... [RUN]
+[0m08:46:28  24 of 29 PASS source_relationships_gold_fact_prices_store_id__store_id__source_gold_dim_stores_  [[32mPASS[0m in 0.28s]
+[0m08:46:28  27 of 29 START test source_unique_gold_dim_stores_name ......................... [RUN]
+[0m08:46:28  25 of 29 PASS source_unique_gold_dim_games_game_id ............................. [[32mPASS[0m in 0.24s]
+[0m08:46:28  28 of 29 START test source_unique_gold_dim_stores_store_id ..................... [RUN]
+[0m08:46:28  26 of 29 PASS source_unique_gold_dim_games_steam_appid ......................... [[32mPASS[0m in 0.21s]
+[0m08:46:28  29 of 29 START test source_unique_gold_fact_prices_price_id .................... [RUN]
+[0m08:46:28  23 of 29 PASS source_relationships_gold_fact_prices_game_id__game_id__source_gold_dim_games_  [[32mPASS[0m in 0.37s]
+[0m08:46:29  27 of 29 PASS source_unique_gold_dim_stores_name ............................... [[32mPASS[0m in 0.23s]
+[0m08:46:29  28 of 29 PASS source_unique_gold_dim_stores_store_id ........................... [[32mPASS[0m in 0.22s]
+[0m08:46:29  29 of 29 PASS source_unique_gold_fact_prices_price_id .......................... [[32mPASS[0m in 0.18s]
+[0m08:46:29  
+[0m08:46:29  Finished running 29 data tests in 0 hours 0 minutes and 5.62 seconds (5.62s).
+[0m08:46:29  
+[0m08:46:29  [32mCompleted successfully[0m
+[0m08:46:29  
+[0m08:46:29  Done. PASS=29 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=29

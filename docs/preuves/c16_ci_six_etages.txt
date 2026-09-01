@@ -1,0 +1,132 @@
+# Preuve c16 : CI/CD : les 6 etages du dernier run, avec leur duree et leur conclusion
+#
+# Criteres de la grille : 16 (voir docs/plan_soutenance.md)
+# Reseau requis        : oui
+# Capture le           : 01/09/2026 08:46 UTC
+# Code de sortie       : 0
+#
+# Commande :
+#   fonction Python _etages_ci() de cet outil
+#
+# --------------------------------------------------------------------------
+
+Run 33480847163, 2026-09-01T07:10:14Z
+  Plan minute de la soutenance, trace sur les 31 sous-criteres de la gr…
+
+
+✓ master CI · 33480847163
+Triggered via push about 1 hour ago
+
+JOBS
+✓ Tests unitaires in 25s (ID 99769912299)
+✓ Qualite du code in 13s (ID 99769912432)
+✓ Integrite du DAG Airflow in 1m14s (ID 99769912917)
+✓ Recette de l'entrepot Snowflake in 2m23s (ID 99770035259)
+✓ Integration sur infrastructure reelle in 1m35s (ID 99770035272)
+✓ Publication de l'image in 1m18s (ID 99770627711)
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Tests unitaires: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Qualite du code: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Integrite du DAG Airflow: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Recette de l'entrepot Snowflake: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Integration sur infrastructure reelle: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, docker/build-push-action@v6, docker/login-action@v3. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Publication de l'image: .github#2
+
+
+ARTIFACTS
+Mael8zinsou~gamelens-bloc4_0~PPABXS.dockerbuild
+rapport-tests
+
+For more information about a job, try: gh run view --job=<job-id>
+View this run on GitHub: https://github.com/Mael8zinsou/gamelens-bloc4_0/actions/runs/33480847163
+
+
+--- etapes de chaque etage ---
+
+=== Tests unitaires : success ===
+  success  Set up job
+  success  Run actions/checkout@v4
+  success  Run actions/setup-python@v5
+  success  Installer les dependances
+  success  Executer les tests
+  success  Conserver le rapport de tests
+  success  Post Run actions/setup-python@v5
+  success  Post Run actions/checkout@v4
+  success  Complete job
+
+=== Qualite du code : success ===
+  success  Set up job
+  success  Run actions/checkout@v4
+  success  Run actions/setup-python@v5
+  success  Installer les outils de qualite
+  success  Lint
+  success  Format
+  success  Post Run actions/setup-python@v5
+  success  Post Run actions/checkout@v4
+  success  Complete job
+
+=== Integrite du DAG Airflow : success ===
+  success  Set up job
+  success  Run actions/checkout@v4
+  success  Construire l'image Airflow du projet
+  success  Verifier que les DAG s'analysent sans erreur
+  success  Post Run actions/checkout@v4
+  success  Complete job
+
+=== Recette de l'entrepot Snowflake : success ===
+  success  Set up job
+  success  Run actions/checkout@v4
+  success  Run actions/setup-python@v5
+  success  Verifier la presence des identifiants
+  success  Installer l'outillage Snowflake
+  success  Executer la recette sur une base jetable
+  success  Verifier que le dictionnaire de la couche Gold est a jour
+  success  Supprimer la base jetable restee en place
+  success  Post Run actions/setup-python@v5
+  success  Post Run actions/checkout@v4
+  success  Complete job
+
+=== Integration sur infrastructure reelle : success ===
+  success  Set up job
+  success  Run actions/checkout@v4
+  success  Run actions/setup-python@v5
+  success  Installer les dependances
+  success  Demarrer le socle PostgreSQL et Kafka
+  success  Attendre que le socle soit sain
+  success  Verifier l'initialisation des schemas
+  success  Tests de securite sur les roles
+  success  Executer le pipeline temps reel de bout en bout
+  success  Verifier le resultat en base
+  success  Verifier que la couche Bronze a archive la collecte
+  success  Verifier que le dictionnaire de donnees est a jour
+  success  Verifier l'idempotence du puits
+  success  Verifier le moteur d'alertes
+  skipped  Journaux en cas d'echec
+  success  Arreter le socle
+  success  Post Run actions/setup-python@v5
+  success  Post Run actions/checkout@v4
+  success  Complete job
+
+=== Publication de l'image : success ===
+  success  Set up job
+  success  Run actions/checkout@v4
+  success  Normaliser le nom du depot en minuscules
+  success  S'authentifier aupres du registre GitHub
+  success  Construire et publier l'image Airflow
+  success  Recapitulatif
+  success  Post Construire et publier l'image Airflow
+  success  Post S'authentifier aupres du registre GitHub
+  success  Post Run actions/checkout@v4
+  success  Complete job

@@ -1,0 +1,60 @@
+# Preuve c26 : Cahier de recettes : les tests automatises, tels que la CI les lance
+#
+# Criteres de la grille : 26, 27 (voir docs/plan_soutenance.md)
+# Reseau requis        : non
+# Capture le           : 01/09/2026 08:45 UTC
+# Code de sortie       : 0
+#
+# Commande :
+#   C:\Users\maelz\AppData\Local\Programs\Python\Python312\python.exe -m pytest tests -v
+#
+# --------------------------------------------------------------------------
+
+============================= test session starts =============================
+platform win32 -- Python 3.12.5, pytest-8.3.3, pluggy-1.5.0 -- C:\Users\maelz\AppData\Local\Programs\Python\Python312\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\maelz\Downloads\Documents\Formalit�s_Officiels\Dossier YNOV\Certification\Bloc 4\GameLens 0
+plugins: anyio-4.9.0, cov-6.0.0, mock-3.14.0
+collecting ... collected 39 items
+
+tests/test_securite_roles.py::test_cloisonnement_des_roles[dashboard_viewer-lire_la_vue_de_restitution_Gold-autorise] PASSED [  2%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[dashboard_viewer-lire_l_agregat_journalier_Silver-autorise] PASSED [  5%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[dashboard_viewer-lire_la_table_de_faits_Gold-refuse] PASSED [  7%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[dashboard_viewer-lire_la_dimension_Gold-refuse] PASSED [ 10%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[dashboard_viewer-lire_les_evenements_bruts_Silver-refuse] PASSED [ 12%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[dashboard_viewer-ecrire_dans_le_journal_d_execution-refuse] PASSED [ 15%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[analyst-lire_la_table_de_faits_Gold-autorise] PASSED [ 17%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[analyst-lire_les_evenements_bruts_Silver-autorise] PASSED [ 20%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[analyst-ecrire_dans_le_journal_d_execution-refuse] PASSED [ 23%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[analyst-supprimer_des_evenements-refuse] PASSED [ 25%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[etl_service-lire_la_table_de_faits_Gold-autorise] PASSED [ 28%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[etl_service-ecrire_dans_le_journal_d_execution-autorise] PASSED [ 30%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[etl_service-supprimer_des_evenements-refuse] PASSED [ 33%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[etl_service-lire_l_archive_Bronze-autorise] PASSED [ 35%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[etl_service-modifier_une_ligne_d_archive-refuse] PASSED [ 38%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[etl_service-supprimer_une_ligne_d_archive-refuse] PASSED [ 41%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[analyst-lire_l_archive_Bronze-autorise] PASSED [ 43%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[analyst-lire_la_sante_des_sources-autorise] PASSED [ 46%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[analyst-modifier_une_ligne_d_archive-refuse] PASSED [ 48%]
+tests/test_securite_roles.py::test_cloisonnement_des_roles[dashboard_viewer-lire_l_archive_Bronze-refuse] PASSED [ 51%]
+tests/test_steam_prices.py::test_tarif_plein_converti_en_euros PASSED    [ 53%]
+tests/test_steam_prices.py::test_tarif_en_promotion PASSED               [ 56%]
+tests/test_steam_prices.py::test_jeu_sans_tarif_expose_est_archive_avec_son_motif PASSED [ 58%]
+tests/test_steam_prices.py::test_reponse_en_echec_est_archivee_avec_son_motif PASSED [ 61%]
+tests/test_steam_prices.py::test_tarif_exploitable_porte_la_reponse_complete PASSED [ 64%]
+tests/test_steam_prices.py::test_prix_initial_absent_retombe_sur_le_prix_final PASSED [ 66%]
+tests/test_steam_prices.py::test_conversion_centimes_vers_euros[0-0.0] PASSED [ 69%]
+tests/test_steam_prices.py::test_conversion_centimes_vers_euros[99-0.99] PASSED [ 71%]
+tests/test_steam_prices.py::test_conversion_centimes_vers_euros[100-1.0] PASSED [ 74%]
+tests/test_steam_prices.py::test_conversion_centimes_vers_euros[123456-1234.56] PASSED [ 76%]
+tests/test_steam_producer.py::test_reponse_exploitable_porte_le_compte_et_la_charge PASSED [ 79%]
+tests/test_steam_producer.py::test_appid_inconnu_est_rejete_avec_son_motif PASSED [ 82%]
+tests/test_steam_producer.py::test_succes_annonce_sans_le_champ_attendu PASSED [ 84%]
+tests/test_steam_producer.py::test_zero_joueur_reste_une_valeur_exploitable PASSED [ 87%]
+tests/test_watchlist.py::test_watchlist_non_vide PASSED                  [ 89%]
+tests/test_watchlist.py::test_champs_obligatoires_presents PASSED        [ 92%]
+tests/test_watchlist.py::test_appid_uniques PASSED                       [ 94%]
+tests/test_watchlist.py::test_appid_sont_des_entiers_positifs PASSED     [ 97%]
+tests/test_watchlist.py::test_noms_unifies_uniques PASSED                [100%]
+
+============================= 39 passed in 2.62s ==============================

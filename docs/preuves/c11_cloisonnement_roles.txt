@@ -1,0 +1,24 @@
+# Preuve c11 : Modalites d'acces : dashboard_viewer refuse sur une table de faits, servi par la vue
+#
+# Criteres de la grille : 11 (voir docs/plan_soutenance.md)
+# Reseau requis        : non
+# Capture le           : 01/09/2026 08:45 UTC
+# Code de sortie       : 0
+#
+# Commande :
+#   echo '--- 1. dashboard_viewer tente de lire une table de faits ---'; docker exec gamelens-postgres psql -U dashboard_viewer -d gamelens -c 'SELECT count(*) FROM mart.fact_prices;' 2>&1; echo; echo '--- 2. la vue de restitution lui repond ---'; docker exec gamelens-postgres psql -U dashboard_viewer -d gamelens -c 'SELECT unified_name, day, avg_player_count FROM mart.v_popularity_dashboard ORDER BY day DESC, avg_player_count DESC LIMIT 5;' 2>&1
+#
+# --------------------------------------------------------------------------
+
+--- 1. dashboard_viewer tente de lire une table de faits ---
+ERROR:  permission denied for table fact_prices
+
+--- 2. la vue de restitution lui repond ---
+  unified_name  |    day     | avg_player_count 
+----------------+------------+------------------
+ Stardew Valley | 2026-09-01 |         42874.00
+ Terraria       | 2026-09-01 |         33933.00
+ RimWorld       | 2026-09-01 |         20526.00
+ Factorio       | 2026-09-01 |         10515.00
+ Balatro        | 2026-09-01 |          5451.00
+(5 rows)
