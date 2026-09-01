@@ -247,6 +247,14 @@ remise à plat de la section de référentiel ci-dessus et des trois README.
 - **`bronze.reponses_brutes` n'accorde aucun UPDATE ni DELETE**, pas même à
   `etl_service`. Une archive modifiable n'est plus une archive. Ne pas
   « corriger » ce qui ressemble à un oubli de droits : c'est testé (TBRZ-04).
+- **Le schéma de données en diagramme est GÉNÉRÉ** par
+  `outils/generer_schema.py` vers `docs/annexes/schema_donnees.md` : colonnes,
+  types et contraintes lus dans le catalogue Snowflake, cibles des clefs
+  étrangères lues dans le DDL parce que le catalogue ne les expose pas
+  (`SHOW IMPORTED KEYS` refusé, `key_column_usage` inexistant chez ce moteur).
+  Les deux sources sont recoupées sur le nombre de contraintes par type, et la
+  génération s'arrête si elles divergent. La matrice de droits de la section 3
+  est lue en direct par `SHOW GRANTS`.
 - **Les dictionnaires de `docs/annexes/` sont GÉNÉRÉS, jamais édités à la main.**
   Source : les `COMMENT ON` des fichiers de `sql/`. Après toute modification de
   schéma, lancer `python outils/generer_dictionnaire.py` (et `--cible snowflake`

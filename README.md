@@ -146,6 +146,8 @@ couche de demonstration sans message d'erreur. Passer par
 | `dbt/` | Projet dbt : 4 sources et 1 modele, 29 contrats declaratifs au total (25 portes par les sources, 4 par le modele) |
 | `supervision/` | Moteur d'alertes et verification du tableau de bord |
 | `outils/generer_dictionnaire.py` | Generateur des dictionnaires de donnees, depuis le catalogue des bases |
+| `outils/generer_schema.py` | Generateur du schema de donnees en diagramme, catalogue et DDL recoupes |
+| `outils/capturer_preuves.py` | Captures datees et rejouables des sorties reelles, vers `docs/preuves/` |
 | `docker/grafana/` | Source de donnees et tableau de bord provisionnes comme code |
 | `docker/snowflake/` | Image d'outillage Snowflake, isolee des dependances d'ingestion |
 | `secrets/` | Cle privee Snowflake, ignoree par git |
@@ -163,7 +165,8 @@ couche de demonstration sans message d'erreur. Passer par
 | `docs/journal_incidents.md` | Journal d'incidents, format impose par la grille C4.4.2 |
 | `docs/observations.md` | Observations de session : surprises, fausses pistes, arbitrages |
 | `docs/commandes_successives.md` | Trace chronologique des commandes reellement executees |
-| `docs/annexes/` | Dictionnaires de donnees, GENERES depuis le catalogue des bases |
+| `docs/annexes/` | Dictionnaires de donnees et schema en diagramme, GENERES depuis le catalogue |
+| `docs/preuves/` | Sorties reelles capturees, avec leur en-tete de provenance |
 | `docs/vulgarisation/` | Deux versions vulgarisees du projet, pour un junior et pour un non-specialiste |
 
 Les dictionnaires de `docs/annexes/` ne s'editent pas a la main : ils sont
