@@ -1,0 +1,928 @@
+# Support de soutenance, Bloc 4
+
+Soutenance du **vendredi 11/09/2026**, 30 minutes de présentation puis 15
+d'échange. Dépôt sur DigiformaCertif le **mercredi 09/09**.
+
+## Ce fichier est la source, le PPTX en est une sortie
+
+`outils/generer_support.py` lit ce fichier et produit
+`docs/support_soutenance.pptx`. L'inverse n'est pas vrai : une retouche faite
+dans PowerPoint est perdue à la régénération suivante.
+
+Deux usages, et c'est volontaire :
+
+- **régénérer** le PPTX après une correction ici, ou après avoir déposé les
+  captures d'écran manquantes dans `docs/captures/` ;
+- **reconstruire** le deck entièrement à la main à partir de ce seul fichier, si
+  le générateur venait à ne plus tourner ou si tu préfères finir dans
+  PowerPoint. Tout ce qui est à l'écran et tout ce qui se dit est ici.
+
+## Comment lire une diapositive
+
+Chaque diapositive porte un bloc de métadonnées, puis ses puces, puis les notes
+de ce qui se dit. Les notes atterrissent dans le volet commentaire du PPTX.
+
+- `minute` : instant de début, cumulé depuis le début de la présentation.
+- `criteres` : les numéros du tableau de traçabilité de
+  `docs/plan_soutenance.md`. C'est ce que le jury coche.
+- `densite` : `sobre` sur ce qui se commente en direct, le jury écoute ;
+  `dense` sur ce qui porte une preuve ou un tableau qu'il voudra relire.
+- `visuel` : chemin d'image, ou `capture:<identifiant>` pour un emplacement
+  réservé. Les emplacements réservés sont listés à la fin de ce fichier.
+
+---
+
+## D01. GameLens, concevoir et opérer une infrastructure data
+
+    minute: 00:00
+    duree: 0:20
+    competence: -
+    criteres: -
+    densite: sobre
+    visuel: -
+
+### Puces
+
+- Maël Mike ZINSOU, M2 Data Engineer, Paris YNOV Campus
+- RNCP39586, Bloc 4 : concevoir et opérer une infrastructure data
+- Kestrel Interactive, éditeur de jeux vidéo indépendant
+
+### Notes
+
+Ne pas lire la diapositive. Se présenter en une phrase et enchaîner.
+
+---
+
+## D02. Ce que je vais montrer, dans cet ordre
+
+    minute: 00:20
+    duree: 0:40
+    competence: -
+    criteres: -
+    densite: dense
+    visuel: -
+
+### Puces
+
+- 1. Le besoin, l'existant, les contraintes
+- 2. Les composants retenus et leur coût
+- 3. Le schéma de données
+- 4. Les pipelines, trois méthodes
+- 5. L'intégration et le déploiement continus
+- 6. La supervision et les alertes
+- 7. La feuille de route d'exploitation
+- 8. La documentation technique
+- 9. Le cahier de recettes
+- 10. Un incident réel et sa méthode d'investigation
+
+### Notes
+
+Quarante secondes qui font gagner du temps au jury pendant les vingt-neuf
+minutes suivantes : deux professionnels avec une grille en main peuvent cocher
+au fil de l'eau au lieu de chercher. Dire explicitement : « les dix livrables
+attendus, dans l'ordre de la grille ».
+
+Trois démonstrations en direct sont annoncées ici, pour qu'elles ne surprennent
+pas : le cloisonnement des rôles, l'orchestrateur, le tableau de bord.
+
+---
+
+## D03. Le besoin de Kestrel Interactive
+
+    minute: 01:00
+    duree: 1:00
+    competence: C4.1.1
+    criteres: 1, 2
+    densite: dense
+    visuel: -
+
+### Puces
+
+- Éditeur indépendant, une quinzaine de titres au catalogue
+- B1 : suivre la popularité jouée et diffusée, jour après jour
+- B2 : suivre la tarification, la sienne et celle du panel concurrent
+- B3 : garder l'historique, pour comparer une sortie aux précédentes
+- L'enjeu n'est pas la donnée, c'est de décider quand sortir et à quel prix
+
+### Notes
+
+Insister sur B3, qui est l'enjeu réel : les trois besoins se traduisent en une
+exigence technique unique, disposer d'un historique que l'on possède. C'est ce
+qui va tout déterminer ensuite, y compris l'arbitrage de la diapositive
+suivante.
+
+---
+
+## D04. L'existant, et pourquoi ne pas simplement acheter
+
+    minute: 02:00
+    duree: 0:50
+    competence: C4.1.1
+    criteres: 5, 2
+    densite: dense
+    visuel: -
+
+### Puces
+
+- Ce que font bien les outils du marché : couverture, fraîcheur, zéro exploitation
+- GameDiscoverCo Pro, StreamsCharts Pro : abonnements par siège
+- Ce qu'ils ne donnent pas : l'historique reste chez eux
+- Résilier, c'est perdre la série temporelle accumulée
+- L'arbitrage se joue sur la propriété de l'historique, pas sur le prix
+
+### Notes
+
+Commencer par ce que les outils du marché font **bien**. Un état de l'existant
+qui ne dit que du mal n'est pas une analyse, c'est une justification.
+
+Ne pas chiffrer la comparaison : leurs tarifs dépendent de paliers dont ce
+projet n'a pas connaissance, et inventer un nombre pour faire pencher la
+balance décrédibiliserait le reste. Le dire si la question vient.
+
+---
+
+## D05. L'environnement et les contraintes
+
+    minute: 02:50
+    duree: 0:40
+    competence: C4.1.1
+    criteres: 3, 4
+    densite: sobre
+    visuel: -
+
+### Puces
+
+- Quatre sources : RAWG, Steam fréquentation, Steam tarifs, Twitch
+- Aucune ne diffuse de flux : on échantillonne, on ne s'abonne pas
+- Volumétrie mesurée : 78 octets par relevé de fréquentation, 238 par relevé tarifaire
+- Environ 41 Mo par an, ce qui écarte d'emblée toute solution dimensionnée pour le volume
+- Contraintes : un seul poste, aucun budget d'infrastructure, une échéance de soutenance
+
+### Notes
+
+La contrainte structurante n'est pas le volume, c'est que **les sources ne
+diffusent pas de flux**. Le « temps réel » de ce projet est un échantillonnage
+périodique, et il faut le dire soi-même avant que le jury ne le demande.
+
+Les 41 Mo par an justifient à eux seuls beaucoup de choix ultérieurs, dont la
+couche Bronze en PostgreSQL plutôt qu'en stockage objet.
+
+---
+
+## D06. Les composants retenus
+
+    minute: 03:30
+    duree: 1:10
+    competence: C4.1.2
+    criteres: 6, 7
+    densite: dense
+    visuel: -
+
+### Puces
+
+- Ingestion : Python, et Kafka en mode KRaft comme tampon durable
+- Silver speed : PostgreSQL 16, la donnée récente et nettoyée
+- Gold : Snowflake, cible de production, plus un prototype PostgreSQL gardé comme repli
+- Orchestration : Airflow 3.1.8, en conteneurs
+- Calcul distribué : Snowpark, et non Spark
+- Transformation et contrats : dbt
+- Supervision : indicateurs en SQL, Grafana pour l'affichage
+
+### Notes
+
+Pour chaque composant, une phrase sur l'alternative écartée. Kafka plutôt qu'une
+file légère parce que le rejeu des offsets est ce qui prouve l'idempotence.
+Snowpark plutôt que Spark : y revenir en section 4, ne pas s'y attarder ici.
+
+Ne pas réciter le tableau. Le jury lit plus vite qu'on ne parle.
+
+---
+
+## D07. Points de vigilance : la dépendance fournisseur
+
+    minute: 04:40
+    duree: 0:50
+    competence: C4.1.2
+    criteres: 8
+    densite: dense
+    visuel: -
+
+### Puces
+
+- Faible sur Kafka, PostgreSQL, dbt : standards ouverts, réversibles
+- Modérée sur Airflow et l'intégration continue : le code est portable, pas la plomberie
+- Forte sur Snowflake, et sur lui seul : SQL propriétaire, Snowpark, facturation à l'usage
+- Atténuation assumée : le prototype PostgreSQL du Gold est maintenu et alimenté
+- Ce n'est pas un plan de sortie, c'est un chemin de repli documenté
+
+### Notes
+
+Le critère nomme explicitement le vendor lock-in. Répondre composant par
+composant, pas globalement : une réponse globale ne prouve pas qu'on a regardé.
+
+La dernière puce est importante : ne pas prétendre qu'on pourrait quitter
+Snowflake en une journée. Dire ce que le repli couvre et ce qu'il ne couvre pas.
+
+---
+
+## D08. Les coûts, mesurés et non estimés
+
+    minute: 05:30
+    duree: 1:00
+    competence: C4.1.2
+    criteres: 9
+    densite: dense
+    visuel: capture:snowsight_credits
+
+### Puces
+
+- 2,1566 crédits consommés en 12 jours, relevés dans l'historique de facturation
+- gamelens_wh : 1,4663 crédit. Dimensionné XS, suspension automatique à 60 secondes
+- COMPUTE_WH, l'entrepôt par défaut jamais configuré : 0,6899, soit 32 % au 31/08
+- Au rythme mesuré, les 108 jours restants coûtent une vingtaine de crédits sur 400
+- Ce n'est donc pas le budget qui contraint, c'est la date d'expiration du compte
+
+### Notes
+
+Le mot qui compte est **mesuré**. Beaucoup de candidats estiment ; l'historique
+de facturation existe et se lit.
+
+L'aveu sur COMPUTE_WH est volontaire : un entrepôt que personne n'utilise
+volontairement pèse un tiers de la facture. C'est le genre de détail qui montre
+qu'on a regardé pour de vrai, et il amène naturellement la feuille de route.
+
+Citer la mesure avec sa date. Le pourcentage seul serait trompeur : la
+consommation absolue de COMPUTE_WH a augmenté, c'est sa part qui recule.
+
+---
+
+## D09. Le schéma de données
+
+    minute: 06:30
+    duree: 1:10
+    competence: C4.2.1
+    criteres: 10, 12
+    densite: sobre
+    visuel: annexes/schema_donnees.png
+
+### Puces
+
+- Modèle en étoile : deux dimensions, deux tables de faits, une vue de restitution
+- Grain journalier pour la popularité, grain (jeu, boutique, instant) pour les prix
+- Colonnes larges plutôt qu'un modèle entité-attribut-valeur
+- Clé primaire interne en UUID, indépendante des identifiants sources
+- Ce schéma est généré depuis le catalogue, il ne peut pas dériver du réel
+
+### Notes
+
+Compétence éliminatoire. Laisser le schéma à l'écran et le commenter, sans lire
+les colonnes.
+
+Justifier les colonnes larges : les indicateurs suivis sont connus et peu
+nombreux, un EAV coûterait une jointure à chaque lecture pour une souplesse dont
+personne n'a besoin ici.
+
+La dernière puce mérite dix secondes : le diagramme est produit par
+`outils/generer_schema.py` à partir du catalogue Snowflake. Un schéma dessiné à
+la main ment tôt ou tard.
+
+---
+
+## D10. Les modalités d'accès, démontrées
+
+    minute: 07:40
+    duree: 0:50
+    competence: C4.2.1
+    criteres: 11
+    densite: sobre
+    visuel: direct:cloisonnement_roles
+
+### Puces
+
+- Quatre rôles, hérités du Bloc 1 : admin, etl_service, analyst, dashboard_viewer
+- dashboard_viewer ne voit qu'une vue, jamais les tables de faits
+- Démonstration : la même requête, refusée puis servie
+
+### Notes
+
+**DIRECT 1**, environ quarante secondes, entièrement local, aucun réseau requis.
+
+Deux commandes préparées dans un terminal déjà ouvert, police agrandie :
+
+1. `dashboard_viewer` interroge `mart.fact_prices` : `permission denied for
+   table fact_prices`
+2. le même rôle interroge `mart.v_popularity_dashboard` : trois lignes de
+   données du jour
+
+Dire pendant que ça tourne : « le cloisonnement se prouve mieux par un refus que
+par une matrice de droits ».
+
+Repli : `docs/preuves/c11_cloisonnement_roles.txt`, à la diapositive suivante du
+PPTX. Si le direct ne répond pas en dix secondes, passer au repli sans commenter.
+
+---
+
+## D11. Ce que Snowflake n'applique pas
+
+    minute: 08:30
+    duree: 1:00
+    competence: C4.2.1
+    criteres: 10, 12
+    densite: dense
+    visuel: -
+
+### Puces
+
+- Snowflake accepte CHECK, FOREIGN KEY, PRIMARY KEY et UNIQUE, et ne les applique pas
+- Seules les contraintes portées par la colonne sont opposables : NOT NULL, type, longueur
+- Vérifié empiriquement, pas lu dans une documentation : sql/verify_snowflake_constraints.sql
+- L'intégrité est donc reportée hors du moteur, sur deux filets
+- 29 contrats déclaratifs dbt, et 8 contrôles applicatifs, rejoués à chaque push
+- Les deux sont éprouvés en négatif sur le même jeu de données fautif
+
+### Notes
+
+C'est le point technique le plus fort du projet. Le présenter comme un **choix
+d'architecture assumé**, pas comme une découverte subie.
+
+Si la question « pourquoi deux filets et pas un seul ? » vient : ils ne
+contrôlent pas la même chose. dbt contrôle la forme des données, déclarativement
+et sur les quatre tables. `verifier_gold.py` contrôle des invariants métier que
+dbt n'exprime pas, et il tourne sans dbt. La recette d'intégration continue leur
+soumet le même jeu fautif pour vérifier qu'ils restent d'accord.
+
+---
+
+## D12. Trois méthodes de traitement, annoncées
+
+    minute: 09:30
+    duree: 0:30
+    competence: C4.2.2
+    criteres: 13, 14, 15
+    densite: sobre
+    visuel: -
+
+### Puces
+
+- Un pipeline temps réel : Steam vers Kafka vers PostgreSQL
+- Un orchestrateur : Airflow, quatre DAG
+- Un calcul distribué : Snowpark, sur le compute Snowflake
+
+### Notes
+
+Trente secondes d'annonce, pour que le jury sache que les trois méthodes exigées
+arrivent et dans quel ordre. Compétence éliminatoire : c'est la section à ne
+jamais sacrifier si le temps déborde.
+
+---
+
+## D13. Méthode 1, le pipeline temps réel
+
+    minute: 10:00
+    duree: 1:20
+    competence: C4.2.2
+    criteres: 13
+    densite: sobre
+    visuel: -
+
+### Puces
+
+- Steam GetNumberOfCurrentPlayers, sans authentification, quinze titres
+- Kafka en mode KRaft, sans ZooKeeper : c'est bien Apache Kafka
+- Un topic déclaré explicitement, un consommateur qui écrit en Silver speed
+- Idempotence prouvée par rejeu : quinze messages relus, zéro inséré
+- Orchestré toutes les quinze minutes, avec porte de sortie et reprise vérifiée
+
+### Notes
+
+L'idempotence est le point à défendre, et elle se prouve par le **rejeu des
+offsets** : on remet le consommateur au début, on relit quinze messages, et rien
+ne s'insère. Un test qui vérifie seulement que la requête ne plante pas ne prouve
+rien.
+
+Dire honnêtement que le « temps réel » est ici un échantillonnage périodique,
+puisque la source ne diffuse pas de flux. Cette honnêteté a plus de valeur que
+le mot.
+
+Le test négatif vaut d'être cité : broker coupé, le pipeline échoue proprement,
+et la reprise automatique a été vérifiée.
+
+---
+
+## D14. Méthode 2, l'orchestrateur
+
+    minute: 11:20
+    duree: 1:20
+    competence: C4.2.2
+    criteres: 14
+    densite: sobre
+    visuel: direct:airflow
+
+### Puces
+
+- Airflow 3.1.8, en conteneurs : il ne tourne pas nativement sous Windows
+- Quatre DAG : ingestion toutes les 15 min, deux promotions nocturnes, supervision
+- Deux promotions distinctes, et non une seule : c'est un choix, pas un oubli
+- Portes de fraîcheur, testées en négatif sur les deux promotions
+
+### Notes
+
+**DIRECT 2**, environ soixante secondes, local, aucun réseau requis.
+
+Montrer la liste des quatre DAG, leur historique de runs, puis le graphe de
+`gamelens_promotion_gold` et ses six tâches.
+
+Expliquer les deux promotions séparées : Snowflake est un service tiers facturé
+dont l'indisponibilité ne doit pas emporter la promotion locale. Les fusionner
+aurait couplé un composant local à un fournisseur externe.
+
+Repli : `docs/preuves/c14_airflow_dags.txt` et la capture d'écran.
+
+---
+
+## D15. Méthode 3, le calcul distribué
+
+    minute: 12:40
+    duree: 1:00
+    competence: C4.2.2
+    criteres: 15
+    densite: sobre
+    visuel: -
+
+### Puces
+
+- Snowpark, et non Spark : le référentiel cite Spark en exemple, l'exigence porte sur le distribué
+- Un Spark local aurait tourné en mono-machine, sur ce poste
+- Snowpark construit du SQL et le pousse sur le compute Snowflake
+- MERGE idempotents, fenêtre glissante sur 7 jours, classement par genre
+- Orchestré quotidiennement depuis le 31/08
+
+### Notes
+
+Anticiper la question « en quoi est-ce distribué ? » au lieu de l'attendre. Elle
+viendra, et il vaut mieux y répondre soi-même avant.
+
+Le raisonnement à énoncer : ce qui compte n'est pas le nom du produit mais où
+s'exécute le calcul. Sur ce poste, Spark aurait tourné en local sur une machine.
+Snowpark n'exécute rien ici : il transmet.
+
+La preuve arrive à la diapositive suivante.
+
+---
+
+## D16. La preuve : le SQL que Snowpark génère
+
+    minute: 13:40
+    duree: 1:20
+    competence: C4.2.2
+    criteres: 15
+    densite: dense
+    visuel: -
+
+### Puces
+
+- rank() OVER (PARTITION BY genre ORDER BY joueurs_moyens DESC)
+- avg() OVER (PARTITION BY jeu ORDER BY jour ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)
+- Aucune ligne ne transite par le poste : seul le résultat revient
+- Capturé dans docs/preuves/c15_snowpark_sql_genere.txt
+
+### Notes
+
+C'est la réponse matérielle, et elle vaut mieux qu'un argument. Montrer le SQL
+généré, pas une brochure.
+
+Le point à faire entendre : les fonctions de fenêtrage sont exécutées par le
+moteur Snowflake sur ses propres nœuds. Le programme Python décrit un calcul, il
+ne l'exécute pas. C'est exactement ce que fait Spark, avec un moteur différent.
+
+Si le jury insiste, l'historique de session Snowflake montre les requêtes reçues
+côté serveur.
+
+---
+
+## D17. L'intégration et le déploiement continus
+
+    minute: 15:00
+    duree: 1:20
+    competence: C4.2.3
+    criteres: 16
+    densite: sobre
+    visuel: capture:github_actions
+
+### Puces
+
+- Six étages, à chaque push et chaque pull request
+- Qualité, tests, intégrité des DAG, intégration, recette de l'entrepôt, publication
+- L'infrastructure d'intégration est créée puis détruite à chaque run
+- Image Airflow publiée sur ghcr.io, étiquetée latest et par le SHA du commit
+
+### Notes
+
+Compétence éliminatoire, et la seule dont la preuve vit sur github.com : elle ne
+peut pas être montrée en direct sans réseau. Capture obligatoire.
+
+Le point qui distingue cette chaîne d'un simple lanceur de tests : les étages
+d'intégration et de recette **montent une infrastructure neuve**, l'éprouvent,
+puis la détruisent. Rien n'est testé contre un état accumulé.
+
+Mentionner que le premier run avait échoué, et que le défaut était dans
+l'assertion et non dans l'infrastructure. Un pipeline qui passe du premier coup
+n'a en général rien vérifié.
+
+---
+
+## D18. La recette de l'entrepôt, sur base jetable
+
+    minute: 16:20
+    duree: 1:10
+    competence: C4.2.3
+    criteres: 16
+    densite: dense
+    visuel: -
+
+### Puces
+
+- Une base Snowflake créée pour la durée du run, puis supprimée
+- Le schéma livré est appliqué, le calcul distribué confronté à des valeurs calculées à la main
+- Le comportement du moteur sur les contraintes est re-vérifié à chaque push
+- Les deux filets d'intégrité sont éprouvés en positif ET en négatif, sur le même jeu fautif
+- La couche de démonstration n'est jamais visée : le script refuse de démarrer si elle l'était
+
+### Notes
+
+La dernière puce est le genre de détail qu'un jury de professionnels remarque :
+`entrepot/recette_ci.py` porte une liste de bases protégées et sort en erreur
+plutôt que de risquer de détruire la démonstration.
+
+L'épreuve en négatif est le point fort : vérifier qu'un contrôle passe ne prouve
+pas qu'il contrôle. On lui soumet des données fautives et on exige qu'il échoue.
+
+La clé privée n'est jamais écrite sur le disque du runner : elle transite par une
+variable d'environnement, en contenu PEM.
+
+---
+
+## D19. La supervision : ce que l'on surveille, et pourquoi
+
+    minute: 17:30
+    duree: 1:00
+    competence: C4.3.1
+    criteres: 17, 18
+    densite: dense
+    visuel: -
+
+### Puces
+
+- Cinq indicateurs : fraîcheur, complétude, latence, fiabilité par composant, fraîcheur du Gold
+- Les seuils sont définis en SQL, pas dans l'outil d'affichage
+- Conséquence : ils restent interrogeables par n'importe quel client, même Grafana arrêté
+- Le tableau de bord est provisionné comme code, pas cliqué dans une interface
+- Grafana se connecte avec le rôle analyst, en lecture seule
+
+### Notes
+
+Le choix à défendre : **l'outil affiche les indicateurs, il ne les définit pas.**
+Un seuil enfermé dans une interface graphique est un seuil qu'on ne peut ni
+tester, ni versionner, ni interroger autrement.
+
+C'est ce qui permet d'affirmer que la supervision survivrait à un changement
+d'outil de restitution.
+
+---
+
+## D20. Les indicateurs, à l'écran
+
+    minute: 18:30
+    duree: 1:00
+    competence: C4.3.1
+    criteres: 19
+    densite: sobre
+    visuel: direct:grafana
+
+### Puces
+
+- Sept panneaux, vérifiés par un contrôle automatisé
+- Fraîcheur par flux, complétude de la collecte, latence, fiabilité, alertes ouvertes
+
+### Notes
+
+**DIRECT 3**, environ soixante secondes, local, aucun réseau requis.
+
+Ouvrir le tableau de bord et le laisser parler. Ne commenter que deux panneaux,
+pas les sept.
+
+Si la donnée du jour est présente, le dire : la plateforme a tourné cette nuit,
+sans intervention. C'est plus convaincant qu'une capture.
+
+Repli : la capture d'écran, à la diapositive suivante du PPTX.
+
+---
+
+## D21. Les alertes, et leur cycle de vie
+
+    minute: 19:30
+    duree: 1:00
+    competence: C4.3.1
+    criteres: 20
+    densite: dense
+    visuel: -
+
+### Puces
+
+- Six règles, évaluées toutes les quinze minutes par un DAG
+- Cycle complet : déclenchement, non-duplication, fermeture automatique
+- Une alerte au plus par règle : sans cela, 96 lignes par jour pour un seul incident
+- Fenêtre par composant, et non fenêtre unique : 24 h pour les collectes fréquentes, 26 h pour les quotidiennes
+- Un incident réel de quatre jours a été détecté puis refermé seul, en moins de cinq minutes
+
+### Notes
+
+La non-duplication et la fermeture automatique sont ce qui distingue un système
+d'alertes d'un simple journal d'erreurs.
+
+La fenêtre par composant est un piège évité et qui vaut d'être raconté : une
+fenêtre unique de 24 heures déclarerait muet, à chaque cycle, un composant qui ne
+tourne qu'une fois par jour.
+
+Enchaîner directement sur la limite, diapositive 29 : rien ne prévient un humain.
+Mieux vaut l'annoncer ici que de laisser le jury le découvrir.
+
+---
+
+## D22. La feuille de route d'exploitation
+
+    minute: 20:30
+    duree: 1:00
+    competence: C4.3.2
+    criteres: 21, 22, 23
+    densite: dense
+    visuel: -
+
+### Puces
+
+- Tâches du quotidien au trimestriel, avec leur fréquence et leur durée
+- Échéances datées, dont l'expiration du compte Snowflake
+- Fenêtres de maintenance, et l'ordre d'arrêt et de redémarrage des composants
+- Procédures d'intervention éprouvées avant d'être prescrites, pas rédigées d'avance
+
+### Notes
+
+La dernière puce est le point de méthode : une procédure écrite sans avoir été
+exécutée est une intention. Celles de ce document ont toutes été jouées au moins
+une fois, et les durées annoncées sont mesurées.
+
+Exemple concret si le jury veut du détail : la procédure de reprise après
+coupure du broker Kafka a été exécutée, et le pipeline a repris seul.
+
+---
+
+## D23. Les points de vigilance
+
+    minute: 21:30
+    duree: 1:00
+    competence: C4.3.2
+    criteres: 24
+    densite: dense
+    visuel: -
+
+### Puces
+
+- Treize points de vigilance, dont deux datés
+- V-01, expiration du compte Snowflake : le seul réellement bloquant
+- V-02, aucun canal de notification : l'écart le plus important avec une plateforme exploitée
+- V-03, l'utilisateur de service tourne avec des droits trop larges
+- COMPUTE_WH à réduire : mesuré à 32 % de la consommation au 31/08
+
+### Notes
+
+Nommer ses propres limites, avec leur numéro et leur mesure, avant que le jury ne
+les cherche. C'est un exercice qu'un jury de professionnels cherche à provoquer,
+et le devancer vaut mieux que le subir.
+
+V-02 est chiffré : une alerte de fraîcheur est restée ouverte 6 jours et 20
+heures en août, et a été détectée en 90 minutes une fois regardée. Le chiffre
+rend l'aveu crédible.
+
+---
+
+## D24. La documentation technique
+
+    minute: 22:30
+    duree: 1:00
+    competence: C4.3.3
+    criteres: 25
+    densite: sobre
+    visuel: -
+
+### Puces
+
+- Onze décisions d'architecture, datées, chacune avec sa contrepartie
+- Traçabilité champ par champ, de la source à la couche Gold
+- Deux annexes GÉNÉRÉES depuis le catalogue des bases, jamais écrites à la main
+- L'intégration continue échoue si une annexe ne correspond plus au schéma
+
+### Notes
+
+Le critère porte sur le **choix** de la documentation. L'argument n'est donc pas
+le volume, c'est le mécanisme : un dictionnaire de données généré ne peut pas
+mentir sur le schéma, et la chaîne d'intégration refuse le push s'il diverge.
+
+Sur les décisions d'architecture : chacune porte sa contrepartie, ce qu'elle a
+coûté. Une décision sans inconvénient documenté est une décision qu'on n'a pas
+vraiment prise.
+
+---
+
+## D25. Le cahier de recettes
+
+    minute: 23:30
+    duree: 0:45
+    competence: C4.4.1
+    criteres: 26, 27
+    densite: dense
+    visuel: -
+
+### Puces
+
+- 55 cas, 0 partiel, 0 en attente
+- Fonctionnels : 5. Structurels : 19. Sécurité : 3. Plus les catégories propres au projet
+- Format retenu : PASS ou FAIL vérifié sur un résultat attendu
+- Et non « la requête s'exécute sans erreur », qui ne prouve rien
+
+### Notes
+
+Le critère nomme trois familles : fonctionnels, structurels, de sécurité. Le
+cahier est structuré sur ces trois-là. Montrer la table de synthèse.
+
+Le format est le point de méthode : chaque cas énonce son résultat attendu avant
+son résultat obtenu. Le premier cas conforme à ce format était le rejeu des
+offsets Kafka, quinze relus et zéro inséré.
+
+---
+
+## D26. Éprouvé en négatif
+
+    minute: 24:15
+    duree: 0:45
+    competence: C4.4.1
+    criteres: 27
+    densite: sobre
+    visuel: -
+
+### Puces
+
+- Vérifier qu'un contrôle passe ne prouve pas qu'il contrôle
+- Les deux filets d'intégrité sont soumis au même jeu de données fautif
+- Les tests de sécurité valident aussi les refus : treize cas, en 20 cas paramétrés
+- Les portes de fraîcheur ont été testées en coupant réellement la source
+
+### Notes
+
+C'est la différence entre un cahier de recettes et une liste de vœux. Trois
+exemples suffisent, ne pas les énumérer tous.
+
+Le cas du broker Kafka coupé est le plus parlant : on a arrêté le conteneur, on a
+vérifié que le pipeline échouait proprement, puis qu'il reprenait seul.
+
+---
+
+## D27. Un incident réel : INC-004
+
+    minute: 25:00
+    duree: 1:00
+    competence: C4.4.2
+    criteres: 28
+    densite: dense
+    visuel: -
+
+### Puces
+
+- Symptôme : UnicodeDecodeError, à l'intérieur de psycopg2.connect()
+- Fausse piste évidente : le projet est stocké sous un chemin accentué
+- Cause réelle : un PostgreSQL natif occupait déjà le port 5432
+- Docker publiait le port sans effet réel, et sans le moindre message d'erreur
+- L'erreur d'authentification, seule informative, a été détruite par l'échec de décodage de son propre message
+
+### Notes
+
+L'intérêt de cet incident n'est pas sa difficulté, qui est faible. C'est que **le
+message d'erreur désignait un coupable qui n'avait rien à voir avec la cause**.
+
+L'octet 0xe9 était le « é » de « échouée », dans un message d'erreur PostgreSQL
+en français. Le décodage a échoué avant que l'erreur utile ne remonte.
+
+Raconter cet enchaînement lentement : c'est la partie que le jury retient.
+
+---
+
+## D28. La méthode, et ce qu'elle a donné
+
+    minute: 26:00
+    duree: 1:00
+    competence: C4.4.2
+    criteres: 29, 30, 31
+    densite: dense
+    visuel: -
+
+### Puces
+
+- Cinq hypothèses testées, trois écartées, chacune avec sa vérification
+- Ce qui a tranché : la LANGUE du message d'erreur
+- L'image du conteneur est une Alpine en locale C : elle ne peut répondre qu'en anglais ASCII
+- Un message en français accentué prouvait donc que l'interlocuteur n'était pas le conteneur
+- Trois scénarios de correction pesés, dont deux écartés pour leurs effets de bord
+- Retenu : publier sur le port hôte 5433, et écrire dans le fichier pourquoi ce n'est pas 5432
+
+### Notes
+
+C'est le cœur du livrable C4.4.2 : la nature du problème, les actions selon les
+scénarios, la communication, les résultats attendus.
+
+Le raisonnement sur la langue est le moment fort. La langue d'un message d'erreur
+a servi d'empreinte pour identifier quel serveur répondait. Le dire ainsi.
+
+Les deux scénarios écartés : arrêter le service natif, ce qui casse d'autres
+travaux et se refait à chaque redémarrage ; le désinstaller, disproportionné.
+
+Sur la communication aux parties prenantes, rubrique que beaucoup oublient :
+incident de poste de développement, sans impact sur un service rendu, donc aucune
+remontée au commanditaire. La communication pertinente est interne et technique,
+et le commentaire laissé dans `docker-compose.yml` en fait partie : il empêche un
+lecteur futur de « corriger » l'anomalie apparente et de réintroduire l'incident.
+
+---
+
+## D29. Ce que je n'ai pas fait
+
+    minute: 27:00
+    duree: 0:30
+    competence: -
+    criteres: -
+    densite: sobre
+    visuel: -
+
+### Puces
+
+- Aucun canal de notification : les alertes sont persistées, personne n'est prévenu
+- La supervision ne se surveille pas elle-même
+- L'utilisateur de service tourne avec des droits trop larges
+- Les trois sont documentés, chiffrés, et non corrigés faute de priorité
+
+### Notes
+
+Trente secondes, et elles ouvrent les quinze minutes d'échange bien mieux qu'une
+conclusion triomphale.
+
+Ne pas s'excuser. Énoncer, dire pourquoi ça n'a pas été traité, et s'arrêter. Un
+jury de professionnels sait qu'une plateforme a toujours une dette ; ce qu'il
+veut savoir, c'est si le candidat la connaît.
+
+---
+
+## D30. Questions
+
+    minute: 27:30
+    duree: 0:00
+    competence: -
+    criteres: -
+    densite: sobre
+    visuel: -
+
+### Puces
+
+- Merci
+- Le dépôt, la documentation et les preuves sont à disposition
+
+### Notes
+
+Diapositive hors temps. Les questions probables et leurs réponses sont dans la
+section 8 de `docs/plan_soutenance.md`, à relire la veille.
+
+---
+
+# Emplacements réservés pour les captures d'écran
+
+Le générateur pose un cadre à la bonne place et à la bonne taille pour chacune.
+Déposer les images sous ces noms exacts dans `docs/captures/`, puis régénérer :
+elles remplacent le cadre automatiquement.
+
+| Identifiant | Fichier attendu | Diapo | Où le prendre | Réseau |
+|---|---|---|---|---|
+| `github_actions` | `docs/captures/github_actions.png` | D17 | GitHub, onglet Actions, les 6 étages d'un run vert | requis |
+| `snowsight_credits` | `docs/captures/snowsight_credits.png` | D08 | Snowsight, Admin puis Usage, consommation par entrepôt | requis |
+| `airflow` | `docs/captures/airflow.png` | D14 | http://localhost:8080, les 4 DAG puis un graphe | non |
+| `grafana` | `docs/captures/grafana.png` | D20 | http://localhost:3000, le tableau de bord entier | non |
+
+Les deux marquées « réseau requis » sont à prendre **avant le dépôt du 09/09**.
+
+# Les trois moments en direct
+
+Chacun est suivi, dans le PPTX, d'une diapositive de repli portant la preuve
+textuelle déjà capturée. Règle de scène : si le direct ne répond pas en dix
+secondes, passer au repli sans commenter l'incident.
+
+| Identifiant | Diapo | Durée | Repli |
+|---|---|---|---|
+| `cloisonnement_roles` | D10 | ~40 s | `docs/preuves/c11_cloisonnement_roles.txt` |
+| `airflow` | D14 | ~60 s | `docs/preuves/c14_airflow_dags.txt` et la capture |
+| `grafana` | D20 | ~60 s | la capture |

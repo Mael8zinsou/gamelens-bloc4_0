@@ -149,6 +149,7 @@ couche de demonstration sans message d'erreur. Passer par
 | `outils/generer_schema.py` | Generateur du schema de donnees : catalogue et DDL recoupes, puis dessin |
 | `outils/diagramme.py` | Rendu du schema en SVG et PNG, sans moteur de rendu externe |
 | `outils/capturer_preuves.py` | Captures datees et rejouables des sorties reelles, vers `docs/preuves/` |
+| `outils/generer_support.py` | Generateur du support de soutenance : le Markdown vers le PPTX |
 | `docker/grafana/` | Source de donnees et tableau de bord provisionnes comme code |
 | `docker/snowflake/` | Image d'outillage Snowflake, isolee des dependances d'ingestion |
 | `secrets/` | Cle privee Snowflake, ignoree par git |
@@ -168,6 +169,8 @@ couche de demonstration sans message d'erreur. Passer par
 | `docs/commandes_successives.md` | Trace chronologique des commandes reellement executees |
 | `docs/annexes/` | Dictionnaires de donnees et schema en diagramme, GENERES depuis le catalogue |
 | `docs/preuves/` | Sorties reelles capturees, avec leur en-tete de provenance |
+| `docs/support_soutenance.md` | Support de soutenance, diapo par diapo : la SOURCE du PPTX |
+| `docs/captures/` | Captures d'ecran d'interfaces, deposees a la main |
 | `docs/vulgarisation/` | Deux versions vulgarisees du projet, pour un junior et pour un non-specialiste |
 
 Les dictionnaires de `docs/annexes/` ne s'editent pas a la main : ils sont
