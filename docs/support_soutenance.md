@@ -25,21 +25,28 @@ de ce qui se dit. Les notes atterrissent dans le volet commentaire du PPTX.
 - `minute` : instant de début, cumulé depuis le début de la présentation.
 - `criteres` : les numéros du tableau de traçabilité de
   `docs/plan_soutenance.md`. C'est ce que le jury coche.
-- `densite` : `sobre` sur ce qui se commente en direct, le jury écoute ;
-  `dense` sur ce qui porte une preuve ou un tableau qu'il voudra relire.
-- `visuel` : chemin d'image, ou `capture:<identifiant>` pour un emplacement
-  réservé. Les emplacements réservés sont listés à la fin de ce fichier.
+- `type` : la forme de la diapositive, et donc sa mise en page.
+  `couverture`, `puces`, `visuel` (image plein cadre), `capture` (emplacement
+  réservé), `preuve` (sortie réelle en police fixe), `direct` (démonstration),
+  `duo` (deux colonnes, chaque puce portant ses deux moitiés séparées par ` | `).
+- `section` : le surtitre affiché. Il donne le rythme sans coûter de temps, là où
+  des intercalaires en auraient consommé.
+- `visuel` : chemin d'image sous `docs/`, ou `capture:<identifiant>` pour un
+  emplacement réservé, ou `preuve:<fichier de docs/preuves>`.
+- `legende` : la ligne sous l'image. Pour un `duo`, les deux titres de colonne,
+  séparés par ` | `.
 
 ---
 
 ## D01. GameLens, concevoir et opérer une infrastructure data
 
+    type: couverture
     minute: 00:00
     duree: 0:20
     competence: -
     criteres: -
-    densite: sobre
     visuel: -
+    legende: Concevoir et operer une infrastructure data
 
 ### Puces
 
@@ -55,11 +62,12 @@ Ne pas lire la diapositive. Se présenter en une phrase et enchaîner.
 
 ## D02. Ce que je vais montrer, dans cet ordre
 
+    type: puces
+    section: Ouverture
     minute: 00:20
     duree: 0:40
     competence: -
     criteres: -
-    densite: dense
     visuel: -
 
 ### Puces
@@ -89,11 +97,12 @@ pas : le cloisonnement des rôles, l'orchestrateur, le tableau de bord.
 
 ## D03. Le besoin de Kestrel Interactive
 
+    type: puces
+    section: 1. Le besoin, l'existant, les contraintes
     minute: 01:00
     duree: 1:00
     competence: C4.1.1
     criteres: 1, 2
-    densite: dense
     visuel: -
 
 ### Puces
@@ -115,22 +124,25 @@ suivante.
 
 ## D04. L'existant, et pourquoi ne pas simplement acheter
 
+    type: duo
     minute: 02:00
     duree: 0:50
     competence: C4.1.1
     criteres: 5, 2
-    densite: dense
     visuel: -
+    legende: Ce que les outils du marche font bien | Ce qu'ils ne donnent pas
 
 ### Puces
 
-- Ce que font bien les outils du marché : couverture, fraîcheur, zéro exploitation
-- GameDiscoverCo Pro, StreamsCharts Pro : abonnements par siège
-- Ce qu'ils ne donnent pas : l'historique reste chez eux
-- Résilier, c'est perdre la série temporelle accumulée
-- L'arbitrage se joue sur la propriété de l'historique, pas sur le prix
+- Une couverture bien plus large que la nôtre | L'historique reste chez eux
+- Une fraîcheur quotidienne, sans rien exploiter | Résilier, c'est perdre la série accumulée
+- Aucune infrastructure à opérer | Aucune requête libre sur le détail
+- Une équipe qui maintient les connecteurs | Un abonnement par siège, qui court
 
 ### Notes
+
+L'arbitrage se joue sur la propriété de l'historique, pas sur le prix. C'est
+la phrase à prononcer en quittant cette diapositive.
 
 Commencer par ce que les outils du marché font **bien**. Un état de l'existant
 qui ne dit que du mal n'est pas une analyse, c'est une justification.
@@ -143,11 +155,11 @@ balance décrédibiliserait le reste. Le dire si la question vient.
 
 ## D05. L'environnement et les contraintes
 
+    type: puces
     minute: 02:50
     duree: 0:40
     competence: C4.1.1
     criteres: 3, 4
-    densite: sobre
     visuel: -
 
 ### Puces
@@ -171,12 +183,14 @@ couche Bronze en PostgreSQL plutôt qu'en stockage objet.
 
 ## D06. Les composants retenus
 
+    type: visuel
+    section: 2. Les composants et leur cout
     minute: 03:30
     duree: 1:10
     competence: C4.1.2
     criteres: 6, 7
-    densite: dense
-    visuel: -
+    visuel: annexes/visuel_architecture.png
+    legende: Quatre sources, trois couches, deux cibles Gold, quatre chaines orchestrees.
 
 ### Puces
 
@@ -200,11 +214,11 @@ Ne pas réciter le tableau. Le jury lit plus vite qu'on ne parle.
 
 ## D07. Points de vigilance : la dépendance fournisseur
 
+    type: puces
     minute: 04:40
     duree: 0:50
     competence: C4.1.2
     criteres: 8
-    densite: dense
     visuel: -
 
 ### Puces
@@ -227,12 +241,13 @@ Snowflake en une journée. Dire ce que le repli couvre et ce qu'il ne couvre pas
 
 ## D08. Les coûts, mesurés et non estimés
 
+    type: visuel
     minute: 05:30
     duree: 1:00
     competence: C4.1.2
     criteres: 9
-    densite: dense
-    visuel: capture:snowsight_credits
+    visuel: annexes/visuel_couts.png
+    legende: Releve dans l'historique de facturation, pas estime.
 
 ### Puces
 
@@ -258,12 +273,14 @@ consommation absolue de COMPUTE_WH a augmenté, c'est sa part qui recule.
 
 ## D09. Le schéma de données
 
+    type: visuel
+    section: 3. Le schema de donnees
     minute: 06:30
     duree: 1:10
     competence: C4.2.1
     criteres: 10, 12
-    densite: sobre
     visuel: annexes/schema_donnees.png
+    legende: Genere depuis le catalogue Snowflake : ce schema ne peut pas deriver du reel.
 
 ### Puces
 
@@ -290,11 +307,11 @@ la main ment tôt ou tard.
 
 ## D10. Les modalités d'accès, démontrées
 
+    type: direct
     minute: 07:40
     duree: 0:50
     competence: C4.2.1
     criteres: 11
-    densite: sobre
     visuel: direct:cloisonnement_roles
 
 ### Puces
@@ -324,11 +341,11 @@ PPTX. Si le direct ne répond pas en dix secondes, passer au repli sans commente
 
 ## D11. Ce que Snowflake n'applique pas
 
+    type: puces
     minute: 08:30
     duree: 1:00
     competence: C4.2.1
     criteres: 10, 12
-    densite: dense
     visuel: -
 
 ### Puces
@@ -355,11 +372,12 @@ soumet le même jeu fautif pour vérifier qu'ils restent d'accord.
 
 ## D12. Trois méthodes de traitement, annoncées
 
+    type: puces
+    section: 4. Les pipelines, trois methodes
     minute: 09:30
     duree: 0:30
     competence: C4.2.2
     criteres: 13, 14, 15
-    densite: sobre
     visuel: -
 
 ### Puces
@@ -378,11 +396,11 @@ jamais sacrifier si le temps déborde.
 
 ## D13. Méthode 1, le pipeline temps réel
 
+    type: puces
     minute: 10:00
     duree: 1:20
     competence: C4.2.2
     criteres: 13
-    densite: sobre
     visuel: -
 
 ### Puces
@@ -411,11 +429,11 @@ et la reprise automatique a été vérifiée.
 
 ## D14. Méthode 2, l'orchestrateur
 
+    type: direct
     minute: 11:20
     duree: 1:20
     competence: C4.2.2
     criteres: 14
-    densite: sobre
     visuel: direct:airflow
 
 ### Puces
@@ -442,11 +460,11 @@ Repli : `docs/preuves/c14_airflow_dags.txt` et la capture d'écran.
 
 ## D15. Méthode 3, le calcul distribué
 
+    type: puces
     minute: 12:40
     duree: 1:00
     competence: C4.2.2
     criteres: 15
-    densite: sobre
     visuel: -
 
 ### Puces
@@ -472,12 +490,13 @@ La preuve arrive à la diapositive suivante.
 
 ## D16. La preuve : le SQL que Snowpark génère
 
+    type: preuve
     minute: 13:40
     duree: 1:20
     competence: C4.2.2
     criteres: 15
-    densite: dense
-    visuel: -
+    visuel: preuve:c15_snowpark_sql_genere.txt
+    legende: Extrait de docs/preuves/c15_snowpark_sql_genere.txt, capture du 01/09.
 
 ### Puces
 
@@ -502,12 +521,14 @@ côté serveur.
 
 ## D17. L'intégration et le déploiement continus
 
+    type: visuel
+    section: 5. Integration et deploiement continus
     minute: 15:00
     duree: 1:20
     competence: C4.2.3
     criteres: 16
-    densite: sobre
-    visuel: capture:github_actions
+    visuel: annexes/visuel_ci.png
+    legende: Les etages 4 et 5 montent une infrastructure neuve, l'eprouvent, puis la detruisent.
 
 ### Puces
 
@@ -531,14 +552,15 @@ n'a en général rien vérifié.
 
 ---
 
-## D18. La recette de l'entrepôt, sur base jetable
+## D18. Six étages au vert, sur le dernier run
 
+    type: capture
     minute: 16:20
     duree: 1:10
     competence: C4.2.3
     criteres: 16
-    densite: dense
-    visuel: -
+    visuel: capture:github_actions
+    legende: Le dernier run de la branche principale, six etages au vert.
 
 ### Puces
 
@@ -564,11 +586,12 @@ variable d'environnement, en contenu PEM.
 
 ## D19. La supervision : ce que l'on surveille, et pourquoi
 
+    type: puces
+    section: 6. Supervision et alertes
     minute: 17:30
     duree: 1:00
     competence: C4.3.1
     criteres: 17, 18
-    densite: dense
     visuel: -
 
 ### Puces
@@ -592,11 +615,11 @@ d'outil de restitution.
 
 ## D20. Les indicateurs, à l'écran
 
+    type: direct
     minute: 18:30
     duree: 1:00
     competence: C4.3.1
     criteres: 19
-    densite: sobre
     visuel: direct:grafana
 
 ### Puces
@@ -620,11 +643,11 @@ Repli : la capture d'écran, à la diapositive suivante du PPTX.
 
 ## D21. Les alertes, et leur cycle de vie
 
+    type: puces
     minute: 19:30
     duree: 1:00
     competence: C4.3.1
     criteres: 20
-    densite: dense
     visuel: -
 
 ### Puces
@@ -651,11 +674,12 @@ Mieux vaut l'annoncer ici que de laisser le jury le découvrir.
 
 ## D22. La feuille de route d'exploitation
 
+    type: puces
+    section: 7. Feuille de route d'exploitation
     minute: 20:30
     duree: 1:00
     competence: C4.3.2
     criteres: 21, 22, 23
-    densite: dense
     visuel: -
 
 ### Puces
@@ -678,11 +702,11 @@ coupure du broker Kafka a été exécutée, et le pipeline a repris seul.
 
 ## D23. Les points de vigilance
 
+    type: puces
     minute: 21:30
     duree: 1:00
     competence: C4.3.2
     criteres: 24
-    densite: dense
     visuel: -
 
 ### Puces
@@ -707,11 +731,12 @@ rend l'aveu crédible.
 
 ## D24. La documentation technique
 
+    type: puces
+    section: 8. Documentation technique
     minute: 22:30
     duree: 1:00
     competence: C4.3.3
     criteres: 25
-    densite: sobre
     visuel: -
 
 ### Puces
@@ -735,12 +760,14 @@ vraiment prise.
 
 ## D25. Le cahier de recettes
 
+    type: visuel
+    section: 9. Cahier de recettes
     minute: 23:30
     duree: 0:45
     competence: C4.4.1
     criteres: 26, 27
-    densite: dense
-    visuel: -
+    visuel: annexes/visuel_recettes.png
+    legende: Les trois familles exigees par la grille, en bleu, et celles que le projet a ajoutees.
 
 ### Puces
 
@@ -762,11 +789,11 @@ offsets Kafka, quinze relus et zéro inséré.
 
 ## D26. Éprouvé en négatif
 
+    type: puces
     minute: 24:15
     duree: 0:45
     competence: C4.4.1
     criteres: 27
-    densite: sobre
     visuel: -
 
 ### Puces
@@ -788,11 +815,12 @@ vérifié que le pipeline échouait proprement, puis qu'il reprenait seul.
 
 ## D27. Un incident réel : INC-004
 
+    type: puces
+    section: 10. Un incident reel
     minute: 25:00
     duree: 1:00
     competence: C4.4.2
     criteres: 28
-    densite: dense
     visuel: -
 
 ### Puces
@@ -817,11 +845,11 @@ Raconter cet enchaînement lentement : c'est la partie que le jury retient.
 
 ## D28. La méthode, et ce qu'elle a donné
 
+    type: puces
     minute: 26:00
     duree: 1:00
     competence: C4.4.2
     criteres: 29, 30, 31
-    densite: dense
     visuel: -
 
 ### Puces
@@ -854,11 +882,12 @@ lecteur futur de « corriger » l'anomalie apparente et de réintroduire l'incid
 
 ## D29. Ce que je n'ai pas fait
 
+    type: puces
+    section: Cloture
     minute: 27:00
     duree: 0:30
     competence: -
     criteres: -
-    densite: sobre
     visuel: -
 
 ### Puces
@@ -881,12 +910,13 @@ veut savoir, c'est si le candidat la connaît.
 
 ## D30. Questions
 
+    type: couverture
     minute: 27:30
     duree: 0:00
     competence: -
     criteres: -
-    densite: sobre
     visuel: -
+    legende: Le depot, la documentation et les preuves sont a disposition
 
 ### Puces
 
@@ -909,11 +939,14 @@ elles remplacent le cadre automatiquement.
 | Identifiant | Fichier attendu | Diapo | Où le prendre | Réseau |
 |---|---|---|---|---|
 | `github_actions` | `docs/captures/github_actions.png` | D17 | GitHub, onglet Actions, les 6 étages d'un run vert | requis |
-| `snowsight_credits` | `docs/captures/snowsight_credits.png` | D08 | Snowsight, Admin puis Usage, consommation par entrepôt | requis |
 | `airflow` | `docs/captures/airflow.png` | D14 | http://localhost:8080, les 4 DAG puis un graphe | non |
 | `grafana` | `docs/captures/grafana.png` | D20 | http://localhost:3000, le tableau de bord entier | non |
 
-Les deux marquées « réseau requis » sont à prendre **avant le dépôt du 09/09**.
+Celle marquée « réseau requis » est à prendre **avant le dépôt du 09/09**.
+
+La consommation de crédits ne figure plus dans ce tableau : elle est désormais
+portée par un graphique généré depuis les chiffres mesurés, ce qui vaut mieux
+qu'une capture de Snowsight et fait une capture de moins à prendre.
 
 # Les trois moments en direct
 

@@ -150,6 +150,7 @@ couche de demonstration sans message d'erreur. Passer par
 | `outils/diagramme.py` | Rendu du schema en SVG et PNG, sans moteur de rendu externe |
 | `outils/capturer_preuves.py` | Captures datees et rejouables des sorties reelles, vers `docs/preuves/` |
 | `outils/generer_support.py` | Generateur du support de soutenance : le Markdown vers le PPTX |
+| `outils/visuels.py` | Schemas et graphiques du support, palette de dataviz validee |
 | `docker/grafana/` | Source de donnees et tableau de bord provisionnes comme code |
 | `docker/snowflake/` | Image d'outillage Snowflake, isolee des dependances d'ingestion |
 | `secrets/` | Cle privee Snowflake, ignoree par git |
