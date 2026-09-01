@@ -155,6 +155,7 @@ couche de demonstration sans message d'erreur. Passer par
 
 | Chemin | Contenu |
 |---|---|
+| `docs/plan_soutenance.md` | Plan minute de la soutenance, trace sur les 31 sous-criteres de la grille |
 | `docs/rapport_analyse.md` | Analyse des besoins et presentation des composants (A4.1) |
 | `docs/documentation_technique.md` | Point d'entree, decisions d'architecture, tracabilite, configuration, securite (C4.3.3) |
 | `docs/feuille_route_exploitation.md` | Taches recurrentes, maintenance, points de vigilance (C4.3.2) |
