@@ -146,7 +146,8 @@ couche de demonstration sans message d'erreur. Passer par
 | `dbt/` | Projet dbt : 4 sources et 1 modele, 29 contrats declaratifs au total (25 portes par les sources, 4 par le modele) |
 | `supervision/` | Moteur d'alertes et verification du tableau de bord |
 | `outils/generer_dictionnaire.py` | Generateur des dictionnaires de donnees, depuis le catalogue des bases |
-| `outils/generer_schema.py` | Generateur du schema de donnees en diagramme, catalogue et DDL recoupes |
+| `outils/generer_schema.py` | Generateur du schema de donnees : catalogue et DDL recoupes, puis dessin |
+| `outils/diagramme.py` | Rendu du schema en SVG et PNG, sans moteur de rendu externe |
 | `outils/capturer_preuves.py` | Captures datees et rejouables des sorties reelles, vers `docs/preuves/` |
 | `docker/grafana/` | Source de donnees et tableau de bord provisionnes comme code |
 | `docker/snowflake/` | Image d'outillage Snowflake, isolee des dependances d'ingestion |

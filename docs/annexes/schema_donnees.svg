@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="679" viewBox="0 0 1020 679" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<rect width="1020" height="679" fill="#ffffff"/>
+<text x="40" y="30" font-size="17" font-weight="600" fill="#1c2530">GameLens, couche Gold Snowflake : schema en etoile</text>
+<polyline points="380,115 510,115 510,365 640,365" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 4"/>
+<path d="M640,365 l-11,-6 M640,365 l-11,0 M640,365 l-11,6" stroke="#94a3b8" stroke-width="1.6" fill="none"/>
+<circle cx="386" cy="115" r="3.4" fill="none" stroke="#94a3b8" stroke-width="1.6"/>
+<polyline points="380,480 510,480 510,388 640,388" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 4"/>
+<path d="M640,388 l-11,-6 M640,388 l-11,0 M640,388 l-11,6" stroke="#94a3b8" stroke-width="1.6" fill="none"/>
+<circle cx="386" cy="480" r="3.4" fill="none" stroke="#94a3b8" stroke-width="1.6"/>
+<polyline points="380,115 510,115 510,115 640,115" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 4"/>
+<path d="M640,115 l-11,-6 M640,115 l-11,0 M640,115 l-11,6" stroke="#94a3b8" stroke-width="1.6" fill="none"/>
+<circle cx="386" cy="115" r="3.4" fill="none" stroke="#94a3b8" stroke-width="1.6"/>
+<rect x="40" y="70" width="340" height="310" rx="7" fill="#ffffff" stroke="#8ba3c0" stroke-width="1.4"/>
+<path d="M40,104 v-27 a7,7 0 0 1 7,-7 h326 a7,7 0 0 1 7,7 v27 z" fill="#dbe4ef" stroke="#8ba3c0" stroke-width="1.4"/>
+<text x="53" y="93" font-size="14.5" font-weight="600" fill="#1c2530">dim_games</text>
+<text x="367" y="93" font-size="11" text-anchor="end" fill="#5b6875">dimension</text>
+<text x="53" y="120" font-size="9.5" font-weight="700" fill="#7c5cff">PK</text>
+<text x="82" y="120" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">game_id</text>
+<text x="367" y="120" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="41" y1="127" x2="379" y2="127" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="82" y="143" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">unified_name</text>
+<text x="367" y="143" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="41" y1="150" x2="379" y2="150" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="82" y="166" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">genre</text>
+<text x="367" y="166" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="41" y1="173" x2="379" y2="173" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="82" y="189" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">developer</text>
+<text x="367" y="189" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="41" y1="196" x2="379" y2="196" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="82" y="212" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">release_date</text>
+<text x="367" y="212" font-size="11" text-anchor="end" fill="#5b6875">DATE</text>
+<line x1="41" y1="219" x2="379" y2="219" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="82" y="235" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">metacritic_score</text>
+<text x="367" y="235" font-size="11" text-anchor="end" fill="#5b6875">NUMBER</text>
+<line x1="41" y1="242" x2="379" y2="242" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="82" y="258" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">critical_tier</text>
+<text x="367" y="258" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="41" y1="265" x2="379" y2="265" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="53" y="281" font-size="9.5" font-weight="700" fill="#7c5cff">UK</text>
+<text x="82" y="281" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">steam_appid</text>
+<text x="367" y="281" font-size="11" text-anchor="end" fill="#5b6875">NUMBER</text>
+<line x1="41" y1="288" x2="379" y2="288" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="82" y="304" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">twitch_game_id</text>
+<text x="367" y="304" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="41" y1="311" x2="379" y2="311" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="82" y="327" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">gog_slug</text>
+<text x="367" y="327" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="41" y1="334" x2="379" y2="334" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="82" y="350" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">rawg_id</text>
+<text x="367" y="350" font-size="11" text-anchor="end" fill="#5b6875">NUMBER</text>
+<line x1="41" y1="357" x2="379" y2="357" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="82" y="373" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">gold_loaded_at</text>
+<text x="367" y="373" font-size="11" text-anchor="end" fill="#5b6875">TIMESTAMP_NTZ</text>
+<rect x="40" y="435" width="340" height="126" rx="7" fill="#ffffff" stroke="#8ba3c0" stroke-width="1.4"/>
+<path d="M40,469 v-27 a7,7 0 0 1 7,-7 h326 a7,7 0 0 1 7,7 v27 z" fill="#dbe4ef" stroke="#8ba3c0" stroke-width="1.4"/>
+<text x="53" y="458" font-size="14.5" font-weight="600" fill="#1c2530">dim_stores</text>
+<text x="367" y="458" font-size="11" text-anchor="end" fill="#5b6875">dimension</text>
+<text x="53" y="485" font-size="9.5" font-weight="700" fill="#7c5cff">PK</text>
+<text x="82" y="485" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">store_id</text>
+<text x="367" y="485" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="41" y1="492" x2="379" y2="492" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="53" y="508" font-size="9.5" font-weight="700" fill="#7c5cff">UK</text>
+<text x="82" y="508" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">name</text>
+<text x="367" y="508" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="41" y1="515" x2="379" y2="515" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="82" y="531" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">base_url</text>
+<text x="367" y="531" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="41" y1="538" x2="379" y2="538" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="82" y="554" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">source_type</text>
+<text x="367" y="554" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<rect x="640" y="70" width="340" height="172" rx="7" fill="#ffffff" stroke="#bda98c" stroke-width="1.4"/>
+<path d="M640,104 v-27 a7,7 0 0 1 7,-7 h326 a7,7 0 0 1 7,7 v27 z" fill="#e6ded2" stroke="#bda98c" stroke-width="1.4"/>
+<text x="653" y="93" font-size="14.5" font-weight="600" fill="#1c2530">fact_popularity_history</text>
+<text x="967" y="93" font-size="11" text-anchor="end" fill="#5b6875">faits</text>
+<text x="653" y="120" font-size="9.5" font-weight="700" fill="#7c5cff">PK</text>
+<text x="682" y="120" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">game_id</text>
+<text x="967" y="120" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="641" y1="127" x2="979" y2="127" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="653" y="143" font-size="9.5" font-weight="700" fill="#7c5cff">PK</text>
+<text x="682" y="143" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">day</text>
+<text x="967" y="143" font-size="11" text-anchor="end" fill="#5b6875">DATE</text>
+<line x1="641" y1="150" x2="979" y2="150" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="682" y="166" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">avg_player_count</text>
+<text x="967" y="166" font-size="11" text-anchor="end" fill="#5b6875">NUMBER</text>
+<line x1="641" y1="173" x2="979" y2="173" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="682" y="189" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">max_player_count</text>
+<text x="967" y="189" font-size="11" text-anchor="end" fill="#5b6875">NUMBER</text>
+<line x1="641" y1="196" x2="979" y2="196" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="682" y="212" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">avg_viewer_count</text>
+<text x="967" y="212" font-size="11" text-anchor="end" fill="#5b6875">NUMBER</text>
+<line x1="641" y1="219" x2="979" y2="219" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="682" y="235" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">max_viewer_count</text>
+<text x="967" y="235" font-size="11" text-anchor="end" fill="#5b6875">NUMBER</text>
+<rect x="640" y="297" width="340" height="195" rx="7" fill="#ffffff" stroke="#bda98c" stroke-width="1.4"/>
+<path d="M640,331 v-27 a7,7 0 0 1 7,-7 h326 a7,7 0 0 1 7,7 v27 z" fill="#e6ded2" stroke="#bda98c" stroke-width="1.4"/>
+<text x="653" y="320" font-size="14.5" font-weight="600" fill="#1c2530">fact_prices</text>
+<text x="967" y="320" font-size="11" text-anchor="end" fill="#5b6875">faits</text>
+<text x="653" y="347" font-size="9.5" font-weight="700" fill="#7c5cff">PK</text>
+<text x="682" y="347" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">price_id</text>
+<text x="967" y="347" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="641" y1="354" x2="979" y2="354" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="653" y="370" font-size="9.5" font-weight="700" fill="#7c5cff">FK</text>
+<text x="682" y="370" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">game_id</text>
+<text x="967" y="370" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="641" y1="377" x2="979" y2="377" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="653" y="393" font-size="9.5" font-weight="700" fill="#7c5cff">FK</text>
+<text x="682" y="393" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">store_id</text>
+<text x="967" y="393" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="641" y1="400" x2="979" y2="400" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="682" y="416" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">price</text>
+<text x="967" y="416" font-size="11" text-anchor="end" fill="#5b6875">NUMBER</text>
+<line x1="641" y1="423" x2="979" y2="423" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="682" y="439" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">currency</text>
+<text x="967" y="439" font-size="11" text-anchor="end" fill="#5b6875">TEXT</text>
+<line x1="641" y1="446" x2="979" y2="446" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="682" y="462" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">promotion_flag</text>
+<text x="967" y="462" font-size="11" text-anchor="end" fill="#5b6875">BOOLEAN</text>
+<line x1="641" y1="469" x2="979" y2="469" stroke="#94a3b8" stroke-width="0.5" opacity="0.45"/>
+<text x="653" y="485" font-size="9.5" font-weight="700" fill="#7c5cff">UK</text>
+<text x="682" y="485" font-size="12.5" fill="#1c2530" font-family="Consolas, monospace">collected_at</text>
+<text x="967" y="485" font-size="11" text-anchor="end" fill="#5b6875">TIMESTAMP_NTZ</text>
+<line x1="40" y1="617" x2="980" y2="617" stroke="#94a3b8" stroke-width="0.8"/>
+<text x="40" y="635" font-size="11.5" fill="#5b6875">PK clef primaire, FK clef etrangere, UK unicite. Traits en tirets : relations DECLAREES, que Snowflake n applique pas a l ecriture.</text>
+<text x="40" y="653" font-size="11.5" fill="#5b6875">L integrite est portee hors du moteur, par les contrats dbt et les controles de entrepot/verifier_gold.py, rejoues a chaque push.</text>
+</svg>
