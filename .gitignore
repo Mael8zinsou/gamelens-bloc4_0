@@ -40,3 +40,7 @@ Thumbs.db
 
 # Bonus
 note_modifications_support.md
+
+# Fichiers de verrouillage crees par PowerPoint et Word quand un document
+# est ouvert. Temporaires, invisibles, et sans interet pour le depot.
+~$*
