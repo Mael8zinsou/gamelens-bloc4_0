@@ -142,8 +142,9 @@ consignes qui se contredit fait perdre du temps à qui le lit.
 
 ## État d'avancement
 
-Mis à jour le 31/08/2026 en fin de session 11 : rapport d'analyse A4.1, puis
-remise à plat de la section de référentiel ci-dessus et des trois README.
+Mis à jour le 02/09/2026 en fin de session 12 : support de soutenance, preuves
+capturées, feuille du jury, puis rattrapage des quatre fichiers de suivi, où les
+sessions 11 et 12 manquaient dans deux d'entre eux.
 
 | Élément | Statut |
 |---|---|
@@ -165,6 +166,8 @@ remise à plat de la section de référentiel ci-dessus et des trois README.
 | **dbt sur Snowflake** | ✅ **Construit et exécuté** : 29 contrats déclaratifs sur 4 sources, 1 modèle (la vue de tableau de bord, sortie d'un script SQL non rejouable). Éprouvés en positif et en négatif, sur base jetable et sur la couche de démonstration. |
 | Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **55 PASS, 0 partiel, 0 en attente**. |
 | Incident réel documenté | ✅ **INC-004 retenu** pour le C4.4.2. 9 incidents au total, INC-001 à INC-009, tous réellement vécus. Le dernier, INC-009, est né de la correction de V-12. |
+| **Support de soutenance** | ✅ **Construit** : `docs/support_soutenance.md` est la source, deux PPTX en sont des sorties, la version projetée sans marquage de conformité et la version de répétition avec. 30 diapositives, 33 replis compris, **27:30 de contenu sur 30:00**. Organisé sur la grille et non chronologiquement : les 31 sous-critères ont chacun leur diapositive, vérifié par script (phase 47). |
+| **Preuves et feuille du jury** | ✅ 10 preuves textuelles datées dans `docs/preuves/`, rejouables par `outils/capturer_preuves.py`. 5 visuels plus le schéma de données, tous générés. `docs/feuille_jury.pdf` met les 31 critères en regard des numéros de diapositive, depuis trois sources et sans saisie manuelle. **Reste 1 capture d'écran**, GitHub Actions, réseau requis. |
 
 ## Faits d'environnement à ne pas redécouvrir
 
@@ -417,15 +420,10 @@ Snowflake présenté par des traces capturées, sauf réseau confirmé sur place
 
 ## Prochaine étape immédiate
 
-**Tous les livrables du Bloc 4 sont écrits, et dbt est branché.** Les trois
-compétences éliminatoires sont couvertes par des briques exécutées, la chaîne
-est autonome de bout en bout, l'architecture Medallion est complète.
-
-**Il ne reste que le support de soutenance** (30 min de présentation), à
-construire pour le **vendredi 11/09/2026**. Tout ce qui doit être montré existe,
-a été exécuté, et laisse des traces consultables : le travail restant est de
-rendre cela visible en trente minutes, sur le plan de la grille, pas d'ajouter
-des briques.
+**Tous les livrables du Bloc 4 sont écrits, et le support de soutenance est
+construit.** Les trois compétences éliminatoires sont couvertes par des briques
+exécutées, la chaîne est autonome de bout en bout, et les trente minutes de
+présentation existent sous forme de fichier généré depuis une source versionnée.
 
 **Deux dates, et c'est la première qui contraint** : dépôt sur DigiformaCertif
 le **mercredi 09/09/2026**, soutenance le **vendredi 11/09/2026**. Le support est
@@ -433,10 +431,27 @@ donc gelé deux jours avant l'oral, pendant que les répétitions ont lieu. Un d
 en retard rend les compétences « non acquises » automatiquement, quel que soit le
 contenu.
 
-Les preuves textuelles sont produites : 9 captures datées dans `docs/preuves/`,
-rejouables par `outils/capturer_preuves.py`. Restent 4 captures d'écran
-d'interfaces graphiques, dont 2 exigent le réseau, plus le schéma de données en
-diagramme.
+### Ce qu'il reste à faire, dans l'ordre
+
+1. **Répéter.** C'est désormais le premier poste de travail, et de loin. Le
+   budget annonce 27:30 de contenu pour 30:00, mais un budget calculé n'est pas
+   un budget tenu. Répéter sur `docs/support_soutenance_repetition.pptx`, qui
+   porte en pied de page l'identifiant, la minute, la compétence et les critères
+   de chaque diapositive. La version projetée n'en porte rien, délibérément.
+2. **Une capture d'écran manque** : GitHub Actions, réseau requis, laissant un
+   cadre vide sur la diapositive 20. Les autres sont prises.
+3. **Convertir les six livrables écrits en PDF.** Ils n'existent qu'en Markdown,
+   et un correcteur qui ouvre un `.md` sur DigiformaCertif verra du texte brut
+   avec ses `##` et ses `|---|`, alors qu'ils contiennent beaucoup de tableaux.
+   Le poste n'a ni pandoc ni LibreOffice : la conversion se fera depuis un
+   éditeur.
+4. **Imprimer `docs/feuille_jury.pdf`** en deux exemplaires, un par membre du
+   jury.
+
+Ce qui **ne** reste **pas** à faire : ajouter des briques. Le critère de la
+grille dit « 3 méthodes de traitement de la donnée sont **présentées** », pas
+« sont réalisées » (OBS-79). Une brique construite et non montrée peut être
+notée non acquise ; une brique de plus ne rapporte rien.
 
 Décision prise le 31/08/2026 : **gel du dépôt**. Tout écart trouvé à partir de
 maintenant va sur la liste ci-dessous, pas dans un commit. Le critère pour

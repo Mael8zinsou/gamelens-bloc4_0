@@ -572,3 +572,30 @@ Deuxieme enseignement, plus inconfortable : la panne a dure douze minutes sans
 declencher quoi que ce soit, parce qu'elle touchait l'interface et non la
 donnee. Une supervision construite autour des traitements ne voit pas
 l'indisponibilite de ce qui permet de les regarder.
+
+---
+
+## Etat du journal
+
+Neuf incidents, INC-001 a INC-009, tous reellement vecus pendant la
+construction et consignes le jour meme. **INC-004 est celui retenu pour la
+competence C4.4.2** : il est le seul a couvrir les quatre rubriques exigees par
+la grille, communication aux parties prenantes comprise.
+
+Les sessions 11 et 12 n'ont produit **aucun incident**. L'absence est ecrite ici
+plutot que laissee au silence, faute de quoi rien ne distingue un journal tenu a
+jour d'un journal oublie.
+
+- **Session 11** (31/08/2026), rapport d'analyse et remise a plat des fichiers
+  de suivi : aucune execution sur la plateforme, donc aucune occasion d'incident.
+- **Session 12** (01 et 02/09/2026), support de soutenance : six defauts
+  rencontres, tous dans l'outillage de generation, corriges dans la seance, sans
+  effet sur la plateforme ni sur les donnees. Ils sont consignes comme
+  observations (OBS-82 et OBS-84, plus les quatre defauts de l'outil de capture
+  detailles en phase 43 du journal des commandes) et non comme incidents.
+
+La distinction retenue, et elle vaut d'etre dite a l'oral : **un incident touche
+un systeme en service**. Un bug dans un generateur de documents qui n'a jamais
+tourne ailleurs que sur le poste de travail n'en est pas un, quelle que soit la
+duree passee dessus. Confondre les deux gonflerait artificiellement ce journal
+et affaiblirait l'incident qui compte.

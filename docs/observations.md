@@ -1712,3 +1712,263 @@ Corollaire utile pour la soutenance : les deux couches ne sont pas
 interchangeables, et une question du jury du type « les deux contiennent-elles
 la même chose ? » a une réponse précise et chiffrée, qui n'est pas oui.
 
+---
+
+# Session 11, 31 août 2026 : rapport d'analyse et remise à plat des README
+
+Objet : écrire le rapport d'analyse A4.1, puis relire les trois fichiers qui
+disent au lecteur où en est le projet.
+
+## OBS-76. Le journal des commandes avait cessé d'être rejouable, et c'est sa seule raison d'être
+
+INC-009 avait renommé `entrepot/connexion.py` en `connexion_snowflake.py` cinq
+heures plus tôt. Le renommage a été propagé dans le code, dans les DAG et dans
+la documentation technique. Trois blocs de `docs/commandes_successives.md`
+portaient encore `from connexion import connexion`, dont un étiqueté **« à
+rejouer avant toute démonstration »**.
+
+Le mode de défaillance mérite d'être nommé, parce qu'il n'a rien d'accidentel :
+**un document dont la valeur est la rejouabilité ne signale jamais qu'il a cessé
+d'être rejouable**, précisément parce que personne ne le rejoue entre deux
+besoins. Le code casse à l'exécution suivante ; une procédure écrite attend son
+heure, et son heure est en général le pire moment.
+
+Le contraste avec les dictionnaires de `docs/annexes/` est instructif. Eux non
+plus ne sont pas relus, mais la CI les compare au catalogue vivant à chaque
+push : ils ne peuvent pas dériver de plus d'un commit. Ce journal n'a pas
+d'équivalent et n'en aura probablement pas, parce que rejouer une procédure
+suppose l'infrastructure allumée.
+
+Les trois blocs corrigés, la procédure a été rejouée pour de bon : 15 dim_games,
+60 faits de popularité, 165 tarifs. Elle marche. Elle n'aurait pas marché le
+jour de la soutenance.
+
+**Règle retenue.** Ce que la CI vérifie ne périme pas ; le reste périme en
+silence. Le renommage d'un module doit donc déclencher une recherche textuelle
+dans les **documents**, pas seulement dans le code.
+
+## OBS-77. Corriger une contradiction n'avait pas déclenché la recherche des autres
+
+La session 9 avait trouvé et corrigé la note de calendrier de `CLAUDE.md`, qui
+décrivait un compte Snowflake « à recréer » alors qu'il existait depuis onze
+jours et que la section des faits d'environnement, quarante lignes plus haut, le
+disait (OBS-72).
+
+Cette session-ci a trouvé le même défaut dans le même fichier, ailleurs : la
+section du référentiel portait encore « À faire » sur C4.2.2 et C4.2.3, deux
+compétences **éliminatoires**, exécutées et vertes en CI depuis plusieurs jours,
+que le tableau d'avancement donnait pour terminées quarante lignes plus bas.
+
+Ce qui est instructif n'est pas la contradiction, c'est qu'elle a survécu à sa
+propre correction. Découvrir qu'un fichier se contredit aurait dû déclencher une
+question simple, « où d'autre ? », et elle n'a pas été posée. Une correction
+ponctuelle traite l'instance ; elle ne traite pas la classe.
+
+**Conséquence pratique**, appliquée depuis : quand un défaut de cohérence est
+trouvé dans un document de suivi, on relit le document entier avant de
+committer, pas seulement le paragraphe fautif.
+
+---
+
+# Session 12, 1er et 2 septembre 2026 : le support de soutenance
+
+Objet : construire les trente minutes de présentation. **Aucune brique nouvelle**,
+et c'est le point : tout ce qui doit être montré existe déjà et a été exécuté.
+
+## OBS-78. Le projet suivait neuf compétences, la grille en compte dix
+
+Trois documents de cadrage dormaient dans `Certification/`, deux niveaux
+au-dessus du dépôt, et n'avaient jamais été ouverts en onze sessions : les
+modalités d'évaluation, le règlement spécial de certification, et surtout
+l'onglet « Grille Eval spé Bloc 4 » du fichier d'évaluation.
+
+La grille liste **dix** compétences. Le projet en suivait neuf, ayant fusionné
+les deux premières sous l'étiquette « A4.1 ». Or A4.1 est le nom de
+l'**activité** ; le jury coche des **compétences**, et il en coche deux là où
+nous en comptions une. C4.1.2, « une présentation des composants de
+l'architecture DATA », n'avait jamais été nommée.
+
+Le contenu existait : la partie 2 de `docs/rapport_analyse.md` couvre ses quatre
+critères. C'est l'étiquette qui manquait, pas le travail. Mais une compétence
+qu'on ne nomme pas est une compétence qu'on ne présente pas explicitement, et le
+jury coche sur ce qu'il entend.
+
+**Ce que ça dit de la méthode.** Onze sessions de travail sérieux ont été
+conduites sur une lecture de seconde main du référentiel. Lire la source a coûté
+quarante minutes. Ne pas la lire aurait pu coûter une compétence.
+
+## OBS-79. Un mot de la grille déplace toute la priorité : « présentées »
+
+Critère de C4.2.2, verbatim : « **3 méthodes de traitement de la donnée sont
+présentées.** » Pas « sont réalisées », pas « existent dans le dépôt ».
+
+La règle de travail du projet depuis la session 1 est de ne rien documenter qui
+n'ait été exécuté. Elle reste juste, et elle ne suffit plus : **une brique
+construite, testée et verte en CI mais non montrée pendant les trente minutes
+peut être notée non acquise**, et pour C4.2.2 elle est éliminatoire.
+
+C'est un renversement complet de priorité à dix jours de l'oral. Ce qui reste à
+faire n'est pas de construire davantage, c'est de rendre visible ce qui est
+construit. Toute envie de refermer un écart gelé doit être pesée contre cette
+phrase.
+
+## OBS-80. Trente minutes pour trente et un sous-critères
+
+Les dix compétences se déploient en 31 sous-critères explicites dans la grille.
+Trente minutes de présentation. **Moins d'une minute chacun.**
+
+Cette division interdit ce que tout le monde fait spontanément : raconter le
+projet dans l'ordre où il a été construit. Un récit chronologique consacre du
+temps aux débuts, qui sont les moins notés, et arrive essoufflé sur les
+livrables. Le support est donc organisé sur la grille, et un tableau de
+traçabilité vérifie que les 31 critères ont chacun leur diapositive.
+
+Le budget est tenu à 27:30 de contenu et 2:30 de marge, **calculé par un script**
+depuis les durées déclarées diapositive par diapositive, pas estimé à vue.
+
+## OBS-81. Le dépôt ne contenait aucune preuve montrable
+
+La convention du projet demande depuis la session 1 de conserver « les logs et
+sorties réelles des tests et des runs, ils serviront de preuve et de matière
+pour le support de soutenance ». Au moment de construire ce support,
+`docs/preuves/` n'existait pas. Zéro capture, zéro sortie datée.
+
+Tout avait été **transcrit** dans les documents de `docs/`, ce qui est utile
+mais n'est pas une preuve : un tableau de résultats recopié à la main a
+exactement la même apparence, qu'il soit vrai ou inventé.
+
+Le manque a été comblé par un outil plutôt que par des commandes jetables.
+`outils/capturer_preuves.py` produit dix captures portant chacune en en-tête la
+date, la commande exacte, le code de sortie et les critères de la grille
+qu'elles servent. Elles se rejouent, ce qui les distingue d'une copie d'écran.
+
+**Ce qui rend l'oubli intéressant** : la convention était écrite, relue à chaque
+session, et jamais appliquée. Une règle qu'aucun mécanisme ne rappelle n'est pas
+une règle, c'est une intention.
+
+## OBS-82. Le garde-fou que j'avais écrit s'est déclenché contre moi
+
+`outils/generer_schema.py` lit les contraintes à deux endroits : le catalogue
+Snowflake pour ce qui est déclaré, le DDL pour les cibles des clefs étrangères
+que le catalogue n'expose pas. Les deux sources sont recoupées sur le nombre de
+contraintes par type, et la génération **s'arrête** si elles divergent.
+
+Elle s'est arrêtée. La divergence venait de mon propre comptage, qui lisait les
+lignes du DDL sans en retirer les commentaires SQL : une contrainte citée dans
+un commentaire était comptée comme déclarée.
+
+Deux enseignements, et le second vaut mieux que le premier. D'abord la
+correction, triviale. Ensuite : **le dispositif a fonctionné exactement comme
+prévu, et sa première victime a été son auteur.** C'est le meilleur signe qu'un
+contrôle n'est pas décoratif. À comparer au garde-fou de la recette
+d'intégration, qui n'a jamais rien refusé parce que rien ne lui parvenait.
+
+## OBS-83. Le diagnostic du lecteur était plus juste que le mien
+
+Premier jet du support : trente-trois diapositives de la même forme, titre plus
+puces, avec une pastille « éliminatoire » tamponnée sur les diapositives
+concernées. Techniquement conforme à la grille, ligne à ligne.
+
+Le retour, mot pour mot : « C'est morne, la palette graphique est
+quasi-inexistante, et tout est formel. Le document fait très v0 sans entrain, et
+surtout, non destiné à un public, mais plus à un robot correcteur froid. »
+
+La dernière partie est le diagnostic, et il est exact. J'avais construit un
+support **pour la grille**, pas pour deux personnes assises trente minutes. Le
+marquage de conformité s'adresse au correcteur ; le public a besoin d'autre
+chose.
+
+La refonte a produit sept formes de diapositive au lieu d'une, cinq visuels
+dessinés, et surtout **deux versions du même fichier** : celle qui est projetée,
+sans marquage, et celle de répétition, qui le porte en pied de page.
+L'information n'est pas perdue, elle change de destinataire. Le marquage part
+sur une feuille A4 remise au jury, où il rend la notation triviale au lieu de
+polluer l'écran.
+
+**Un support de data engineer sans un seul graphique se disqualifie tout seul.**
+C'était le vrai reproche, et il n'avait pas besoin d'être formulé en ces termes
+pour être juste.
+
+## OBS-84. Des puces disparues sans le moindre message
+
+Les formes à visuel occupent tout le cadre. Quand une diapositive de ce type
+portait des puces dans le Markdown source, le générateur les ignorait
+**silencieusement** : lues, jamais dessinées, jamais signalées.
+
+Le contenu manquant ne laissait aucune trace. Aucune erreur, aucun
+avertissement, un PPTX parfaitement valide. Très exactement le mode de
+défaillance que tout le projet passe son temps à traquer ailleurs, reproduit
+dans mon propre outillage.
+
+Corrigé en versant ces puces dans les **notes de l'orateur** plutôt qu'en les
+jetant, et en faisant **compter** le déplacement dans le compte rendu du
+générateur. Le nombre s'affiche à chaque exécution : il devient impossible de ne
+pas le voir.
+
+## OBS-85. Une note extérieure contenait deux chiffres faux, dont un venait de moi
+
+Une relecture des outils de génération a été confiée à une autre instance et
+livrée sous forme de note à appliquer. Elle proposait de bonnes choses, et
+avançait deux chiffres : « 13 points de vigilance » et « cinq hypothèses, trois
+écartées ».
+
+Le premier était périmé : deux des treize, V-12 et V-13, avaient été refermés en
+session 10. Onze restent ouverts.
+
+Le second était faux, et il venait de mon propre support : la diapositive D28
+disait « trois scénarios écartés » là où l'incident en compte deux. La note
+avait donc **recopié fidèlement mon erreur** et me la renvoyait avec l'autorité
+d'un regard extérieur.
+
+**Enseignement.** Une relecture par un tiers vérifie la forme et la cohérence
+interne, pas les chiffres. Un chiffre faux mais cohérent traverse la relecture
+intact et en ressort renforcé. Les deux ont été corrigés au lieu d'être
+appliqués.
+
+## OBS-86. La diapositive revendiquait deux critères qu'elle ne disait pas
+
+Contrôle final du support contre la grille, avant de le déclarer complet. Les
+dix livrables sont couverts, chacun avec ses diapositives et son temps.
+
+Mais la grille attend, en plus des sous-critères, **six phrases de résultat**
+distinctes : elle veut que le dispositif fonctionne, pas seulement qu'il existe.
+Deux manquaient.
+
+Le trou de D28 est le plus grave, et il est ironique. Ses métadonnées
+revendiquaient les critères 30 et 31, soit la **communication aux parties
+prenantes** et le **résultat obtenu**. Ses puces s'arrêtaient à l'action retenue.
+La communication est très exactement le critère que `docs/plan_soutenance.md`
+signale, de sa propre main, comme celui que les candidats oublient le plus
+souvent.
+
+**Ce que ça apprend sur le marquage lui-même.** Déclarer qu'une diapositive
+couvre un critère est une **intention**, pas une couverture, et rien ne les
+distinguait : la feuille du jury, générée depuis ces mêmes métadonnées,
+affichait un critère 30 dûment traité. Le seul contrôle qui tranche est de lire
+ce qui est réellement dit et de le confronter à ce qui est revendiqué.
+
+## OBS-87. Trois sessions de retard dans un pied de page, et aucune règle ne l'attrapait
+
+`docs/vulgarisation/` a une règle de révision écrite, et elle est bonne : les
+deux documents sont relus à chaque session qui ajoute ou retire une brique, ou
+qui invalide une explication qui s'y trouve. Elle autorise explicitement à ne
+rien changer, à condition de le dire.
+
+Elle n'attrape pas ce qui s'est produit : les sessions 8, 9 et 10 ont modifié
+les deux documents **sans toucher à leur pied de page**, resté à « 27/08/2026,
+fin de session 6 ». Un document révisé qui affiche une vieille date se lit comme
+un document oublié, ce qui est le contraire exact de ce que la règle cherche à
+rendre visible.
+
+Le reste suivait : huit incidents annoncés pour neuf, 46 observations pour 75,
+32 cas de recette pour 55, des volumes relevés avant que les deux promotions ne
+tournent chaque nuit. **Aucun de ces chiffres n'était faux le jour où il a été
+écrit**, et c'est la forme de péremption la plus difficile à voir, parce que
+rien dans le texte ne la contredit.
+
+Le manque de fond était ailleurs, et plus gênant : les deux documents énumèrent
+leurs limites, et ni l'un ni l'autre ne citait le plus gros écart de la
+plateforme, à savoir que rien ne porte une alerte jusqu'à un humain. Le README
+du sous-dossier le signalait comme risque de lecture depuis la session 11, sans
+que les documents concernés ne le disent. Signaler un risque de lecture dans un
+troisième document ne le corrige pas.

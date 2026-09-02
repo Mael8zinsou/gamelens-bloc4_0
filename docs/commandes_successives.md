@@ -2125,3 +2125,234 @@ savoir avant qu'un jury ne pose la question.
 | Incident rencontré | INC-009, interface web indisponible 12 min |
 | Tests unitaires | 39 passed |
 
+---
+
+# Session 11, 31 août 2026 : rapport d'analyse et remise à plat des README
+
+## Phase 41. Rejouer les procédures que le renommage d'INC-009 avait cassées (procédure)
+
+Trois blocs de ce journal portaient encore `from connexion import connexion`,
+renommé cinq heures plus tôt par INC-009. Corrigés, puis **rejoués** : c'est le
+seul contrôle qui vaille pour un document dont la valeur est la rejouabilité
+(OBS-76).
+
+```bash
+# [BASH] Les procédures mortes se trouvent en une seconde, encore faut-il chercher
+grep -rn "from connexion import" docs/
+# 3 correspondances, dont une étiquetée « à rejouer avant toute démonstration »
+
+# [BASH] Volumes des deux couches Gold, une fois l'import corrigé
+docker compose --profile outillage run --rm --no-deps snowflake-cli python -c "
+import sys; sys.path.insert(0, 'entrepot')
+from connexion_snowflake import connexion
+c = connexion()
+with c.cursor() as cur:
+    for t in ('dim_games', 'fact_popularity_history', 'fact_prices'):
+        cur.execute(f'SELECT count(*) FROM mart.{t}')
+        print(t, cur.fetchone()[0])
+c.close()"
+# dim_games                 15
+# fact_popularity_history   60
+# fact_prices              165
+```
+
+À retenir : un renommage de module doit déclencher une recherche textuelle dans
+les **documents**, pas seulement dans le code. Le `grep` ci-dessus est
+maintenant un réflexe de fin de renommage.
+
+---
+
+# Session 12, 1er et 2 septembre 2026 : le support de soutenance
+
+Aucune brique ajoutée ni retirée. Cette session produit un support, son plan,
+ses preuves et la feuille remise au jury, tous **générés** depuis des sources
+versionnées.
+
+## Phase 42. Lire les documents de cadrage plutôt que les supposer (diagnostic)
+
+Aucune exécution, uniquement de la lecture. Trois fichiers dans
+`Certification/`, deux niveaux au-dessus du dépôt, jamais ouverts en onze
+sessions : les modalités d'évaluation, le règlement spécial de certification, et
+l'onglet « Grille Eval spé Bloc 4 » du fichier d'évaluation.
+
+Résultat : **dix** compétences et non neuf, 31 sous-critères, deux dates qui
+contraignent, et le mot « présentées » (OBS-78 à OBS-80).
+
+## Phase 43. Capturer les preuves textuelles (procédure)
+
+Le dépôt ne conservait aucune trace montrable : tout était transcrit dans les
+documents, rien n'existait sous forme de sortie réelle datée (OBS-81).
+
+```bash
+# [PY] Toutes les captures, réseau compris (Snowflake, API Steam, github.com)
+python outils/capturer_preuves.py
+
+# [PY] Seulement ce qui tourne sans réseau, utile en répétition
+python outils/capturer_preuves.py --sans-reseau
+
+# [PY] Une seule capture, pour la rejouer après correction
+python outils/capturer_preuves.py --seulement c11
+```
+
+Dix fichiers dans `docs/preuves/`, chacun avec un en-tête qui le rend opposable :
+
+```
+# Preuve c26 : Cahier de recettes : les tests automatises, tels que la CI les lance
+#
+# Criteres de la grille : 26, 27 (voir docs/plan_soutenance.md)
+# Reseau requis        : non
+# Capture le           : 01/09/2026 08:45 UTC
+# Code de sortie       : 0
+```
+
+Quatre défauts corrigés pendant la mise au point, tous de la même famille :
+l'outil rendait une capture vide ou fausse **sans échouer**. Chemin Windows
+passé tel quel à bash, variable de boucle avalée par le shell, colonnes de la
+table d'alertes supposées au lieu d'être lues dans le schéma, et `gh.EXE`
+inutilisable depuis un sous-shell, déplacé dans une fonction Python.
+
+## Phase 44. Générer le schéma de données depuis le catalogue (procédure)
+
+Le schéma du critère C4.2.1 est **généré**, comme les dictionnaires, pour qu'il
+ne puisse pas mentir sur l'état réel de l'entrepôt.
+
+```bash
+# [BASH] Passe 1, dans le conteneur d'outillage : lire le catalogue Snowflake
+docker compose --profile outillage run --rm --no-deps snowflake-cli \
+  python outils/generer_schema.py
+# -> docs/annexes/schema_donnees.json   le modèle
+# -> docs/annexes/schema_donnees.md     colonnes, types, contraintes, droits
+
+# [PY] Passe 2, sur l'hôte : dessiner, sans réseau
+python outils/generer_schema.py --dessiner
+# -> docs/annexes/schema_donnees.svg    source vectorielle
+# -> docs/annexes/schema_donnees.png    ce que python-pptx sait insérer
+```
+
+Deux passes parce que lire le catalogue exige Snowflake et que dessiner n'exige
+rien. Le générateur **recoupe** deux sources et s'arrête si elles divergent : le
+catalogue pour les contraintes déclarées, le DDL pour les cibles des clefs
+étrangères, que ce moteur n'expose pas (`SHOW IMPORTED KEYS` refusé dans ce
+contexte, `information_schema.key_column_usage` inexistant).
+
+Il s'est arrêté au premier essai, et la divergence venait de mon comptage, qui
+n'excluait pas les commentaires SQL (OBS-82).
+
+Parti pris de lecture du diagramme : les relations sont dessinées **en tirets**,
+parce que Snowflake les déclare sans les appliquer. Le trait dit la même chose
+que la section 4 du document, et le jury le voit avant de le lire.
+
+## Phase 45. Dessiner les visuels et générer le support (procédure)
+
+```bash
+# [PY] Les cinq visuels, dessinés avec Pillow comme le schéma de données
+python outils/visuels.py
+# -> docs/annexes/visuel_architecture.png  visuel_ci.png  visuel_couts.png
+#    visuel_recettes.png  visuel_investigation.png
+
+# [PY] Le support : le Markdown est la SOURCE, les PPTX en sont des sorties
+python outils/generer_support.py
+# -> docs/support_soutenance.pptx             projeté et déposé, sans marquage
+# -> docs/support_soutenance_repetition.pptx  marquage complet, pour répéter
+# -> docs/annexes/plan_diapos.json            numérotation, pour la feuille du jury
+#    30 diapositives du Markdown, 33 dans le PPTX
+#    durée annoncée : 27:30 sur 30:00
+```
+
+**Une retouche faite dans PowerPoint est perdue à la régénération suivante.**
+C'est `docs/support_soutenance.md` qu'il faut corriger, jamais le PPTX.
+
+Deux détails du générateur qui ont chacun leur raison : il refuse d'écrire si le
+fichier est ouvert dans PowerPoint et le dit clairement, et il écrit
+`plan_diapos.json` **avant** les PPTX, pour que la feuille du jury reste
+générable quand l'écriture échoue.
+
+## Phase 46. Générer la feuille remise au jury (procédure)
+
+```bash
+# [PY] Deux exemplaires à imprimer, un par membre du jury
+python outils/generer_feuille_jury.py
+# -> docs/feuille_jury.pdf
+#    31 sous-critères, 31 associés à au moins une diapositive
+```
+
+Trois sources, aucune saisie manuelle : les libellés viennent des tables de
+traçabilité de `docs/plan_soutenance.md`, l'association critère vers diapositive
+des champs `criteres` du support, et les numéros de `plan_diapos.json`. La
+feuille ne peut donc pas diverger de ce qui sera projeté.
+
+Elle existe parce que le marquage de conformité a été retiré du support projeté,
+où il donnait à voir la mécanique de la notation au lieu du propos.
+L'information n'est pas perdue : elle change de support et de destinataire.
+
+## Phase 47. Contrôler le support contre la grille (procédure)
+
+À rejouer après toute modification du support, avant de le déclarer complet.
+
+```bash
+# [PY] Chaque critère de 1 à 31 est-il revendiqué par au moins une diapositive ?
+python - <<'PY'
+import re
+from pathlib import Path
+t = Path("docs/support_soutenance.md").read_text(encoding="utf-8")
+champs = re.findall(r"^    criteres: (.+)$", t, re.M)
+vus = {int(n) for b in champs for n in re.findall(r"\d+", b)}
+print("champs criteres lus :", len(champs))
+print("criteres revendiques :", len(vus))
+print("manquants sur 1..31 :", sorted(set(range(1, 32)) - vus) or "aucun")
+PY
+# champs criteres lus : 30
+# criteres revendiques : 31
+# manquants sur 1..31 : aucun
+```
+
+Ce contrôle est **nécessaire et pas suffisant**, et c'est tout son intérêt. Il
+vérifie ce que les diapositives revendiquent, pas ce qu'elles disent. Il rendait
+« aucun manquant » alors que deux phrases de résultat étaient absentes et qu'une
+diapositive revendiquait les critères 30 et 31 sans les énoncer (OBS-86). Le
+seul contrôle qui tranche reste la lecture.
+
+## Phase 48. Mettre à jour la vulgarisation (procédure)
+
+```bash
+# [BASH] Recompter les mots, pour que les durées de lecture ne vieillissent pas seules
+wc -w docs/vulgarisation/*.md
+# 8976 pour-un-junior.md,  6150 explique-simplement.md
+
+# [PY] Aucun tiret cadratin introduit (convention du projet). Le caractere
+# est CONSTRUIT et non ecrit, sans quoi ce journal violerait la regle qu'il
+# verifie. Meme raison que le chr(92) des heredocs.
+python -c "
+import glob
+from pathlib import Path
+for f in sorted(glob.glob('docs/vulgarisation/*.md')):
+    print(Path(f).read_text(encoding='utf-8').count(chr(8212)), f)"
+# 0 docs/vulgarisation\README.md
+# 0 docs/vulgarisation\explique-simplement.md
+# 0 docs/vulgarisation\pour-un-junior.md
+
+# [BASH] Le contrôle qui compte vraiment : l'ampleur du diff
+git diff --stat docs/vulgarisation/
+# 3 files changed, 170 insertions(+), 32 deletions(-)
+```
+
+Le `git diff --stat` est le garde-fou de fin d'édition. Le dépôt n'a pas de
+`.gitattributes` et mélange LF et CRLF selon les fichiers : une conversion
+involontaire aurait présenté les trois fichiers **entièrement réécrits** là où
+une trentaine de lignes ont changé (OBS-68). Écrire depuis Python avec
+`newline="\r\n"` sur un fichier CRLF pur est ce qui l'évite.
+
+## Bilan de session
+
+| Vérification | Résultat |
+|---|---|
+| Compétences suivies avant lecture de la grille | 9 sur **10** |
+| Sous-critères tracés dans le plan | 31, tous associés à une diapositive |
+| Budget du support | 27:30 de contenu, 2:30 de marge |
+| Diapositives | 30 dans le Markdown, 33 dans le PPTX (3 replis) |
+| Preuves textuelles capturées | 10, rejouables par un outil |
+| Visuels dessinés | 5, plus le schéma de données |
+| Captures d'écran restantes | 1, GitHub Actions, réseau requis |
+| Incident sur la plateforme | aucun |
+| Briques ajoutées ou retirées | aucune |
+| Tests unitaires | non rejoués, aucun code de production modifié |
