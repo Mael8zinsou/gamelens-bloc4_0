@@ -76,17 +76,19 @@ du projet.
         Steam Web API  (temps reel, sans authentification)
                     |
                     v
-        ingestion/steam_producer.py          <- collecte et publie
-                    |
-            Apache Kafka (mode KRaft)        <- tampon durable
-        gamelens.steam.player_count
-                    |
-        ingestion/kafka_to_postgres.py       <- consomme et ecrit
-                    |
-                    v
-        PostgreSQL, couche Silver speed      <- la donnee recente, nettoyee
-                    |
-        +-----------+------------------------------+
+        ingestion/steam_producer.py          <- archive, PUIS publie
+              |                  |
+              v                  v
+  bronze.reponses_brutes    Apache Kafka (mode KRaft)   <- tampon durable
+  tout appel, abouti ou     gamelens.steam.player_count
+  non, jamais modifie                |
+                                     v
+                     ingestion/kafka_to_postgres.py     <- consomme et ecrit
+                                     |
+                                     v
+                     PostgreSQL, couche Silver speed    <- la donnee recente
+                                     |
+        +----------------------------+-------------+
         |                                          |
    DAG promotion_gold                   DAG promotion_snowflake
      quotidien, 02h30 UTC                 quotidien, 03h00 UTC
@@ -98,6 +100,13 @@ du projet.
                                         fact_prices,
                                         fact_popularity_history
 ```
+
+**Bronze n'y figurait pas jusqu'au 02/09/2026**, alors que la couche existe
+depuis le 27/08 et que le paragraphe suivant la décrit longuement. Un schéma qui
+omet une couche entière la fait disparaître pour qui lit vite, et c'est
+exactement le reproche fait ci-dessous à la version précédente, en plus discret.
+Note aussi l'ordre, qui n'est pas décoratif : on archive **avant** d'exploiter,
+sinon on ne conserve que ce qu'on a su lire.
 
 **Ce schéma a été faux pendant onze jours, et l'histoire vaut mieux que le
 schéma.** Jusqu'au 31/08/2026 il montrait l'orchestrateur alimentant directement
@@ -853,7 +862,7 @@ Et un test qui réussit ne prouve pas qu'il teste quelque chose.
 
 # 6. Les incidents, et la méthode
 
-Huit incidents sont documentés. Un seul mérite d'être raconté en détail, parce
+Neuf incidents sont documentés. Un seul mérite d'être raconté en détail, parce
 qu'il illustre une méthode plutôt qu'une astuce.
 
 ## INC-004 : quand le message d'erreur désigne un innocent
@@ -898,7 +907,7 @@ l'anomalie apparente et réintroduirait l'incident.
 opération d'infrastructure. C'est souvent le linceul d'une erreur fonctionnelle
 plus haute, pas le problème lui-même.
 
-## Les sept autres, en une ligne chacune
+## Les huit autres, en une ligne chacune
 
 | ID | Ce qui s'est passé | Ce qu'on en retient |
 |---|---|---|
@@ -909,6 +918,7 @@ plus haute, pas le problème lui-même.
 | INC-006 | `logical_date` vaut `None` sur un lancement manuel en Airflow 3 | Ne suppose pas qu'une valeur fournie par le cadre est toujours présente |
 | INC-007 | Quatre collectes réelles, une seule ligne de journal | Vérifie l'effet de bord attendu, pas seulement le résultat principal |
 | INC-008 | Une panne de broker ne laissait aucune trace en échec : l'exception précédait l'ouverture du journal | Un mécanisme d'observabilité correct ne sert à rien s'il n'est pas atteint |
+| INC-009 | Monter `entrepot/` dans les conteneurs Airflow y a rendu visible un `connexion.py` qui a masqué la bibliothèque `connexion` dont Airflow se sert pour s'authentifier. Interface web indisponible 12 minutes | Ajouter un répertoire au `PYTHONPATH` n'ajoute pas seulement, ça peut masquer. Et rien ne l'a signalé : la supervision regarde la chaîne de production, pas l'écran qui sert à la regarder |
 
 ## Ce que la grille attend d'un incident
 
@@ -963,6 +973,40 @@ Bloc 1, les commentaires du schéma les nommaient colonne par colonne, et les
 dépendances étaient installées à chaque exécution de la chaîne. Tout avait l'air
 fait.
 
+## Rien ne porte l'alerte jusqu'à un humain
+
+C'est l'écart le plus important entre cette plateforme et une plateforme
+réellement exploitée. C'est aussi celui qu'il vaut mieux énoncer soi-même que se
+faire signaler.
+
+Le moteur d'alertes fonctionne, et son cycle de vie est complet : six règles,
+déclenchement sur seuil, non-duplication tant que la condition dure, fermeture
+automatique au retour à la normale. Tout est testé, y compris en négatif, sur
+une plateforme délibérément cassée.
+
+Ce qui manque est l'étage suivant. Aucun canal de notification n'est branché :
+ni courriel, ni webhook, ni astreinte. Les alertes sont **persistées** dans
+`speed.alertes`, et c'est tout. Une alerte que personne ne lit vaut exactement
+une alerte qui ne s'est pas déclenchée.
+
+La mesure le dit mieux qu'un argument. En août, une rupture de fraîcheur a été
+**détectée en 90 minutes**, ce qui est bon, et elle est restée ouverte
+**6 jours et 20 heures**. Le délai de détection n'est pas le problème. Le délai
+de réaction l'est, et il l'est parce qu'il n'y a personne au bout du fil.
+
+Le corollaire est plus vicieux : **la supervision ne se surveille pas
+elle-même**. Si le DAG `gamelens_supervision` s'arrête, plus aucune alerte n'est
+produite, et un tableau sans alerte ressemble trait pour trait à un tableau dont
+le producteur d'alertes est mort. C'est le principe 1 de la section 8, celui du
+composant qui réussit sans rien faire, retourné contre l'outil même qui devrait
+le détecter.
+
+Ce que ça coûterait à corriger : peu de chose. Un canal de notification est une
+heure de travail, pas une difficulté d'architecture. C'est précisément pour ça
+que l'absence mérite d'être racontée : elle ne mesure pas un obstacle technique,
+elle mesure ce qu'on laisse tomber quand on construit seul et qu'on est aussi le
+seul lecteur du tableau de bord.
+
 ## L'utilisateur de service tourne en ACCOUNTADMIN
 
 `GAMELENS_SERVICE` dispose du rôle `ACCOUNTADMIN` sur Snowflake, y compris dans
@@ -977,8 +1021,16 @@ créer un rôle dédié avec `CREATE DATABASE` et rien de plus.
 
 ## Les volumes sont ceux d'un laboratoire
 
-15 jeux, 30 faits de popularité, 75 faits tarifaires. Tout tient en mémoire.
-Les questions qui se posent à l'échelle ne se sont donc jamais posées :
+15 jeux, et des faits qui se comptent en dizaines. Dernière mesure, le
+31/08/2026 : côté PostgreSQL 45 faits de popularité et 120 faits tarifaires ;
+côté Snowflake 60 et 165, répartis sur quatre journées. L'écart entre les deux
+couches n'est pas une anomalie et vaut d'être compris : la promotion PostgreSQL
+traite une journée par run, la promotion Snowpark rejoue tout l'historique
+disponible par `MERGE`. Les deux portent la même journée la plus récente, pas la
+même profondeur.
+
+Tout cela tient en mémoire. Les questions qui se posent à l'échelle ne se sont
+donc jamais posées :
 
 - **partitionnement et regroupement** : `CLUSTER BY (day)` est déclaré sur la
   table de faits, mais sur ce volume il ne sert à rien et on ne peut pas
@@ -1004,6 +1056,12 @@ Les questions qui se posent à l'échelle ne se sont donc jamais posées :
 - **Mots de passe de développement en clair** dans le dépôt (`devlocal_*`,
   `admin/admin`). Acceptable parce qu'ils ne donnent accès qu'à des conteneurs
   locaux, mais c'est une habitude à ne pas prendre.
+- **Le compte Snowflake expire.** Compte étudiant, 120 jours de validité depuis
+  le 20/08/2026, donc une fin attendue à la mi-décembre. Rien n'est prévu pour
+  ce jour-là : la couche Gold cible disparaîtra et il ne restera que le
+  prototype PostgreSQL. C'est le seul point de vigilance réellement bloquant du
+  projet, et c'est une date qui contraint, pas un budget : la consommation
+  mesurée est d'une vingtaine de crédits sur les 400 accordés.
 - **`dim_games.critical_tier` est vide**, alors que le commentaire de la colonne
   annonce qu'elle est dérivée par un modèle dbt. Ce modèle n'existe pas, et il
   ne pourrait rien dériver aujourd'hui puisque la note critique dont il
@@ -1063,8 +1121,8 @@ documentée d'une architecture surveillée.
 | Ce que tu cherches | Où |
 |---|---|
 | Les incidents au format complet | `docs/journal_incidents.md` |
-| Les surprises, fausses pistes, arbitrages | `docs/observations.md`, 46 entrées |
-| Les tests et leurs résultats réels | `docs/cahier_recettes.md`, 32 cas |
+| Les surprises, fausses pistes, arbitrages | `docs/observations.md`, 75 entrées |
+| Les tests et leurs résultats réels | `docs/cahier_recettes.md`, 55 cas, tous PASS |
 | Les commandes réellement exécutées | `docs/commandes_successives.md` |
 | Ce qu'il faut faire tourner, surveiller et purger | `docs/feuille_route_exploitation.md` |
 | L'état d'avancement et les pièges d'environnement | `CLAUDE.md` |
@@ -1074,4 +1132,6 @@ documentée d'une architecture surveillée.
 | La supervision | `supervision/` et `sql/schema_supervision.sql` |
 | La chaîne d'intégration continue | `.github/workflows/ci.yml`, six étages |
 
-Dernière mise à jour : 27/08/2026, fin de session 6.
+Dernière mise à jour : 02/09/2026, fin de session 12. Les chiffres cités
+(incidents, observations, cas de recette, volumes) sont datés : ils étaient
+exacts au jour dit, et les volumes croissent chaque nuit.

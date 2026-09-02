@@ -16,9 +16,12 @@ documents-ci font l'inverse : ils partent du lecteur.
 | [`explique-simplement.md`](explique-simplement.md) | Quelqu'un qui sait ce qu'est un programme, une base de données, une API, mais pour qui « pipeline », « idempotence » ou « couche Gold » ne veulent rien dire. | « C'est quoi, ton truc ? » | ~30 min |
 
 Les durées sont recalculées sur le nombre de mots à chaque révision, sinon elles
-vieillissent en silence : au 31/08/2026, 8 356 mots pour la version junior et
-5 835 pour la version simple. Elles avaient été annoncées à 25 et 12 minutes
-quand les documents faisaient à peu près la moitié de cette taille.
+vieillissent en silence : au 02/09/2026, 8 976 mots pour la version junior et
+6 150 pour la version simple. Elles avaient été annoncées à 25 et 12 minutes
+quand les documents faisaient à peu près la moitié de cette taille. La révision
+de la session 12 les a fait grossir de 7 % et de 5 %, ce qui ne déplace ni l'une
+ni l'autre une fois arrondie : le tableau reste juste, et c'est le recomptage
+qui le prouve, pas l'habitude.
 
 La ligne de partage est volontairement franche, sinon les deux documents
 seraient le même à quelques mots près.
@@ -81,9 +84,15 @@ distingue un document relu d'un document oublié.
   et `supervision/regles_alertes.py`, ce que la version Feynman admet dans sa
   section finale. Vérifié encore vrai le 31/08/2026 : la valeur 90 figure bien
   aux deux endroits. Une source unique rendrait ce passage caduc.
-- Aucun canal de notification n'est branché (V-02). Les deux documents décrivent
-  des alertes qui se déclenchent et se referment toutes seules, ce qui est exact,
-  mais un lecteur peut en déduire que quelqu'un est prévenu. Ce n'est pas le cas.
+- Aucun canal de notification n'est branché (V-02), et la supervision ne se
+  surveille pas elle-même (V-07). Les deux documents le **disent** désormais,
+  chiffres à l'appui : détection en 90 minutes, alerte restée ouverte 6 j 20 h.
+  C'était un risque de lecture signalé ici depuis la session 11 sans que les
+  documents concernés ne le portent ; il est levé. Le jour où un canal sera
+  branché, ce sont ces passages-là qui deviendront faux.
+- L'expiration du compte Snowflake à la mi-décembre 2026 (V-01) est citée dans
+  la version junior. La date est **attendue et non confirmée** dans Snowsight :
+  si elle est démentie, ce passage l'est avec elle.
 
 ### Journal des révisions
 
@@ -132,4 +141,40 @@ rapport d'analyse, ajouté à la liste des sources ; et l'absence de canal de
 notification, ajoutée aux points à revoir parce qu'un lecteur peut déduire des
 deux documents qu'une alerte prévient quelqu'un.
 
-Dernière mise à jour : 31/08/2026, fin de session 11.
+**Session 12 (02/09/2026).** Révision demandée par le lecteur, qui trouvait les
+documents périmés. Il avait raison, et sur un point que la règle de cette page
+n'attrape pas : **les deux documents se dataient encore du 27/08, fin de
+session 6**, alors que les sessions 8, 9 et 10 les avaient modifiés sans jamais
+toucher au pied de page. Un document révisé qui affiche une vieille date se lit
+comme un document oublié, ce qui est très exactement le contraire de ce que la
+règle ci-dessus cherche à rendre visible.
+
+Trois familles de corrections, et elles ne se valent pas.
+
+*Des chiffres devenus faux par simple écoulement du temps.* Huit incidents pour
+neuf, 46 observations pour 75, 32 cas de recette pour 55, des volumes relevés
+avant que les deux promotions ne tournent chaque nuit. Aucun n'était faux le
+jour où il a été écrit, et c'est là toute la difficulté : un chiffre juste ne
+prévient pas qu'il a cessé de l'être.
+
+*Un schéma incomplet.* Le schéma d'architecture de la version junior ne montrait
+pas la couche Bronze, alors qu'elle existe depuis le 27/08 et que le paragraphe
+placé juste dessous la décrit longuement. C'est le défaut refermé en session 9,
+en plus discret : une omission se remarque encore moins qu'une erreur, parce que
+rien dans le texte ne la contredit.
+
+*Un manque de fond jamais écrit.* Les deux documents énumèrent leurs limites, et
+ni l'un ni l'autre ne citait le plus gros écart de la plateforme : rien ne porte
+une alerte jusqu'à un humain. Cette page le signalait comme risque de lecture
+depuis la session 11, sans que les documents concernés ne le disent. Chacun a
+désormais sa section, chiffrée, avec la limite jumelle V-07.
+
+À noter pour la règle elle-même : **aucune brique n'a été ajoutée ni retirée
+depuis la session 11.** La session 12 a produit le support de soutenance, son
+plan et la feuille remise au jury, qui sont des documents. Cette révision n'a
+donc pas été déclenchée par la branche habituelle de la règle, mais par la
+seconde, celle des explications devenues fausses. C'est la deuxième fois qu'elle
+sert, après les sessions 9 et 10, et les deux fois ce n'est pas la construction
+qui a périmé les documents, c'est le temps.
+
+Dernière mise à jour : 02/09/2026, fin de session 12.

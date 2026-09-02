@@ -363,9 +363,14 @@ Seul le fait d'essayer de casser la chose a révélé que le garde-fou était mo
 
 ## 7. Ce qui a cassé pour de vrai
 
-Huit incidents ont été consignés au fil de la construction. Voici le plus
+Neuf incidents ont été consignés au fil de la construction. Voici le plus
 instructif, raconté en entier, parce qu'il montre à quoi ressemble vraiment un
 diagnostic.
+
+Le neuvième est le plus récent, et il n'est pas ici : il est raconté à la fin de
+la section 9, parce qu'il est né de la correction d'un des défauts décrits
+là-bas. Une réparation qui casse autre chose est la situation la plus ordinaire
+qui soit, et la plus instructive.
 
 ### L'erreur qui accusait un innocent
 
@@ -479,6 +484,30 @@ une démonstration préparée. Ce qui vaut mieux.
 
 Cette section est là par honnêteté, et parce qu'un projet dont on ne sait pas
 nommer les limites est un projet mal compris.
+
+**Une alerte se déclenche, et personne n'est prévenu.** C'est l'écart le plus
+important entre cette plateforme et une plateforme réellement exploitée, et je
+préfère le dire avant qu'on me le demande.
+
+Le système sait détecter qu'il va mal. Il ouvre un signalement, le garde ouvert
+tant que le problème dure, et le referme tout seul quand la situation revient à
+la normale. Tout cela fonctionne, a été vérifié, et vous l'avez vu à l'oeuvre
+un peu plus haut : cinq alertes se sont refermées d'elles-mêmes le jour où la
+collecte a été remise en marche.
+
+Ce qui manque est la dernière marche, et c'est celle qui compte : rien ne porte
+ce signalement jusqu'à un humain. Pas de courriel, pas de message, pas de
+téléphone qui sonne. Le signalement attend, dans une table, que quelqu'un ait
+l'idée d'aller regarder.
+
+L'écart entre les deux n'est pas théorique, et il se chiffre. En août, une panne
+de collecte a été **détectée en 90 minutes**, ce qui est bon. Elle est restée en
+alerte **6 jours et 20 heures**, parce que rien ni personne n'a transmis la
+détection. Ce n'est donc pas la surveillance qui a manqué, c'est le fil qui
+aurait dû partir d'elle.
+
+Un détecteur de fumée qui clignote dans une cave vide est un détecteur qui
+fonctionne parfaitement, et une maison qui brûle quand même.
 
 **Corrigé le 27 août : la collecte se lance maintenant toute seule.** Cette
 section disait, la veille encore, que personne ne démarrait la collecte et que
@@ -610,8 +639,9 @@ et que le registre de l'entrepôt le prouve.
 
 Ce que ce registre prouve exactement, c'est que le calcul a eu lieu **ailleurs**.
 Il ne prouve pas qu'il a été **découpé et réparti sur plusieurs machines**, parce
-que sur trois jeux et huit jours il n'y a rien à répartir. L'entrepôt a très
-probablement traité ça sur un seul fil d'exécution.
+que sur quinze jeux et quatre journées de relevés, comptés le 31 août, il n'y a
+rien à répartir. L'entrepôt a très probablement traité ça sur un seul fil
+d'exécution.
 
 La formulation exacte serait donc : le mécanisme qui permet la répartition est
 en place et vérifiable, la répartition elle-même n'est pas démontrée. C'est une
@@ -635,9 +665,10 @@ entreprise**. Je ne peux pas démontrer qu'il est le bon choix **ici**.
 L'entrepôt permet de dire « range ces données en les regroupant par date », ce
 qui accélère beaucoup les recherches par période sur de gros volumes.
 
-C'est déclaré dans le projet. Sur soixante-quinze lignes, ça ne change
-rigoureusement rien, et je ne peux pas montrer la différence entre l'avoir et ne
-pas l'avoir. Je sais ce que c'est censé faire. Je ne l'ai pas vu faire.
+C'est déclaré dans le projet. Sur la soixantaine de lignes que compte
+aujourd'hui la table concernée, ça ne change rigoureusement rien, et je ne peux
+pas montrer la différence entre l'avoir et ne pas l'avoir. Je sais ce que c'est
+censé faire. Je ne l'ai pas vu faire.
 
 ### « Le double chemin, ça ne fait pas deux fois le travail ? »
 
@@ -707,6 +738,8 @@ vieillira mal si le projet grandit.
 
 ---
 
-Dernière mise à jour : 27/08/2026, fin de session 6.
+Dernière mise à jour : 02/09/2026, fin de session 12. Les chiffres cités ici
+(incidents, volumes, durées) sont datés : ils étaient exacts au jour dit, et
+plusieurs d'entre eux croissent chaque nuit.
 
 Pour le détail technique des décisions, voir [`pour-un-junior.md`](pour-un-junior.md).
