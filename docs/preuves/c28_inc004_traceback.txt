@@ -1,0 +1,28 @@
+# Preuve c28 : Incident : le traceback d'INC-004, rejoue a l'identique
+#
+# Criteres de la grille : 28 (voir docs/plan_soutenance.md)
+# Reseau requis        : non
+# Capture le           : 02/09/2026 08:02 UTC
+# Code de sortie       : 0
+#
+# Commande :
+#   fonction Python _traceback_inc004() de cet outil
+#
+# --------------------------------------------------------------------------
+
+Rejeu de INC-004 : connexion applicative vers le port hote 5432,
+celui que le service PostgreSQL natif occupe a la place du conteneur.
+
+Traceback (most recent call last):
+  File "C:\Users\maelz\Downloads\Documents\Formalités_Officiels\Dossier YNOV\Certification\Bloc 4\GameLens 0\outils\capturer_preuves.py", line 119, in _traceback_inc004
+    psycopg2.connect(host="localhost", port=5432, dbname="gamelens",
+  File "C:\Users\maelz\AppData\Local\Programs\Python\Python312\Lib\site-packages\psycopg2\__init__.py", line 135, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe9 in position 103: invalid continuation byte
+
+L'octet 0xe9 est le « e » accentue de « echouee », dans
+« authentification par mot de passe echouee », message rendu en
+francais et en cp1252 par le serveur natif. L'erreur d'authentification,
+seule reellement informative, est detruite par l'echec de decodage de
+son propre message.

@@ -331,6 +331,76 @@ def recettes():
     return t.enregistrer("visuel_recettes.png")
 
 
+def investigation():
+    """INC-004 : les cinq etapes, et celle qui a tranche.
+
+    Comptes repris du journal d'incidents : deux hypotheses ecartees, une
+    confirmee, deux verifications d'isolement. L'etape 4 est mise en avant
+    parce que c'est elle qui a identifie le serveur, par la langue de son
+    message d'erreur.
+    """
+    t = Toile(1180, 560)
+
+    t.texte(40, 42, "INC-004 : ce qui a tranché", 20, ENCRE, gras=True)
+    t.texte(40, 66,
+            "Le message d'erreur désignait l'encodage. La cause était une "
+            "collision de ports.", 12.5, ENCRE_2)
+
+    etapes = [
+        ("1", "Encodage du code, ou chemin accentué",
+         "Scripts en UTF-8, et le même chemin monté sans problème (INC-002)",
+         "écartée", GRIS),
+        ("2", "Le conteneur n'est pas démarré",
+         "docker compose ps : Up, healthcheck pg_isready au vert",
+         "écartée", GRIS),
+        ("3", "Le port 5432 n'est pas servi par le conteneur",
+         "Get-NetTCPConnection : PID 6284, service postgresql-x64-18",
+         "confirmée", BLEU),
+        ("4", "Qui répond réellement sur ce port ?",
+         "Connexion depuis le conteneur : réponse en FRANÇAIS ACCENTUÉ",
+         "a tranché", ORANGE),
+        ("5", "Isoler les deux serveurs",
+         "select version() dans le conteneur : PostgreSQL 16.15 Alpine",
+         "confirmé", BLEU),
+    ]
+
+    y = 112
+    for numero, hypothese, verification, issue, couleur in etapes:
+        decisive = issue == "a tranché"
+        if decisive:
+            t.bloc(34, y - 6, 1112, 52, fond="#fdf1ea", bord=ORANGE, epaisseur=1.5)
+        t.d.ellipse([(40 * ECHELLE, (y + 6) * ECHELLE),
+                     (64 * ECHELLE, (y + 30) * ECHELLE)], fill=couleur)
+        t.texte(52, y + 23, numero, 12.5, SURFACE, gras=True, ancre="ms")
+        t.texte(78, y + 16, hypothese, 12.5, ENCRE, gras=decisive)
+        t.texte(78, y + 34, verification, 10.5, ENCRE_2)
+        t.texte(1136, y + 24, issue.upper(), 11, couleur, gras=True, ancre="rs")
+        if not decisive:
+            t.ligne([(40, y + 46), (1140, y + 46)], "#e4e7ec", 1)
+        y += 58
+
+    bas = 410
+    t.bloc(40, bas, 1100, 118, fond=GRIS_PALE, bord=FILET)
+    t.texte(60, bas + 26, "Trois scénarios pesés, un retenu", 13.5, ENCRE, gras=True)
+    scenarios = [
+        ("Arrêter le service natif", "à refaire à chaque redémarrage", False),
+        ("Désinstaller PostgreSQL", "destructif et disproportionné", False),
+        ("Publier le conteneur sur 5433", "une variable à ajuster", True),
+    ]
+    x = 60
+    for titre, effet, retenu in scenarios:
+        couleur = AQUA if retenu else GRIS
+        t.bloc(x, bas + 44, 340, 56, fond=SURFACE, bord=couleur,
+               epaisseur=1.5 if retenu else 1.1)
+        t.texte(x + 14, bas + 66, titre, 12, ENCRE, gras=retenu)
+        t.texte(x + 14, bas + 86, effet, 10.5, ENCRE_2)
+        if retenu:
+            t.texte(x + 326, bas + 66, "RETENU", 9.5, AQUA, gras=True, ancre="rs")
+        x += 360
+
+    return t.enregistrer("visuel_investigation.png")
+
+
 def main() -> int:
     SORTIE.mkdir(parents=True, exist_ok=True)
     print("Visuels du support :")
@@ -338,6 +408,7 @@ def main() -> int:
     ci_etages()
     couts()
     recettes()
+    investigation()
     return 0
 
 

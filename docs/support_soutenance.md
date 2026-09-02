@@ -46,7 +46,7 @@ de ce qui se dit. Les notes atterrissent dans le volet commentaire du PPTX.
     competence: -
     criteres: -
     visuel: -
-    legende: Concevoir et operer une infrastructure data
+    legende: Une plateforme qui a tourné cette nuit à 02h30, sans personne aux commandes
 
 ### Puces
 
@@ -57,6 +57,16 @@ de ce qui se dit. Les notes atterrissent dans le volet commentaire du PPTX.
 ### Notes
 
 Ne pas lire la diapositive. Se présenter en une phrase et enchaîner.
+
+Ouvrir sur la légende plutôt que sur l'identité : « cette plateforme a tourné
+cette nuit à 2h30, sans personne aux commandes. Je vais vous montrer comment
+elle est faite. » Vingt secondes déjà budgétées, et le registre change sans
+coûter une minute.
+
+Poser aussi l'amorce d'INC-004, sans la résoudre : « à un moment, un message
+d'erreur m'a désigné un coupable qui n'avait rien à voir. J'y reviens à la
+fin. » Une attente qui tient trente minutes, et qui donne à la section 10
+l'attention qu'elle n'aurait pas à la vingt-cinquième minute.
 
 ---
 
@@ -341,26 +351,33 @@ PPTX. Si le direct ne répond pas en dix secondes, passer au repli sans commente
 
 ## D11. Ce que Snowflake n'applique pas
 
-    type: puces
+    type: duo
     minute: 08:30
     duree: 1:00
     competence: C4.2.1
     criteres: 10, 12
-    visuel: -
+    legende: Déclaré dans le schéma | Réellement appliqué par le moteur
 
 ### Puces
 
-- Snowflake accepte CHECK, FOREIGN KEY, PRIMARY KEY et UNIQUE, et ne les applique pas
-- Seules les contraintes portées par la colonne sont opposables : NOT NULL, type, longueur
-- Vérifié empiriquement, pas lu dans une documentation : sql/verify_snowflake_constraints.sql
-- L'intégrité est donc reportée hors du moteur, sur deux filets
-- 29 contrats déclaratifs dbt, et 8 contrôles applicatifs, rejoués à chaque push
-- Les deux sont éprouvés en négatif sur le même jeu de données fautif
+- CHECK, sur une valeur | NOT NULL
+- FOREIGN KEY, entre deux tables | Le type de la colonne
+- PRIMARY KEY, entre lignes | La longueur de la colonne
+- UNIQUE, entre lignes | Rien d'autre
 
 ### Notes
 
 C'est le point technique le plus fort du projet. Le présenter comme un **choix
 d'architecture assumé**, pas comme une découverte subie.
+
+La règle sous-jacente, à énoncer à l'oral : Snowflake applique ce qui se vérifie
+sur la colonne seule, et ignore tout ce qui suppose de regarder une autre ligne
+ou une autre table.
+
+Enchaîner sur ce que cela coûte : l'intégrité est reportée hors du moteur, sur
+29 contrats déclaratifs dbt et 8 contrôles applicatifs, rejoués à chaque push et
+éprouvés en négatif sur le même jeu de données fautif. Vérifié empiriquement,
+pas lu dans une documentation : `sql/verify_snowflake_constraints.sql`.
 
 Si la question « pourquoi deux filets et pas un seul ? » vient : ils ne
 contrôlent pas la même chose. dbt contrôle la forme des données, déclarativement
@@ -702,16 +719,18 @@ coupure du broker Kafka a été exécutée, et le pipeline a repris seul.
 
 ## D23. Les points de vigilance
 
-    type: puces
+    type: chiffre
     minute: 21:30
     duree: 1:00
     competence: C4.3.2
     criteres: 24
-    visuel: -
+    chiffre: 11
+    legende: points de vigilance ouverts, sur treize numérotés
 
 ### Puces
 
-- Treize points de vigilance, dont deux datés
+- Nommés, numérotés, et pour deux d'entre eux datés
+- V-12 et V-13 ont été refermés le 31/08 : la feuille de route vit
 - V-01, expiration du compte Snowflake : le seul réellement bloquant
 - V-02, aucun canal de notification : l'écart le plus important avec une plateforme exploitée
 - V-03, l'utilisateur de service tourne avec des droits trop larges
@@ -815,21 +834,20 @@ vérifié que le pipeline échouait proprement, puis qu'il reprenait seul.
 
 ## D27. Un incident réel : INC-004
 
-    type: puces
+    type: preuve
     section: 10. Un incident reel
     minute: 25:00
     duree: 1:00
     competence: C4.4.2
     criteres: 28
-    visuel: -
+    visuel: preuve:c28_inc004_traceback.txt
+    legende: Rejoué le 01/09/2026, à l'identique : même octet 0xe9, même position 103
 
 ### Puces
 
-- Symptôme : UnicodeDecodeError, à l'intérieur de psycopg2.connect()
-- Fausse piste évidente : le projet est stocké sous un chemin accentué
-- Cause réelle : un PostgreSQL natif occupait déjà le port 5432
-- Docker publiait le port sans effet réel, et sans le moindre message d'erreur
-- L'erreur d'authentification, seule informative, a été détruite par l'échec de décodage de son propre message
+- Le message ne dit pas ce qui ne va pas : il dit qu'il n'a pas su lire ce qui ne va pas
+- L'octet 0xe9 est le « é » de « échouée », dans un message PostgreSQL en français
+- Fausse piste évidente, et coûteuse : le projet est stocké sous un chemin accentué
 
 ### Notes
 
@@ -845,16 +863,16 @@ Raconter cet enchaînement lentement : c'est la partie que le jury retient.
 
 ## D28. La méthode, et ce qu'elle a donné
 
-    type: puces
+    type: visuel
     minute: 26:00
     duree: 1:00
     competence: C4.4.2
     criteres: 29, 30, 31
-    visuel: -
+    visuel: annexes/visuel_investigation.png
+    legende: Cinq étapes, deux hypothèses écartées, et celle qui a tranché
 
 ### Puces
 
-- Cinq hypothèses testées, trois écartées, chacune avec sa vérification
 - Ce qui a tranché : la LANGUE du message d'erreur
 - L'image du conteneur est une Alpine en locale C : elle ne peut répondre qu'en anglais ASCII
 - Un message en français accentué prouvait donc que l'interlocuteur n'était pas le conteneur
@@ -882,13 +900,14 @@ lecteur futur de « corriger » l'anomalie apparente et de réintroduire l'incid
 
 ## D29. Ce que je n'ai pas fait
 
-    type: puces
+    type: chiffre
     section: Cloture
     minute: 27:00
     duree: 0:30
     competence: -
     criteres: -
-    visuel: -
+    chiffre: 6 j 20 h
+    legende: une alerte de fraîcheur restée ouverte en août, sans que personne ne soit prévenu
 
 ### Puces
 

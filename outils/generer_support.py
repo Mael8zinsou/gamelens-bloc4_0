@@ -350,12 +350,16 @@ def forme_capture(diapo, d):
 def forme_preuve(diapo, d, lignes: list[str]):
     _fond(diapo)
     entete(diapo, d)
-    _rect(diapo, MARGE, HAUT_CONTENU, UTILE, HAUTEUR_CONTENU, PANNEAU, FILET,
-          rayon=True)
+    # Le panneau epouse le contenu : un extrait de six lignes n'a pas a flotter
+    # dans un cadre dimensionne pour quinze. Le coefficient est cale sur du
+    # Consolas 11 points a l'interligne courant.
+    hauteur = min(HAUTEUR_CONTENU, Inches(0.52) + len(lignes) * Inches(0.205))
+    _rect(diapo, MARGE, HAUT_CONTENU, UTILE, hauteur, PANNEAU, FILET, rayon=True)
     tf = _cadre(diapo, MARGE + Inches(0.34), HAUT_CONTENU + Inches(0.26),
-                UTILE - Inches(0.68), HAUTEUR_CONTENU - Inches(0.5))
+                UTILE - Inches(0.68), hauteur - Inches(0.5))
     for i, ligne in enumerate(lignes):
         _ligne(tf, ligne[:112], 11, ENCRE, premier=(i == 0), police="Consolas")
+    return hauteur
 
 
 def forme_preuve_fichier(diapo, d):
@@ -365,17 +369,20 @@ def forme_preuve_fichier(diapo, d):
     il n'apporte rien a l'ecran.
     """
     chemin = PREUVES / d["visuel"].split(":", 1)[1]
+    hauteur = HAUTEUR_CONTENU
     if chemin.exists():
         lignes = [l for l in chemin.read_text(encoding="utf-8").splitlines()
                   if not l.startswith("#") and l.strip()]
-        forme_preuve(diapo, d, lignes[:15])
+        hauteur = forme_preuve(diapo, d, lignes[:15])
     else:
         _fond(diapo)
         entete(diapo, d)
         _rect(diapo, MARGE, HAUT_CONTENU, UTILE, HAUTEUR_CONTENU, PANNEAU,
               FILET, rayon=True)
     if d["legende"]:
-        tf = _cadre(diapo, MARGE, BAS_CONTENU - Inches(0.3), UTILE, Inches(0.3))
+        haut_legende = min(HAUT_CONTENU + hauteur + Inches(0.16),
+                           BAS_CONTENU - Inches(0.3))
+        tf = _cadre(diapo, MARGE, haut_legende, UTILE, Inches(0.3))
         _ligne(tf, d["legende"], 12, ENCRE_2, premier=True)
 
 

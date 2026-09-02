@@ -37,3 +37,6 @@ data/tmp/
 # Systeme
 .DS_Store
 Thumbs.db
+
+# Bonus
+note_modifications_support.md

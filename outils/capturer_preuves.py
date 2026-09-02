@@ -91,7 +91,65 @@ def _etages_ci() -> tuple[str, int]:
     return ("\n".join(morceaux), code)
 
 
+def _traceback_inc004() -> tuple[str, int]:
+    """Rejoue INC-004 : une connexion vers le port 5432 du poste.
+
+    Le service PostgreSQL natif y repond en francais accentue, psycopg2 tente de
+    decoder ce message en UTF-8 et echoue avant d'avoir pu remonter l'erreur
+    d'authentification. Le symptome designe donc un coupable, l'encodage, qui
+    n'a rien a voir avec la cause, une collision de ports.
+
+    Un echec est le resultat attendu. Une connexion etablie signifierait que le
+    service natif ne tient plus 5432, et donc que la preuve n'est plus rejouable
+    sur ce poste : le message le dit alors explicitement.
+    """
+    import traceback
+
+    try:
+        import psycopg2
+    except ImportError:
+        return ("psycopg2 absent du poste : la preuve ne peut pas etre rejouee.", 1)
+
+    lignes = [
+        "Rejeu de INC-004 : connexion applicative vers le port hote 5432,",
+        "celui que le service PostgreSQL natif occupe a la place du conteneur.",
+        "",
+    ]
+    try:
+        psycopg2.connect(host="localhost", port=5432, dbname="gamelens",
+                         user="gamelens_app", password="devlocal_gamelens",
+                         connect_timeout=5)
+    except UnicodeDecodeError:
+        lignes.append(traceback.format_exc().rstrip())
+        lignes += [
+            "",
+            "L'octet 0xe9 est le \u00ab e \u00bb accentue de \u00ab echouee \u00bb, dans",
+            "\u00ab authentification par mot de passe echouee \u00bb, message rendu en",
+            "francais et en cp1252 par le serveur natif. L'erreur d'authentification,",
+            "seule reellement informative, est detruite par l'echec de decodage de",
+            "son propre message.",
+        ]
+        return ("\n".join(lignes), 0)
+    except Exception:  # noqa: BLE001 - tout autre echec est aussi une information
+        lignes.append(traceback.format_exc().rstrip())
+        lignes.append("")
+        lignes.append("Echec attendu, mais pas celui d'INC-004 : le serveur qui "
+                      "repond sur 5432 a change.")
+        return ("\n".join(lignes), 1)
+
+    lignes.append("Connexion ETABLIE. Le service natif ne tient plus le port 5432 :")
+    lignes.append("l'incident n'est plus rejouable sur ce poste.")
+    return ("\n".join(lignes), 1)
+
+
 CAPTURES: tuple[Capture, ...] = (
+    Capture(
+        "c28",
+        "c28_inc004_traceback.txt",
+        "28",
+        "Incident : le traceback d'INC-004, rejoue a l'identique",
+        fonction=_traceback_inc004,
+    ),
     Capture(
         "c11",
         "c11_cloisonnement_roles.txt",
