@@ -179,6 +179,7 @@ balance décrédibiliserait le reste. Le dire si la question vient.
 - Volumétrie mesurée : 78 octets par relevé de fréquentation, 238 par relevé tarifaire
 - Environ 41 Mo par an, ce qui écarte d'emblée toute solution dimensionnée pour le volume
 - Contraintes : un seul poste, aucun budget d'infrastructure, une échéance de soutenance
+- Ce cadrage a décidé la suite : couche Bronze en PostgreSQL et non en stockage objet, entrepôt dimensionné XS
 
 ### Notes
 
@@ -188,6 +189,10 @@ périodique, et il faut le dire soi-même avant que le jury ne le demande.
 
 Les 41 Mo par an justifient à eux seuls beaucoup de choix ultérieurs, dont la
 couche Bronze en PostgreSQL plutôt qu'en stockage objet.
+
+La grille demande que ce rapport **permette de cadrer le travail de conception**.
+Le dire en quittant la diapositive, avec un exemple et non en général : c'est
+cette analyse qui a écarté le stockage objet, et non un arbitrage pris plus tard.
 
 ---
 
@@ -873,19 +878,27 @@ Raconter cet enchaînement lentement : c'est la partie que le jury retient.
 
 ### Puces
 
-- Ce qui a tranché : la LANGUE du message d'erreur
-- L'image du conteneur est une Alpine en locale C : elle ne peut répondre qu'en anglais ASCII
-- Un message en français accentué prouvait donc que l'interlocuteur n'était pas le conteneur
-- Trois scénarios de correction pesés, dont deux écartés pour leurs effets de bord
-- Retenu : publier sur le port hôte 5433, et écrire dans le fichier pourquoi ce n'est pas 5432
+- Ce qui a tranché : la LANGUE du message d'erreur, devenue empreinte du serveur
+- Une Alpine en locale C ne peut répondre qu'en anglais ASCII : le français prouvait l'imposture
+- Communication, immédiat : mention en daily, tout poste avec un PostgreSQL local se bloquera pareil
+- Puis un prérequis ajouté à la procédure d'installation, et cette entrée de journal pour la trace
+- Résultat vérifié par l'exécution : 15 titres écrits, chaîne complète, rejeu idempotent à 0 inséré
 
 ### Notes
 
-C'est le cœur du livrable C4.4.2 : la nature du problème, les actions selon les
-scénarios, la communication, les résultats attendus.
+C'est le cœur du livrable C4.4.2, et la grille y attend quatre choses : la
+nature du problème, les actions selon les scénarios, **la communication aux
+parties prenantes**, et les résultats. La troisième est celle que les candidats
+oublient le plus souvent ; elle est ici en deux puces, immédiat puis durable.
 
 Le raisonnement sur la langue est le moment fort. La langue d'un message d'erreur
 a servi d'empreinte pour identifier quel serveur répondait. Le dire ainsi.
+
+Fermer sur la phrase de résultat que la grille demande : **la méthode a résolu
+l'incident**, et la vérification n'a pas été l'absence d'erreur mais l'exécution
+réelle de la chaîne. Ajouter que le port 5433 est commenté dans
+`docker-compose.yml` pour que personne ne « corrige » l'anomalie apparente et ne
+réintroduise l'incident.
 
 Les deux scénarios écartés : arrêter le service natif, ce qui casse d'autres
 travaux et se refait à chaque redémarrage ; le désinstaller, disproportionné.
