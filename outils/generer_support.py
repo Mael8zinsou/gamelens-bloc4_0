@@ -27,6 +27,7 @@ Ce qui a change :
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -40,6 +41,10 @@ from pptx.util import Emu, Inches, Pt
 RACINE = Path(__file__).resolve().parent.parent
 SOURCE = RACINE / "docs" / "support_soutenance.md"
 SORTIE = RACINE / "docs" / "support_soutenance.pptx"
+SORTIE_REPETITION = RACINE / "docs" / "support_soutenance_repetition.pptx"
+# Le numero de chaque diapositive, pour que la feuille remise au jury
+# renvoie aux memes numeros que le support projete.
+PLAN_NUMEROS = RACINE / "docs" / "annexes" / "plan_diapos.json"
 CAPTURES = RACINE / "docs" / "captures"
 PREUVES = RACINE / "docs" / "preuves"
 
@@ -192,18 +197,25 @@ def entete(diapo, d):
     _rect(diapo, MARGE, Inches(1.72), Inches(1.15), Emu(28000), accent)
 
 
-def pied(diapo, d, numero, total):
+def pied(diapo, d, numero, total, marquage: bool):
+    """Le pied de page. Avec `marquage`, il porte de quoi repeter.
+
+    Sans, il ne garde que le numero de diapositive : le jury en a besoin, la
+    feuille qui lui est remise renvoie a ces numeros. Le reste, identifiant,
+    minute, competence et criteres, ne regarde que celui qui repete.
+    """
     accent = accent_de(d)
     _rect(diapo, MARGE, HAUTEUR - Inches(0.62), Emu(28000), Inches(0.16), accent)
 
-    morceaux = [d["ident"], d["minute"]]
-    if d["competence"] != "-":
-        morceaux.append(d["competence"])
-    if d["criteres"] != "-":
-        morceaux.append(f"criteres {d['criteres']}")
-    tf = _cadre(diapo, MARGE + Inches(0.14), HAUTEUR - Inches(0.66),
-                Inches(9.0), Inches(0.3))
-    _ligne(tf, "   ·   ".join(morceaux), 9, ENCRE_2, premier=True)
+    if marquage:
+        morceaux = [d["ident"], d["minute"]]
+        if d["competence"] != "-":
+            morceaux.append(d["competence"])
+        if d["criteres"] != "-":
+            morceaux.append(f"criteres {d['criteres']}")
+        tf = _cadre(diapo, MARGE + Inches(0.14), HAUTEUR - Inches(0.66),
+                    Inches(9.0), Inches(0.3))
+        _ligne(tf, "   ·   ".join(morceaux), 9, ENCRE_2, premier=True)
 
     tf = _cadre(diapo, LARGEUR - MARGE - Inches(1.6), HAUTEUR - Inches(0.66),
                 Inches(1.6), Inches(0.3))
@@ -403,7 +415,7 @@ FORMES = {
 SANS_PUCES = {"visuel", "capture", "preuve"}
 
 
-def construire(presentation, d, numero, total):
+def construire(presentation, d, numero, total, marquage):
     diapo = presentation.slides.add_slide(presentation.slide_layouts[6])
     FORMES.get(d["type"], forme_puces)(diapo, d)
 
@@ -416,11 +428,11 @@ def construire(presentation, d, numero, total):
     if notes:
         diapo.notes_slide.notes_text_frame.text = notes
     if d["type"] != "couverture":
-        pied(diapo, d, numero, total)
+        pied(diapo, d, numero, total, marquage)
     return diapo
 
 
-def construire_repli(presentation, d, numero, total):
+def construire_repli(presentation, d, numero, total, marquage):
     identifiant = d["visuel"].split(":", 1)[1]
     fichier, titre = REPLIS[identifiant]
     chemin = PREUVES / fichier
@@ -443,7 +455,7 @@ def construire_repli(presentation, d, numero, total):
         f"Repli de {d['ident']}. Ne pas commenter la panne : enchainer comme si "
         "c'etait prevu."
     )
-    pied(diapo, repli, numero, total)
+    pied(diapo, repli, numero, total, marquage)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -458,36 +470,54 @@ def main(argv: list[str] | None = None) -> int:
 
     total = len(diapos) + sum(1 for d in diapos if d["type"] == "direct")
 
-    presentation = Presentation()
-    presentation.slide_width = LARGEUR
-    presentation.slide_height = HAUTEUR
-
-    numero = 0
     deplacees = 0
     requises: list[str] = []
     souhaitables: list[str] = []
-    for d in diapos:
-        numero += 1
-        if d["type"] in SANS_PUCES and d["puces"]:
-            deplacees += len(d["puces"])
-        construire(presentation, d, numero, total)
-        if d["visuel"].startswith("capture:"):
-            identifiant = d["visuel"].split(":", 1)[1]
-            if not (CAPTURES / f"{identifiant}.png").exists():
-                requises.append(identifiant)
-        if d["type"] == "direct":
-            identifiant = d["visuel"].split(":", 1)[1]
-            if not (CAPTURES / f"{identifiant}.png").exists():
-                souhaitables.append(identifiant)
-            numero += 1
-            construire_repli(presentation, d, numero, total)
+    numeros: dict[str, int] = {}
 
-    try:
-        presentation.save(SORTIE)
-    except PermissionError:
-        print(f"{SORTIE.name} est ouvert dans PowerPoint : le fermer, puis "
-              "relancer. Rien n'a ete ecrit.")
-        return 1
+    def assembler(marquage: bool):
+        nonlocal deplacees, requises, souhaitables
+        deplacees, requises, souhaitables = 0, [], []
+        presentation = Presentation()
+        presentation.slide_width = LARGEUR
+        presentation.slide_height = HAUTEUR
+        numero = 0
+        for d in diapos:
+            numero += 1
+            numeros[d["ident"]] = numero
+            if d["type"] in SANS_PUCES and d["puces"]:
+                deplacees += len(d["puces"])
+            construire(presentation, d, numero, total, marquage)
+            if d["visuel"].startswith("capture:"):
+                identifiant = d["visuel"].split(":", 1)[1]
+                if not (CAPTURES / f"{identifiant}.png").exists():
+                    requises.append(identifiant)
+            if d["type"] == "direct":
+                identifiant = d["visuel"].split(":", 1)[1]
+                if not (CAPTURES / f"{identifiant}.png").exists():
+                    souhaitables.append(identifiant)
+                numero += 1
+                construire_repli(presentation, d, numero, total, marquage)
+        return presentation
+
+    # Assembler d'abord, ecrire ensuite : la numerotation doit etre disponible
+    # meme si PowerPoint tient un des deux fichiers, sans quoi un verrou sur le
+    # support empecherait aussi de regenerer la feuille remise au jury.
+    a_ecrire = [(SORTIE, assembler(False)), (SORTIE_REPETITION, assembler(True))]
+
+    PLAN_NUMEROS.parent.mkdir(parents=True, exist_ok=True)
+    PLAN_NUMEROS.write_text(
+        json.dumps({"total": total, "diapos": numeros}, indent=2) + "\n",
+        encoding="utf-8", newline="\n",
+    )
+
+    for fichier, presentation in a_ecrire:
+        try:
+            presentation.save(fichier)
+        except PermissionError:
+            print(f"{fichier.name} est ouvert dans PowerPoint : le fermer, puis "
+                  "relancer. La numerotation est ecrite, le fichier non.")
+            return 1
 
     duree = sum(int(d["duree"].split(":")[0]) * 60 + int(d["duree"].split(":")[1])
                 for d in diapos)
@@ -495,7 +525,9 @@ def main(argv: list[str] | None = None) -> int:
     for d in diapos:
         formes[d["type"]] = formes.get(d["type"], 0) + 1
 
-    print(f"Ecrit : {SORTIE.relative_to(RACINE)}")
+    print(f"Ecrit : {SORTIE.relative_to(RACINE)}  (projete et depose, sans marquage)")
+    print(f"        {SORTIE_REPETITION.relative_to(RACINE)}  (repetition, marquage complet)")
+    print(f"        {PLAN_NUMEROS.relative_to(RACINE)}  (numerotation, pour la feuille du jury)")
     print(f"  {len(diapos)} diapositives du Markdown, {total} dans le PPTX")
     print(f"  duree annoncee : {duree // 60}:{duree % 60:02d} sur 30:00")
     print("  formes : " + ", ".join(f"{n} {t}" for t, n in sorted(formes.items())))

@@ -151,6 +151,7 @@ couche de demonstration sans message d'erreur. Passer par
 | `outils/capturer_preuves.py` | Captures datees et rejouables des sorties reelles, vers `docs/preuves/` |
 | `outils/generer_support.py` | Generateur du support de soutenance : le Markdown vers le PPTX |
 | `outils/visuels.py` | Schemas et graphiques du support, palette de dataviz validee |
+| `outils/generer_feuille_jury.py` | Feuille A4 remise au jury : les 31 sous-criteres et leur diapositive |
 | `docker/grafana/` | Source de donnees et tableau de bord provisionnes comme code |
 | `docker/snowflake/` | Image d'outillage Snowflake, isolee des dependances d'ingestion |
 | `secrets/` | Cle privee Snowflake, ignoree par git |
@@ -170,6 +171,7 @@ couche de demonstration sans message d'erreur. Passer par
 | `docs/commandes_successives.md` | Trace chronologique des commandes reellement executees |
 | `docs/annexes/` | Dictionnaires de donnees et schema en diagramme, GENERES depuis le catalogue |
 | `docs/preuves/` | Sorties reelles capturees, avec leur en-tete de provenance |
+| `docs/feuille_jury.pdf` | Feuille A4 a imprimer en deux exemplaires, GENEREE |
 | `docs/support_soutenance.md` | Support de soutenance, diapo par diapo : la SOURCE du PPTX |
 | `docs/captures/` | Captures d'ecran d'interfaces, deposees a la main |
 | `docs/vulgarisation/` | Deux versions vulgarisees du projet, pour un junior et pour un non-specialiste |
