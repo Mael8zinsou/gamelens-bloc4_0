@@ -144,6 +144,15 @@ def _e(valeur) -> str:
 
 PASTILLES = {CRITIQUE: "\U0001f534", "avertissement": "\U0001f7e0"}
 
+# Les vues d'indicateurs portent une echelle a TROIS niveaux et non deux :
+# v_supervision_synthese classe la latence en avertissement des 60 s alors
+# que la regle ne se declenche qu'a 300 s. Cette bande intermediaire est
+# deliberee, c'est une pre-alerte destinee au tableau de bord. Rendre tout
+# ce qui n'est pas nominal par une croix la ferait passer pour une panne, et
+# annoncer une panne qui n'en est pas une coute la credibilite du canal
+# aussi surement que de taire une vraie.
+MARQUES = {"nominal": "✓", "avertissement": "!", CRITIQUE: "✗", "inconnu": "?"}
+
 
 def composer_ouverture(regle: str, severite: str, message: str, depuis) -> str:
     pastille = PASTILLES.get(severite, "⚪")
@@ -182,7 +191,7 @@ def composer_battement(etat: dict) -> str:
         ]
 
     for element, valeur, unite, niveau in etat["indicateurs"]:
-        marque = "✓" if niveau == "nominal" else "✗"
+        marque = MARQUES.get(niveau, "?")
         lignes.append(f"{marque} {_e(element)} : <b>{_e(valeur)}</b> {_e(unite)}")
 
     ouvertes = etat["alertes_ouvertes"]

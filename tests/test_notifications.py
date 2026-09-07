@@ -184,3 +184,28 @@ def test_battement_signale_les_composants_muets():
         _etat(composants_muets=[("snowpark_promotion", "05/09 03:00")])
     )
     assert "snowpark_promotion" in msg
+
+
+def test_les_trois_niveaux_dindicateur_sont_distingues():
+    """Defaut reel trouve au premier bilan envoye, le 07/09/2026.
+
+    Le rendu ecrasait trois niveaux en deux et affichait une croix des que
+    l'etat n'etait pas nominal. Une latence de 148 s, classee `avertissement`
+    par la vue mais tres en dessous du seuil de 300 s de la regle, etait donc
+    annoncee comme une panne. Annoncer une panne qui n'en est pas une coute la
+    credibilite du canal aussi surement que de taire une vraie.
+    """
+    msg = notifications.composer_battement(
+        _etat(
+            indicateurs=[
+                ("Fraicheur", "9.0", "minutes", "nominal"),
+                ("Latence", "148.14", "secondes", "avertissement"),
+                ("Alertes ouvertes", "1", "alertes", "critique"),
+                ("Jamais mesure", "", "", "inconnu"),
+            ]
+        )
+    )
+    assert "✓ Fraicheur" in msg
+    assert "! Latence" in msg
+    assert "✗ Alertes ouvertes" in msg
+    assert "? Jamais mesure" in msg
