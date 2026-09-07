@@ -485,9 +485,14 @@ une démonstration préparée. Ce qui vaut mieux.
 Cette section est là par honnêteté, et parce qu'un projet dont on ne sait pas
 nommer les limites est un projet mal compris.
 
-**Une alerte se déclenche, et personne n'est prévenu.** C'est l'écart le plus
+**Corrigé le 7 septembre : quelqu'un est enfin prévenu.** Ce qui suit était,
+jusqu'à cette date, le plus gros trou de la plateforme. Le texte est conservé
+tel qu'il était écrit, parce que le raisonnement vaut mieux que la conclusion,
+et la correction est racontée juste après.
+
+Une alerte se déclenchait, et personne n'était prévenu. C'était l'écart le plus
 important entre cette plateforme et une plateforme réellement exploitée, et je
-préfère le dire avant qu'on me le demande.
+préférais le dire avant qu'on me le demande.
 
 Le système sait détecter qu'il va mal. Il ouvre un signalement, le garde ouvert
 tant que le problème dure, et le referme tout seul quand la situation revient à
@@ -508,6 +513,45 @@ aurait dû partir d'elle.
 
 Un détecteur de fumée qui clignote dans une cave vide est un détecteur qui
 fonctionne parfaitement, et une maison qui brûle quand même.
+
+**Ce qui a été fait, et pourquoi ce n'est pas seulement « brancher une
+messagerie ».** Le système envoie maintenant un message sur un téléphone. Mais
+poser ce fil-là et s'arrêter aurait laissé un défaut plus vicieux que celui
+qu'on corrigeait.
+
+Reprenez l'image du détecteur de fumée. Si vous le reliez à une sirène, vous
+êtes prévenu quand il détecte. Vous n'êtes toujours pas prévenu **quand le
+détecteur lui-même est en panne**, puisqu'un détecteur mort ne détecte rien,
+donc ne sonne pas, donc ne se distingue en rien d'une maison où tout va bien.
+Le silence veut dire deux choses opposées, et c'est le pire état possible pour
+un signal.
+
+D'où deux dispositifs et non un.
+
+Le premier envoie un message **quand quelque chose ne va pas**. Mesuré à la mise
+en service : une panne réelle, provoquée exprès, a été détectée et annoncée en
+**deux secondes**. Comparez aux 6 jours et 20 heures plus haut : c'est le même
+détecteur, seul le fil manquait.
+
+Le second envoie un message **matin et soir, quoi qu'il arrive**, même quand
+tout va bien. C'est un bulletin de santé, et son intérêt n'est pas ce qu'il
+raconte : c'est qu'il **arrive**. Le jour où il n'arrive pas, quelque chose ne
+tourne plus. On a retourné le problème : au lieu d'espérer un message quand ça
+va mal, on s'inquiète d'une absence de message.
+
+Et parce que ce second dispositif est séparé du premier, il survit à la panne du
+premier et peut la dénoncer. Il vérifie à chaque envoi quand la surveillance a
+travaillé pour la dernière fois, et si elle s'est tue, il le dit en tête du
+message.
+
+La formule que je retiens : **on ne demande jamais à quelqu'un de témoigner de
+sa propre existence, on lui adjoint un témoin.**
+
+Jusqu'où faut-il aller ? Le témoin demande un témoin à son tour, et ainsi de
+suite. Ici la chaîne s'arrête un cran plus haut : si tout le système
+d'orchestration s'arrête, les deux dispositifs s'arrêtent ensemble, et c'est le
+lecteur qui ne reçoit pas son message du matin. C'est un choix, pas un oubli.
+Chaque maillon supplémentaire est une pièce de plus à entretenir.
 
 **Corrigé le 27 août : la collecte se lance maintenant toute seule.** Cette
 section disait, la veille encore, que personne ne démarrait la collecte et que
@@ -738,7 +782,7 @@ vieillira mal si le projet grandit.
 
 ---
 
-Dernière mise à jour : 02/09/2026, fin de session 12. Les chiffres cités ici
+Dernière mise à jour : 08/09/2026, fin de session 13. Les chiffres cités ici
 (incidents, volumes, durées) sont datés : ils étaient exacts au jour dit, et
 plusieurs d'entre eux croissent chaque nuit.
 

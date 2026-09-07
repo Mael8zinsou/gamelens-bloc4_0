@@ -2094,3 +2094,112 @@ interfaces rendent HTTP 200, et un run d'ingestion déclenché à la main a coll
 
 La phrase de la feuille de route est désormais vraie. Elle ne l'était pas quand
 elle a été écrite.
+
+## OBS-90. Un mot du lecteur a réglé deux points de sa propre liste
+
+La demande était : « un message périodique qui statue sur l'état des
+composants ». Le mot **périodique** n'était pas un détail de confort, et il
+valait mieux que ce que j'aurais proposé spontanément.
+
+Une notification **événementielle**, une alerte s'ouvre et un message part,
+comble V-02 et laisse V-07 entier. Si le moteur d'alertes s'arrête, aucune règle
+n'est évaluée, aucune alerte n'est ouverte, donc aucun message ne part, et le
+silence redevient indiscernable d'une plateforme saine. C'est le défaut
+d'origine déplacé d'un cran, ce qui est la manière la plus courante de croire
+qu'on l'a corrigé.
+
+Un battement **périodique** inverse la charge de la preuve : il part que tout
+aille bien ou non, donc son **absence** devient le signal. Les deux points 3 et
+4 de la liste du lecteur ne faisaient qu'un, à condition de le concevoir ainsi.
+
+**Ce que j'en retiens sur la méthode.** J'avais lu la demande comme « brancher
+Telegram », c'est-à-dire un problème de transport. C'était un problème de
+**contrat de présence**, et le mot juste était déjà dans la phrase. Reformuler
+la demande avant de la satisfaire aurait pu être vu comme une politesse ; ici
+c'est ce qui a évité de livrer un dispositif qui aurait paru complet.
+
+Corollaire de conception, retenu et écrit dans l'en-tête du DAG : **on ne
+demande jamais à un dispositif de témoigner de sa propre existence, on lui
+adjoint un témoin.** Et il faut décider où la chaîne s'arrête, parce que le
+témoin en demande un à son tour. Ici elle s'arrête un cran plus haut, sur
+l'humain qui ne reçoit pas son message de 8h.
+
+## OBS-91. Les deux seuls défauts sont venus du premier message lu par un humain
+
+Le canal a été livré avec 14 tests unitaires, une chaîne éprouvée sur une vraie
+alerte, et la non-duplication vérifiée sur trois cycles. Puis les premiers
+messages ont été **lus**, et ils ont produit deux défauts, tous deux invisibles
+à tout ce qui précède.
+
+**Le fuseau.** Un bilan composé à 23h58 heure de Paris annonçait « 21:58 ». La
+base stocke en UTC, ce qui est juste, et l'affichage sortait tel quel. Aucune
+assertion ne pouvait le voir : le test comparait un format à un format, et les
+deux étaient corrects.
+
+**L'échelle.** Le rendu écrasait en deux niveaux une échelle qui en porte
+**trois**. `v_supervision_synthese` classe la latence en `avertissement` dès
+60 s, là où la règle ne se déclenche qu'à 300 s. Cette bande intermédiaire est
+délibérée, c'est une pré-alerte destinée au tableau de bord. Résultat, une
+latence de 148 s, parfaitement saine au regard de la règle, était annoncée par
+une croix.
+
+Le second est le plus intéressant, parce qu'il n'était pas un bug de rendu mais
+une **méconnaissance de la donnée rendue** : j'avais supposé que le champ `etat`
+était binaire sans lire la vue qui le produit. Même faute que d'avoir supposé
+des noms de colonnes plus tôt dans la journée, et l'antidote est le même,
+interroger le système sur ce qu'il est.
+
+**La leçon commune aux deux.** Ils portaient sur le **rendu**, la seule partie
+qu'aucune assertion sur des données ne touche, et ils ne pouvaient être trouvés
+que par un humain devant un vrai message. Un canal d'alerte a ceci de
+particulier que son produit final n'est pas une ligne en base : c'est une
+phrase lue par quelqu'un. Le tester sans la lire revient à tester une imprimante
+sans regarder la feuille.
+
+Et une conséquence qui vaut au-delà : **annoncer une panne qui n'en est pas une
+coûte la crédibilité d'un canal aussi sûrement que de taire une vraie.** Un
+canal qui crie pour 148 s de latence finit non lu, exactement comme un canal
+muet.
+
+## OBS-92. La conversion de fuseau avait un angle mort, et il n'aurait touché qu'un champ sur cinq
+
+En corrigeant l'heure, j'ai posé un convertisseur unique appliqué à la
+composition des messages. Propre, un seul endroit, testable sans base.
+
+Il ratait un champ. La liste des composants sans exécution récente est formatée
+par `to_char()` **dans la requête SQL**, donc dans le fuseau de la session
+PostgreSQL, qui est UTC. Le convertisseur Python ne la voit jamais : il reçoit
+déjà du texte.
+
+Le mode de défaillance mérite d'être nommé, parce qu'il est pire qu'une
+correction ratée : le message aurait été juste sur quatre champs et faux sur le
+cinquième. **Une erreur uniforme se remarque ; une erreur partielle se lit comme
+une donnée.** Personne ne soupçonne un fuseau quand les autres lignes sont à
+l'heure.
+
+La règle qui s'en dégage : **quand on centralise une conversion, la première
+question est de savoir ce qui ne passe pas par le centre.** Ici, tout ce qui est
+déjà formaté en amont.
+
+## OBS-93. Le canal d'alerte aurait pu empêcher de signaler les alertes
+
+Question de conception au moment de brancher la notification dans
+`gamelens_supervision` : où placer la nouvelle tâche ?
+
+L'enchaînement naturel, `evaluer` puis `notifier` puis `remonter`, a un défaut
+qui ne se voit qu'en imaginant la panne. Si Telegram est injoignable, la tâche
+de notification échoue, et `remonter_alertes_critiques` passe en
+`upstream_failed` sans jamais s'exécuter. **Le composant chargé de signaler les
+incidents aurait empêché de les signaler**, et précisément le jour où quelque
+chose ne va pas.
+
+Les deux tâches sont donc **parallèles**, toutes deux en aval de l'évaluation et
+indépendantes l'une de l'autre. Elles lisent le même résultat et n'ont aucune
+raison de dépendre l'une de l'autre.
+
+C'est une variante d'un principe que le projet applique déjà ailleurs sans
+l'avoir formulé : **un dispositif de surveillance ne doit jamais être sur le
+chemin critique de ce qu'il surveille.** Le même raisonnement avait conduit à
+séparer `evaluer_regles`, qui réussit toujours, de `remonter_alertes_critiques`,
+qui échoue en présence d'une alerte. La notification est le troisième étage de
+la même idée.

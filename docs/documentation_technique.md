@@ -417,6 +417,76 @@ de `v_indicateur_gold` : le moteur d'alertes tourne toutes les 15 minutes, soit
 traitement quotidien. La vérification a donc lieu au moment de la promotion,
 là où la connexion est déjà ouverte et où le coût est déjà payé.
 
+## DA-12 Un témoin séparé plutôt qu'une notification de plus
+
+**Date** : 07/09/2026, session 13.
+
+**Ce qui a déclenché la décision** : V-02, l'absence de tout canal portant une
+alerte jusqu'à un humain, chiffré à une rupture de fraîcheur restée ouverte
+**6 j 20 h** en août pour une détection en 90 minutes.
+
+**La décision qui comptait n'était pas le choix de l'outil.** Brancher une
+messagerie sur les alertes est une heure de travail et n'aurait comblé que V-02.
+Elle aurait même aggravé V-07 en donnant l'impression que la surveillance était
+complète : si le moteur d'alertes s'arrête, aucune règle n'est évaluée, aucune
+alerte n'est ouverte, donc aucun message ne part. Le silence redevient
+indiscernable d'une plateforme saine, ce qui est le défaut d'origine déplacé
+d'un cran.
+
+**Décision** : deux mécanismes, dans deux DAG distincts.
+
+1. **Notification événementielle**, tâche ajoutée à `gamelens_supervision`. Les
+   3 règles critiques notifient à l'ouverture et à la fermeture. Les 3
+   avertissements attendent le bilan : ce qui demande une action et ce qui
+   demande un regard n'appellent pas la même interruption.
+2. **Battement périodique**, DAG `gamelens_battement`, 8h et 20h. Il part que
+   tout aille bien ou non, donc **son absence est le signal**. Étant séparé, il
+   survit à une panne de la supervision et la dénonce : il lit quand
+   `moteur_alertes` a tourné pour la dernière fois et, au-delà de trois cycles
+   manqués, ouvre son message par « LA SUPERVISION EST MUETTE ».
+
+**Principe qui se généralise** : on ne demande pas à un dispositif de témoigner
+de sa propre existence, on lui adjoint un témoin. La chaîne s'arrête un cran
+plus haut, sur le lecteur qui ne reçoit pas son message de 8h, et cet arbitrage
+est explicite : chaque témoin supplémentaire est un composant de plus à tenir.
+
+**Trois contraintes de conception, chacune contre un mode de défaillance.**
+
+*Les deux tâches aval sont parallèles, pas enchaînées.* Enchaînée, une panne du
+service de messagerie aurait laissé `remonter_alertes_critiques` en
+`upstream_failed` : le composant chargé de signaler les incidents aurait
+empêché de les signaler, précisément le jour où quelque chose ne va pas. Un
+dispositif de surveillance ne doit jamais être sur le chemin critique de ce
+qu'il surveille.
+
+*Absent n'est pas cassé, configuré mais injoignable l'est.* Sans jeton, tout est
+un no-op qui rend un succès : un dépôt fraîchement cloné et la CI n'ont pas de
+compte de messagerie et doivent fonctionner. Avec un jeton qui ne délivre pas,
+l'exécution est tracée en échec, ce qui déclenche `echecs_composants`. Taire un
+canal déclaré qui ne marche pas reproduirait le défaut corrigé.
+
+*L'état de notification vit en base, pas en mémoire.* Les colonnes
+`notifiee_le` et `resolution_notifiee_le` de `speed.alertes` retiennent ce qui a
+été annoncé. Passer la liste d'une tâche à l'autre aurait été plus court et
+aurait perdu définitivement tout envoi raté. C'est le raisonnement de
+l'idempotence du puits d'ingestion : on ne garantit pas l'envoi, on rend le
+réessai automatique et inoffensif.
+
+**Alternative écartée : le courriel.** Un envoi SMTP demande un serveur, des
+identifiants, une réputation d'expéditeur, et finit dans les indésirables au
+premier message automatique. L'API Telegram est un POST HTTPS sortant, sans port
+entrant à ouvrir, et le message arrive sur un téléphone. Contrepartie assumée :
+une **dépendance à un service tiers gratuit et sans contrat**, du même ordre que
+celle qui pèse déjà sur l'API Steam (V-10). Le dispositif dégrade proprement si
+Telegram disparaît, puisque les alertes restent persistées et remontées par
+Airflow comme avant.
+
+**Contrepartie mesurée** : la conversion de fuseau. La base stocke en UTC, ce
+qui est juste, mais un message destiné à un humain doit porter son heure. La
+conversion se fait au plus tard possible, à la composition, jamais à l'écriture.
+Deux défauts d'affichage ont été trouvés par les premiers messages **lus**, non
+par les tests, ce qui est consigné en OBS-91 et couvert par TNOT-06.
+
 ## 3.1 Fréquentation
 
 | Étape | Objet | Transformation appliquée |
@@ -619,7 +689,7 @@ par `git check-ignore` et non supposé.
 |---|---|---|---|
 | PostgreSQL | 16-alpine | Silver speed, Bronze, Gold prototype (seul Gold tenu à jour), métadonnées Airflow | `localhost:5433` |
 | Apache Kafka | 3.9.0, mode KRaft | tampon entre collecte et écriture | `localhost:9092` |
-| Apache Airflow | 3.1.8, LocalExecutor | orchestration, 4 DAG | `localhost:8080`, `admin`/`admin` |
+| Apache Airflow | 3.1.8, LocalExecutor | orchestration, 5 DAG | `localhost:8080`, `admin`/`admin` |
 | Grafana | 11.6.0 | restitution des indicateurs | `localhost:3000`, `admin`/`admin` |
 | Snowflake | compte étudiant | entrepôt Gold cible, calcul distribué, contrats dbt. Promu quotidiennement depuis le 31/08/2026 (DA-11) | `RTZSXDV-PM63908` |
 | Outillage Snowflake | image dédiée | Snowpark, dbt, génération du dictionnaire | `docker compose run --rm snowflake-cli` |
@@ -638,7 +708,7 @@ lancement manuel. Partir du fichier compose officiel de la version exacte.
 | Répertoire | Contenu |
 |---|---|
 | `ingestion/` | pipeline temps réel, collecte tarifaire, archivage Bronze |
-| `dags/` | quatre DAG Airflow |
+| `dags/` | cinq DAG Airflow |
 | `entrepot/` | tout ce qui vise Snowflake : connexion, exécution SQL, Snowpark, contrôles, recette de CI |
 | `supervision/` | règles d'alerte et vérification du tableau de bord |
 | `sql/` | schémas et documentation des colonnes |
@@ -724,7 +794,7 @@ fréquente soit aussi la plus rapide à détecter.
 |---|---|
 | Qualité | lint et format sur cinq répertoires |
 | Tests unitaires | 39 tests, sans infrastructure |
-| Intégrité des DAG | les quatre DAG s'analysent et sont enregistrés, vérifié par leur nom |
+| Intégrité des DAG | les cinq DAG s'analysent et sont enregistrés, vérifié par leur nom |
 | Intégration | socle Docker neuf, pipeline complet, sécurité, idempotence, Bronze, dictionnaire |
 | Recette de l'entrepôt | base Snowflake jetable, schéma appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles en positif **et en négatif** |
 | Publication | image poussée avec double étiquetage |

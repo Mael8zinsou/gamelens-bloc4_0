@@ -12,16 +12,16 @@ documents-ci font l'inverse : ils partent du lecteur.
 
 | Document | Pour qui | Ce à quoi il répond | Durée |
 |---|---|---|---|
-| [`pour-un-junior.md`](pour-un-junior.md) | Un data engineer fraîchement diplômé. Il a le vocabulaire, il n'a pas encore l'expérience de la production. | « Pourquoi as-tu fait ça comme ça, et pas autrement ? » | ~45 min |
-| [`explique-simplement.md`](explique-simplement.md) | Quelqu'un qui sait ce qu'est un programme, une base de données, une API, mais pour qui « pipeline », « idempotence » ou « couche Gold » ne veulent rien dire. | « C'est quoi, ton truc ? » | ~30 min |
+| [`pour-un-junior.md`](pour-un-junior.md) | Un data engineer fraîchement diplômé. Il a le vocabulaire, il n'a pas encore l'expérience de la production. | « Pourquoi as-tu fait ça comme ça, et pas autrement ? » | ~50 min |
+| [`explique-simplement.md`](explique-simplement.md) | Quelqu'un qui sait ce qu'est un programme, une base de données, une API, mais pour qui « pipeline », « idempotence » ou « couche Gold » ne veulent rien dire. | « C'est quoi, ton truc ? » | ~35 min |
 
 Les durées sont recalculées sur le nombre de mots à chaque révision, sinon elles
-vieillissent en silence : au 02/09/2026, 8 976 mots pour la version junior et
-6 150 pour la version simple. Elles avaient été annoncées à 25 et 12 minutes
+vieillissent en silence : au 08/09/2026, 9 721 mots pour la version junior et
+6 561 pour la version simple. Elles avaient été annoncées à 25 et 12 minutes
 quand les documents faisaient à peu près la moitié de cette taille. La révision
-de la session 12 les a fait grossir de 7 % et de 5 %, ce qui ne déplace ni l'une
-ni l'autre une fois arrondie : le tableau reste juste, et c'est le recomptage
-qui le prouve, pas l'habitude.
+de la session 12 ne les avait pas déplacées une fois arrondies ; celle de la
+session 13 les déplace toutes les deux d'un cran, ce qui est la raison même de
+recompter à chaque fois plutôt que de reconduire.
 
 La ligne de partage est volontairement franche, sinon les deux documents
 seraient le même à quelques mots près.
@@ -84,12 +84,19 @@ distingue un document relu d'un document oublié.
   et `supervision/regles_alertes.py`, ce que la version Feynman admet dans sa
   section finale. Vérifié encore vrai le 31/08/2026 : la valeur 90 figure bien
   aux deux endroits. Une source unique rendrait ce passage caduc.
-- Aucun canal de notification n'est branché (V-02), et la supervision ne se
-  surveille pas elle-même (V-07). Les deux documents le **disent** désormais,
-  chiffres à l'appui : détection en 90 minutes, alerte restée ouverte 6 j 20 h.
-  C'était un risque de lecture signalé ici depuis la session 11 sans que les
-  documents concernés ne le portent ; il est levé. Le jour où un canal sera
-  branché, ce sont ces passages-là qui deviendront faux.
+- ~~Aucun canal de notification (V-02), et la supervision qui ne se surveille
+  pas elle-même (V-07).~~ **Traités le 07/09/2026.** Cette entrée annonçait,
+  mot pour mot : « le jour où un canal sera branché, ce sont ces passages-là qui
+  deviendront faux ». Ils l'ont été cinq jours plus tard, et c'est la première
+  fois que cette page prévoit correctement sa propre péremption. Les deux
+  documents portent désormais le constat **et** la correction, le premier au
+  passé et daté.
+- Ce qui les remplace comme dépendance à surveiller : le canal repose sur un
+  **service tiers gratuit et sans contrat**, du même ordre que la dépendance à
+  l'API Steam. Si Telegram change ses conditions ou ferme, les passages sur la
+  notification deviendront faux à leur tour. Le dispositif dégraderait
+  proprement, les alertes restant persistées, mais les documents ne le diraient
+  plus juste.
 - L'expiration du compte Snowflake à la mi-décembre 2026 (V-01) est citée dans
   la version junior. La date est **attendue et non confirmée** dans Snowsight :
   si elle est démentie, ce passage l'est avec elle.
@@ -177,4 +184,30 @@ seconde, celle des explications devenues fausses. C'est la deuxième fois qu'ell
 sert, après les sessions 9 et 10, et les deux fois ce n'est pas la construction
 qui a périmé les documents, c'est le temps.
 
-Dernière mise à jour : 02/09/2026, fin de session 12.
+**Session 13 (07 et 08/09/2026).** Première révision déclenchée par les **deux**
+branches de la règle à la fois : une brique a été ajoutée, et cette brique a
+rendu faux ce que les deux documents disaient depuis cinq jours.
+
+La brique est le canal de notification, qui referme V-02 et V-07. Les passages
+écrits en session 12, « rien ne porte une alerte jusqu'à un humain », étaient
+exacts le jour où ils ont été écrits et faux le 7 septembre.
+
+Choix d'écriture, et il mérite d'être défendu : **le constat est conservé, au
+passé et daté, et la correction est racontée après.** Effacer aurait donné deux
+documents plus courts et moins vrais. Ce qu'un lecteur retient ici n'est pas
+qu'un canal existe, c'est *pourquoi brancher une messagerie n'était pas la
+bonne réponse* : une notification événementielle aurait comblé V-02 en
+aggravant V-07, en donnant l'impression d'une surveillance complète alors que
+le silence serait redevenu ambigu. Ce raisonnement-là ne se lit que si l'on
+garde l'état antérieur sous les yeux.
+
+La version Feynman gagne l'image du détecteur de fumée relié à une sirène, qui
+ne dit toujours rien quand le détecteur lui-même est mort. La version junior
+gagne les trois contraintes de conception, dont celle qui se transpose le mieux :
+un dispositif de surveillance ne doit jamais être sur le chemin critique de ce
+qu'il surveille.
+
+Les durées de lecture bougent pour la première fois depuis qu'elles sont
+recomptées, de 45 à 50 minutes et de 30 à 35.
+
+Dernière mise à jour : 08/09/2026, fin de session 13.

@@ -229,6 +229,8 @@ Historique des alertes declenchees. Persistees pour pouvoir mesurer la duree d u
 | `seuil` | `numeric` | oui |  | Seuil franchi. Defini en SQL, jamais dans l'outil de restitution. |
 | `declenchee_le` | `timestamp with time zone` | non | `now()` | Premiere evaluation ayant constate le franchissement. |
 | `resolue_le` | `timestamp with time zone` | oui |  | Evaluation ayant constate le retour sous seuil. Nul tant que l'alerte est ouverte. L'ecart avec declenchee_le mesure la duree d'incident. |
+| `notifiee_le` | `timestamp with time zone` | oui |  | Instant ou l'ouverture a ete annoncee sur le canal externe. Nul si jamais annoncee : seules les alertes critiques le sont, les avertissements attendent le bilan periodique. |
+| `resolution_notifiee_le` | `timestamp with time zone` | oui |  | Instant ou la fermeture a ete annoncee. Une fermeture n'est annoncee que si l'ouverture l'a ete, sinon un message sortirait de nulle part. |
 
 Contraintes :
 

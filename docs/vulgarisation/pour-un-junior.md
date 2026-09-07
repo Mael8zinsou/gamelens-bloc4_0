@@ -973,11 +973,15 @@ Bloc 1, les commentaires du schéma les nommaient colonne par colonne, et les
 dépendances étaient installées à chaque exécution de la chaîne. Tout avait l'air
 fait.
 
-## Rien ne porte l'alerte jusqu'à un humain
+## Résolu le 07/09/2026 : l'alerte atteint enfin un humain
 
-C'est l'écart le plus important entre cette plateforme et une plateforme
-réellement exploitée. C'est aussi celui qu'il vaut mieux énoncer soi-même que se
-faire signaler.
+Cette section listait l'absence de tout canal comme le plus gros écart de la
+plateforme. Elle est levée. Le texte du constat reste, parce que la manière dont
+la correction a été **conçue** est plus instructive que le fait qu'elle existe.
+
+C'était l'écart le plus important entre cette plateforme et une plateforme
+réellement exploitée. C'était aussi celui qu'il valait mieux énoncer soi-même
+que se faire signaler.
 
 Le moteur d'alertes fonctionne, et son cycle de vie est complet : six règles,
 déclenchement sur seuil, non-duplication tant que la condition dure, fermeture
@@ -1001,11 +1005,78 @@ le producteur d'alertes est mort. C'est le principe 1 de la section 8, celui du
 composant qui réussit sans rien faire, retourné contre l'outil même qui devrait
 le détecter.
 
-Ce que ça coûterait à corriger : peu de chose. Un canal de notification est une
+Ce que ça coûtait à corriger : peu de chose. Un canal de notification est une
 heure de travail, pas une difficulté d'architecture. C'est précisément pour ça
-que l'absence mérite d'être racontée : elle ne mesure pas un obstacle technique,
-elle mesure ce qu'on laisse tomber quand on construit seul et qu'on est aussi le
-seul lecteur du tableau de bord.
+que l'absence méritait d'être racontée : elle ne mesurait pas un obstacle
+technique, elle mesurait ce qu'on laisse tomber quand on construit seul et qu'on
+est aussi le seul lecteur du tableau de bord.
+
+### Et voilà pourquoi une heure de travail n'était pas la bonne réponse
+
+Brancher une messagerie sur les alertes aurait comblé le premier écart en
+**aggravant le second**, ce qui est la manière la plus courante de croire qu'on
+a corrigé quelque chose.
+
+Regarde le raisonnement, il se transpose partout. Une notification est
+**événementielle** : elle part quand un événement se produit. Si le moteur
+d'alertes s'arrête, aucune règle n'est évaluée, aucune alerte n'est ouverte,
+donc aucun message ne part. Le silence redevient indiscernable d'une plateforme
+saine. Tu as déplacé le défaut d'un cran, et tu as en prime l'impression que la
+surveillance est complète.
+
+D'où deux mécanismes, dans **deux DAG distincts**, et la séparation est tout le
+propos.
+
+1. **Notification événementielle**, tâche ajoutée à `gamelens_supervision`. Les
+   3 règles critiques annoncent leur ouverture et leur fermeture ; les 3
+   avertissements attendent le bilan. Ce qui demande une action et ce qui
+   demande un regard n'appellent pas la même interruption.
+2. **Battement périodique**, DAG `gamelens_battement`, 8h et 20h. Il part que
+   tout aille bien ou non, donc **son absence est le signal**. Et parce qu'il
+   est séparé, il survit à une panne de la supervision et la dénonce : il lit
+   quand `moteur_alertes` a tourné pour la dernière fois et, au-delà de trois
+   cycles manqués, ouvre son message par « LA SUPERVISION EST MUETTE ».
+
+**On ne demande jamais à un dispositif de témoigner de sa propre existence, on
+lui adjoint un témoin.** Et il faut décider où la chaîne s'arrête, parce que le
+témoin en demande un à son tour. Ici, un cran plus haut : si l'ordonnanceur
+meurt, les deux DAG meurent ensemble et c'est toi qui ne reçois pas ton message
+de 8h.
+
+Trois contraintes de conception valent d'être retenues, chacune posée contre un
+mode de défaillance précis.
+
+**Les deux tâches aval sont parallèles, jamais enchaînées.** Enchaînée, une
+panne de la messagerie aurait laissé `remonter_alertes_critiques` en
+`upstream_failed` : le composant chargé de signaler les incidents aurait empêché
+de les signaler, le jour même où ça compte. Règle générale : *un dispositif de
+surveillance ne doit jamais être sur le chemin critique de ce qu'il surveille.*
+
+**Absent n'est pas cassé, configuré mais injoignable l'est.** Sans jeton, tout
+est un no-op qui rend un succès : un dépôt fraîchement cloné et la CI n'ont pas
+de compte de messagerie. Avec un jeton qui ne délivre pas, l'exécution est
+tracée en échec et déclenche une alerte critique. L'asymétrie est délibérée, et
+testée.
+
+**L'état de notification vit en base, pas en mémoire.** Deux colonnes sur
+`speed.alertes` retiennent ce qui a été annoncé. Passer la liste d'une tâche à
+l'autre aurait été plus court et aurait perdu définitivement tout envoi raté.
+C'est le raisonnement de la décision 3.1, appliqué ailleurs : *on ne garantit
+pas l'envoi, on rend le réessai automatique et inoffensif.*
+
+**Le résultat, mesuré.** Une panne provoquée exprès a été détectée à 21:54:05 et
+annoncée à **21:54:07**. Deux secondes, avec le même moteur de détection qui
+avait laissé une alerte ouverte 6 j 20 h en août.
+
+**Et les deux seuls défauts sont venus du premier message lu.** Ni les 14 tests
+unitaires, ni la chaîne éprouvée sur une vraie alerte ne les avaient montrés :
+l'heure sortait en UTC devant un lecteur qui vit à Paris, et le rendu écrasait
+en deux niveaux une échelle qui en porte trois, annonçant une panne pour une
+latence parfaitement saine. Les deux portaient sur le **rendu**, la seule partie
+qu'aucune assertion sur des données ne touche. Retiens-le : *le produit final
+d'un canal d'alerte n'est pas une ligne en base, c'est une phrase lue par
+quelqu'un.* Et *annoncer une panne qui n'en est pas une coûte la crédibilité du
+canal aussi sûrement que de taire une vraie.*
 
 ## L'utilisateur de service tourne en ACCOUNTADMIN
 
@@ -1127,8 +1198,8 @@ documentée d'une architecture surveillée.
 | Ce que tu cherches | Où |
 |---|---|
 | Les incidents au format complet | `docs/journal_incidents.md` |
-| Les surprises, fausses pistes, arbitrages | `docs/observations.md`, 75 entrées |
-| Les tests et leurs résultats réels | `docs/cahier_recettes.md`, 55 cas, tous PASS |
+| Les surprises, fausses pistes, arbitrages | `docs/observations.md`, 93 entrées |
+| Les tests et leurs résultats réels | `docs/cahier_recettes.md`, 61 cas, tous PASS |
 | Les commandes réellement exécutées | `docs/commandes_successives.md` |
 | Ce qu'il faut faire tourner, surveiller et purger | `docs/feuille_route_exploitation.md` |
 | L'état d'avancement et les pièges d'environnement | `CLAUDE.md` |
@@ -1138,6 +1209,6 @@ documentée d'une architecture surveillée.
 | La supervision | `supervision/` et `sql/schema_supervision.sql` |
 | La chaîne d'intégration continue | `.github/workflows/ci.yml`, six étages |
 
-Dernière mise à jour : 02/09/2026, fin de session 12. Les chiffres cités
+Dernière mise à jour : 08/09/2026, fin de session 13. Les chiffres cités
 (incidents, observations, cas de recette, volumes) sont datés : ils étaient
 exacts au jour dit, et les volumes croissent chaque nuit.

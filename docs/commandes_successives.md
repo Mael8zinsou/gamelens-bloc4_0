@@ -2492,3 +2492,96 @@ ports publies ; `docker exec` ne les emprunte pas ; `localhost` **est**
 `127.0.0.1`, donc le navigateur passe, et la CI aussi, qui se connecte depuis le
 runner avec `POSTGRES_HOST: localhost`. Seul l'acces depuis un autre appareil du
 reseau disparait, et rien ne l'utilisait.
+
+## Phase 52. Mettre en service le canal de notification (procédure)
+
+Les deux variables sont **facultatives** : sans elles la plateforme fonctionne à
+l'identique et la notification est un no-op. Voir `.env.example` pour la
+création du bot et du canal.
+
+```bash
+# [BASH] Verifier la FORME des valeurs sans jamais afficher le secret.
+#        Un jeton mal recopie est la premiere cause d'echec silencieux.
+python - <<'EOF'
+from pathlib import Path
+v = dict(l.split("=", 1) for l in Path(".env").read_text(encoding="utf-8").splitlines()
+         if "=" in l and not l.startswith("#"))
+j = v.get("TELEGRAM_BOT_TOKEN", "").strip()
+d = v.get("TELEGRAM_CHAT_ID", "").strip()
+print("jeton :", "forme <id>:<secret>" if ":" in j else "SUSPECT", "longueur", len(j))
+print("canal :", d, "(un identifiant de canal est NEGATIF, en -100...)")
+EOF
+
+# [BASH] Les conteneurs doivent etre RECREES : un restart ne relit pas .env
+docker compose up -d
+
+# [BASH] L'environnement est-il arrive, sans afficher le secret ?
+docker exec gamelens-airflow-scheduler python -c "
+import os
+print('jeton longueur', len(os.getenv('TELEGRAM_BOT_TOKEN','')))
+print('canal', os.getenv('TELEGRAM_CHAT_ID'))"
+
+# [BASH] Message d'essai de bout en bout. MSYS_NO_PATHCONV est indispensable
+#        depuis Git Bash, sans quoi le chemin est reecrit (INC-002).
+MSYS_NO_PATHCONV=1 docker exec gamelens-airflow-scheduler \
+  python /opt/gamelens/supervision/notifications.py --essai
+# -> message d'essai delivre
+```
+
+## Phase 53. Éprouver la chaîne sur une VRAIE alerte critique (procédure)
+
+Le test qui compte. Une ligne insérée à la main dans `speed.alertes` prouverait
+que le formatage marche, pas que la chaîne marche.
+
+```bash
+# [BASH] 1. Provoquer un ECHEC AUTHENTIQUE : broker inexistant, comme au test
+#           d'INC-008. La connexion est construite DANS le contexte de tracage,
+#           donc l'echec laisse bien une ligne en base.
+MSYS_NO_PATHCONV=1 docker exec -e KAFKA_BOOTSTRAP_SERVERS=kafka:19999 \
+  gamelens-airflow-scheduler python /opt/gamelens/ingestion/kafka_to_postgres.py --timeout 5
+# -> kafka.errors.NoBrokersAvailable, et en base :
+#    kafka_to_postgres | failed | NoBrokersAvailable
+
+# [BASH] 2. Declencher la supervision
+docker exec gamelens-airflow-scheduler airflow dags trigger gamelens_supervision
+
+# [SQL] 3. L'alerte est-elle ouverte ET annoncee ?
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT regle, severite, declenchee_le, notifiee_le
+     FROM speed.alertes WHERE resolue_le IS NULL"
+# echecs_composants | critique | 21:54:05 | 21:54:07   <- deux secondes
+
+# [SQL] 4. NON-DUPLICATION : rejouer deux fois et verifier que rien ne repart
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT started_at, records_in, records_written FROM speed.pipeline_runs
+    WHERE component='notificateur' ORDER BY started_at DESC LIMIT 3"
+# 21:55:52 | 0 | 0
+# 21:55:10 | 0 | 0
+# 21:54:07 | 1 | 1   <- annoncee une seule fois
+```
+
+À savoir avant de lancer : `echecs_composants` compte les échecs sur **24 h**.
+L'alerte reste donc ouverte une journée entière et `gamelens_supervision`
+affichera rouge à chaque cycle, ce qui est son comportement voulu. La fermeture
+automatique le lendemain vaut preuve différée du cycle complet.
+
+## Phase 54. Contrôler l'affichage réellement reçu (procédure)
+
+Les deux seuls défauts du canal ont été trouvés là, pas par les tests (OBS-91).
+
+```bash
+# [BASH] Composer le message SANS l'envoyer, et le lire
+MSYS_NO_PATHCONV=1 docker exec gamelens-airflow-scheduler python -c "
+import sys, re; sys.path.insert(0, '/opt/gamelens/supervision')
+from notifications import etat_plateforme, composer_battement
+print(re.sub(r'</?[bi]>', '', composer_battement(etat_plateforme())))"
+
+# Deux points a verifier a l'oeil, qu'aucune assertion ne couvre :
+#   1. l'heure du bilan colle-t-elle a l'heure du poste ?
+#      python -c "import datetime as dt; print(dt.datetime.now().strftime('%H:%M'))"
+#   2. les marques respectent-elles les TROIS niveaux de v_supervision_synthese ?
+#      nominal -> coche, avertissement -> point d'exclamation, critique -> croix
+```
+
+Rappel de fond : la base stocke en UTC et doit continuer. Seul l'affichage est
+converti, par `GAMELENS_TIMEZONE`, au plus tard possible.

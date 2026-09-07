@@ -141,7 +141,7 @@ couche de demonstration sans message d'erreur. Passer par
 | `sql/schema_gold.sql` | Prototype PostgreSQL du Gold, conserve comme reference |
 | `sql/verify_snowflake_constraints.sql` | Verification empirique des contraintes Snowflake |
 | `sql/schema_supervision.sql` | Indicateurs de supervision et journal d'alertes |
-| `dags/` | 4 DAG Airflow : ingestion temps reel, promotion PostgreSQL, promotion Snowflake, supervision |
+| `dags/` | 5 DAG Airflow : ingestion temps reel, promotion PostgreSQL, promotion Snowflake, supervision, battement |
 | `entrepot/` | Connexion Snowflake, promotion Snowpark, controles d'integrite et recette de CI |
 | `dbt/` | Projet dbt : 4 sources et 1 modele, 29 contrats declaratifs au total (25 portes par les sources, 4 par le modele) |
 | `supervision/` | Moteur d'alertes et verification du tableau de bord |
@@ -187,7 +187,7 @@ correspond plus au catalogue.
 |---|---|---|
 | C4.2.1, architecture d'entrepot | Deux couches Gold, Snowflake et PostgreSQL | `sql/schema_gold_snowflake.sql`, `sql/schema_gold.sql`, `sql/verify_snowflake_constraints.sql` |
 | C4.2.2, methode 1, temps reel | Steam vers Kafka vers PostgreSQL, idempotent | `ingestion/`, DAG `gamelens_ingestion_temps_reel` |
-| C4.2.2, methode 2, orchestrateur | Airflow 3.1.8, 4 DAG | `dags/`, http://localhost:8080 |
+| C4.2.2, methode 2, orchestrateur | Airflow 3.1.8, 5 DAG | `dags/`, http://localhost:8080 |
 | C4.2.2, methode 3, calcul distribue | Snowpark, et non Spark local | `entrepot/snowpark_promotion.py`, DA-04 |
 | C4.2.3, CI/CD | 6 etages, base Snowflake jetable, image publiee | `.github/workflows/ci.yml` |
 | C4.3.1, supervision | 5 indicateurs SQL, 6 regles, Grafana comme code | `sql/schema_supervision.sql`, `supervision/`, `docker/grafana/` |

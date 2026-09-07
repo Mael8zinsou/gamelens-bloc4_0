@@ -95,7 +95,7 @@ consignes qui se contredit fait perdre du temps à qui le lit.
   exécutées :
   1. *pipeline temps réel* (SQL/Python) : Steam vers Kafka vers PostgreSQL,
      `ingestion/`, idempotence prouvée par rejeu des offsets ;
-  2. *orchestrateur* : Airflow 3.1.8 en conteneurs, 4 DAG dans `dags/`, tests
+  2. *orchestrateur* : Airflow 3.1.8 en conteneurs, 5 DAG dans `dags/`, tests
      négatifs de porte de fraîcheur réussis sur les deux promotions ;
   3. *calcul distribué* : **Snowpark et non Spark**, choix assumé du
      19/08/2026, `entrepot/snowpark_promotion.py`. Le référentiel cite Spark en
@@ -153,13 +153,13 @@ sessions 11 et 12 manquaient dans deux d'entre eux.
 | **Couche Bronze** | ✅ **Construite et alimentée** : `bronze.reponses_brutes`, archivage de tout appel abouti ou non, vue de santé des sources. Écart assumé avec le S3 du Bloc 1. |
 | Schéma Silver speed PostgreSQL | ✅ Construit, initialisé automatiquement |
 | **C4.2.2 méthode 1, pipeline temps réel** | ✅ **Exécuté et désormais orchestré** : Steam vers Kafka vers PostgreSQL. Idempotence prouvée par rejeu. DAG `gamelens_ingestion_temps_reel` toutes les 15 min, porte de sortie, test négatif broker coupé et reprise automatique vérifiée. |
-| **C4.2.2 méthode 2, orchestrateur** | ✅ **Exécuté** : Airflow 3.1.8 en conteneurs, **4 DAG**. `gamelens_promotion_gold` (6 tâches), `gamelens_promotion_snowflake`, `gamelens_ingestion_temps_reel`, `gamelens_supervision`. Tests négatifs de porte de fraîcheur réussis sur les deux promotions. |
+| **C4.2.2 méthode 2, orchestrateur** | ✅ **Exécuté** : Airflow 3.1.8 en conteneurs, **5 DAG**. `gamelens_promotion_gold` (6 tâches), `gamelens_promotion_snowflake`, `gamelens_ingestion_temps_reel`, `gamelens_supervision`, `gamelens_battement`. Tests négatifs de porte de fraîcheur réussis sur les deux promotions. |
 | **C4.2.2 méthode 3, calcul distribué** | ✅ **Exécuté et désormais orchestré** : Snowpark, MERGE idempotents et calcul analytique (fenêtre glissante 7 j, classement par genre). Nature distribuée prouvée par le SQL généré et l'historique de session. DAG `gamelens_promotion_snowflake` quotidien depuis le 31/08/2026. |
 | Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté quotidiennement** par le DAG de promotion. Volumes au 31/08/2026 : 15 dim_games, 45 faits popularité, 120 faits prix. Chiffres datés : ils croissent à chaque nuit. |
 | Schéma Gold Snowflake (cible finale) | ✅ **Exécuté** sur `RTZSXDV-PM63908` (AWS_EU_WEST_3) : 27 instructions, 0 erreur, 8 contrôles au vert. **Alimentée quotidiennement** par `gamelens_promotion_snowflake` depuis le 31/08/2026, V-12 refermé. Volumes mesurés le 31/08/2026 : 15 dim_games, 60 faits popularité sur 4 journées, 165 faits prix. Plus profonde que la couche PostgreSQL, et c'est attendu : la promotion Snowpark rejoue tout l'historique par MERGE. |
 | **C4.2.3 pipeline CI/CD** | ✅ **Exécuté, 6 étages verts** sur `Mael8zinsou/gamelens-bloc4_0` (privé). Qualité, tests, intégrité du DAG, intégration sur infrastructure jetable, **recette Snowflake sur base jetable**, publication d'image sur `ghcr.io` avec double étiquetage `latest` et SHA. Le premier run avait échoué : défaut dans l'assertion, pas dans l'infra (OBS-22). |
 | Recette automatisée de l'entrepôt | ✅ **Exécutée sur le runner** (run 32954104664, 41 s). Base Snowflake créée pour le run, schéma livré appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles d'intégrité et contrats dbt vérifiés en positif **et en négatif** sur le même jeu fautif, base supprimée. |
-| **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. |
+| **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. **Canal externe depuis le 07/09/2026** : notification Telegram immédiate des alertes critiques (mesurée à 2 s), plus `gamelens_battement` à 8h et 20h, DAG séparé qui dénonce l'arrêt de la supervision. V-02 et V-07 refermés, DA-12. |
 | **C4.3.2 feuille de route d'exploitation** | ✅ **Écrite** : `docs/feuille_route_exploitation.md`, 10 sections. Tâches quotidiennes à trimestrielles, planification de maintenance, 13 points de vigilance dont 2 datés, durées d'incident mesurées, procédures d'intervention éprouvées avant d'être prescrites. |
 | **A4.1 rapport d'analyse** | ✅ **Écrit** : `docs/rapport_analyse.md`. Deux parties, calquées sur les deux livrables de la grille. Besoins métiers traduits en exigences, état de l'existant, contraintes, puis les composants un par un avec l'alternative écartée, l'analyse de dépendance fournisseur composant par composant, et une estimation des coûts **mesurée** sur l'historique de facturation, pas estimée. |
 | **C4.3.3 documentation technique** | ✅ **Écrite** : `docs/documentation_technique.md`. Point d'entrée, 11 décisions d'architecture datées avec leur contrepartie, traçabilité champ par champ, référence de configuration, matrice de droits, plus **2 annexes générées** depuis le catalogue et vérifiées par la CI. |
@@ -206,6 +206,15 @@ sessions 11 et 12 manquaient dans deux d'entre eux.
   pas dans Grafana : l'outil affiche les indicateurs, il ne les définit pas.
 - Les logs Airflow contiennent des `:` dans les noms de dossier, **illisibles par un
   client Windows**. Les lire via `docker exec ... cat`, pas depuis l'hôte.
+- **Le canal Telegram est FACULTATIF et le restera** : sans `TELEGRAM_BOT_TOKEN`
+  ni `TELEGRAM_CHAT_ID`, la notification est un no-op qui rend un succès. Un
+  jeton présent mais injoignable, en revanche, trace un échec et déclenche
+  `echecs_composants`. Ne pas « corriger » cette asymétrie, elle est testée
+  (TNOT-04, TNOT-05).
+- **La base stocke en UTC, l'affichage seul est converti** par
+  `GAMELENS_TIMEZONE`, défaut `Europe/Paris`. Piège : ce qui est formaté par
+  `to_char()` en SQL sort dans le fuseau de la SESSION et échappe au
+  convertisseur Python. Voir OBS-92.
 - **Compte Snowflake étudiant** `RTZSXDV-PM63908`, région `AWS_EU_WEST_3`, 120 jours
   et 400 dollars de crédits (et non un essai de 30 jours). Utilisateur de service
   `GAMELENS_SERVICE` en `TYPE = SERVICE`, authentifié par **paire de clés RSA** :
@@ -478,25 +487,32 @@ Refermé le 31/08/2026 : V-12 et V-13, la couche Gold Snowflake est
 désormais promue par son propre DAG et son arrêt est visible de la
 supervision (DA-11). Coût de l'opération : un incident, INC-009.
 
+Refermés le 07/09/2026 : **V-14**, la dépréciation d'authentification
+Snowflake, qui ne touchait pas la plateforme ; puis **V-02 et V-07**, par un
+canal Telegram et un DAG témoin séparé (DA-12). Les deux écarts que la
+documentation présentait depuis trois semaines comme les plus importants sont
+donc traités, et le plus important de ceux qui restent est V-03.
+
 ### Écarts connus, gelés
 
-Aucun ne bloque. Les cinq premiers sont aussi des points de vigilance de la
+Aucun ne bloque. Les trois premiers sont aussi des points de vigilance de la
 feuille de route ; les deux derniers sont des écarts entre l'annoncé et le réel,
 du même genre que celui qu'a refermé DA-10, en plus petit.
 
-Attention à la tentation de les refermer un par un : elle est exactement le
-mécanisme qui produit du travail justifié mais hors priorité. Aucun ne change ce
-qui sera dit pendant les 45 minutes, et V-02 comme V-07 valent mieux assumés à
-l'oral que corrigés en silence : nommer une limite de sa propre plateforme est
-un exercice que le jury cherche à provoquer.
+Cette liste comptait sept entrées jusqu'au 07/09/2026, et le conseil qui suivait
+était de ne pas les refermer une par une, la tentation étant le mécanisme même
+qui produit du travail justifié mais hors priorité. Ce conseil valait sous le
+gel du dépôt, décidé pour protéger la préparation de l'oral. Le gel a été levé
+par le lecteur pour reprendre les travaux sur la plateforme, et V-02 et V-07 ont
+été traités : c'est une décision de priorité, pas un contournement de la règle.
 
-- **V-02, aucun canal de notification.** L'écart le plus important entre cette
-  plateforme et une plateforme exploitée : les alertes sont persistées, mais
-  rien ne prévient un humain. Chiffré : la fraîcheur est restée en alerte
-  6 j 20 h en août, détectée en 90 minutes.
-- **V-07, la supervision ne se surveille pas elle-même.** Son arrêt rend
-  l'absence d'alerte indiscernable du bon fonctionnement.
-- **V-03, `GAMELENS_SERVICE` en `ACCOUNTADMIN`.**
+Ce qui reste vrai, et qu'il faut garder : **nommer une limite de sa propre
+plateforme est un exercice que le jury cherche à provoquer.** Les cinq écarts
+ci-dessous valent mieux assumés à l'oral que corrigés en silence, et V-03 est
+désormais celui qu'il faut savoir énoncer le premier.
+
+- **V-03, `GAMELENS_SERVICE` en `ACCOUNTADMIN`.** Devient le plus important des
+  écarts ouverts depuis que V-02 et V-07 sont refermés.
 - **V-01, expiration du compte Snowflake les 17 ou 18/12/2026.** À confirmer
   dans Snowsight. Seul point de vigilance réellement bloquant : c'est la date
   qui contraint, pas le budget, mesuré à une vingtaine de crédits sur 400 pour

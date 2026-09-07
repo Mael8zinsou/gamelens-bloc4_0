@@ -572,8 +572,134 @@ Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt privé
   rythme. Voir OBS-71.
 - **Réserve à énoncer plutôt qu'à taire** : ces cinq alertes se sont ouvertes et
   refermées sans que personne ne soit prévenu. Si elles ne s'étaient pas
-  refermées, rien n'aurait changé pour l'exploitant. C'est V-02, chiffré une
-  fois de plus.
+  refermées, rien n'aurait changé pour l'exploitant. C'était V-02, chiffré une
+  fois de plus. **Traité depuis le 07/09/2026**, voir TNOT-01 : la même alerte
+  de fraîcheur serait aujourd'hui annoncée en deux secondes. Ce cas garde donc
+  sa valeur de mesure AVANT, et c'est pour cela qu'il n'est pas réécrit.
+
+## Canal de notification externe (session 13)
+
+## TNOT-01. Une alerte critique réelle atteint un humain, et en combien de temps
+
+- **Objet** : vérifier la chaîne complète sur une **vraie** alerte, pas sur une
+  ligne insérée à la main. C'est la différence entre éprouver un canal et
+  éprouver une fonction de formatage.
+- **Procédure** : `kafka_to_postgres` lancé contre un broker inexistant, ce qui
+  produit un échec authentique tracé dans `speed.pipeline_runs`, exactement
+  comme au test d'INC-008. Puis `gamelens_supervision` déclenché.
+- **Attendu** : la règle critique `echecs_composants` s'ouvre, et un message
+  part dans la minute.
+- **Observé (07/09/2026)** :
+
+  | Événement | Horodatage |
+  |---|---|
+  | Échec réel de `kafka_to_postgres` | `NoBrokersAvailable` tracé en `failed` |
+  | Ouverture de `echecs_composants` | 21:54:05 |
+  | Notification délivrée, `notifiee_le` | **21:54:07** |
+
+- **Verdict** : **PASS**. Deux secondes.
+- **Ce que le chiffre vaut** : le moteur de détection est le même que celui qui
+  avait laissé une alerte ouverte **6 j 20 h** en août (TSUP-06, V-02). La
+  détection n'a jamais été le problème. Comparer les deux nombres est le seul
+  moyen de montrer ce qui a changé.
+
+## TNOT-02. Une alerte n'est annoncée qu'une fois
+
+- **Objet** : une règle évaluée toutes les 15 minutes produirait 96 messages par
+  jour pour un seul problème. Un canal qui répète cesse d'être lu, ce qui le
+  rend équivalent à l'absence de canal.
+- **Procédure** : trois évaluations successives avec la même alerte ouverte.
+- **Attendu** : `records_written` du composant `notificateur` vaut 1 à la
+  première, puis 0.
+- **Observé (07/09/2026)** :
+
+  | Exécution | `records_in` | `records_written` |
+  |---|---|---|
+  | 21:54:07 | 1 | **1** |
+  | 21:55:10 | 0 | **0** |
+  | 21:55:52 | 0 | **0** |
+
+- **Verdict** : **PASS**.
+
+## TNOT-03. Une fermeture n'est annoncée que si l'ouverture l'a été
+
+- **Objet** : sans cette condition, un avertissement jamais annoncé produirait
+  un message de fermeture sortant de nulle part, et une alerte antérieure à la
+  mise en service du canal en produirait un à retardement.
+- **Procédure** : éprouvé sur les **alertes réellement survenues** le
+  07/09/2026, toutes refermées. Trois de leurs ouvertures ont été marquées comme
+  annoncées, les quatre autres laissées en l'état.
+- **Attendu** : exactement 3 messages de fermeture sur 7 alertes refermées.
+- **Observé (07/09/2026)** :
+
+  | Alerte | Règle | Durée | Fermeture annoncée |
+  |---|---|---|---|
+  | 17 | `fraicheur_frequentation` | 15 min | **oui** |
+  | 18 | `completude_collecte` | 15 min | non |
+  | 19 | `latence_pipeline` | 15 min | non |
+  | 20 | `retard_entrepot_gold` | 15 min | non |
+  | 21 | `composant_muet` | 15 min | non |
+  | 22 | `fraicheur_frequentation` | 1 min | **oui** |
+  | 23 | `fraicheur_frequentation` | 12 min | **oui** |
+
+  `notificateur` : `records_in` 3, `records_written` 3.
+- **Verdict** : **PASS**. 3 sur 7.
+- **Le cas qui compte est le 20** : `retard_entrepot_gold` est **critique**, et
+  sa fermeture n'est pourtant pas annoncée, parce que son ouverture ne l'avait
+  pas été. Un test qui n'aurait regardé que la sévérité aurait conclu à un
+  défaut.
+
+## TNOT-04. Sans configuration, la plateforme fonctionne à l'identique
+
+- **Objet** : un canal d'alerte qui empêche la plateforme de démarrer serait une
+  panne de plus, pas une surveillance. Un dépôt fraîchement cloné et l'étage
+  `tests` de la CI n'ont aucun compte de messagerie.
+- **Attendu** : les deux DAG réussissent, zéro envoi, et **aucun appel réseau
+  n'est même tenté**.
+- **Observé (07/09/2026)** : `gamelens_supervision` et `gamelens_battement`
+  déclenchés sans jeton rendent tous deux `success` ; `battement` trace
+  `records_in` 5 et `records_written` 0. Le test unitaire
+  `test_canal_absent_nenvoie_rien_et_ne_leve_pas` remplace le transport par une
+  fonction qui échoue si elle est appelée.
+- **Verdict** : **PASS**.
+
+## TNOT-05. Un canal configuré mais injoignable est traité comme une panne
+
+- **Objet** : la symétrie du précédent, et elle importe autant. Taire un canal
+  déclaré qui ne délivre pas reproduirait exactement le défaut que ce canal
+  corrige.
+- **Attendu** : ni exception au niveau du transport, ni silence au niveau du
+  composant. Le transport rend `False`, l'appelant trace l'exécution en
+  **échec**, ce qui déclenche la règle critique `echecs_composants`.
+- **Observé (07/09/2026)** : deux tests unitaires couvrent les deux modes de
+  panne, un refus HTTP 400 et une exception réseau, et vérifient que le
+  transport rend `False` sans lever. La remontée en échec est portée par
+  `notifier_et_tracer`, qui lève après coup pour que `execution()` marque le run.
+- **Verdict** : **PASS**.
+
+## TNOT-06. Les heures affichées sont celles du lecteur, et les trois niveaux sont distingués
+
+- **Objet** : deux défauts trouvés par les **premiers messages réellement
+  reçus**, qu'aucun test à blanc n'avait montrés.
+- **Défaut 1, le fuseau** : la base stocke en UTC, ce qui est juste, et
+  l'affichage sortait en UTC. Un bilan composé à 23h58 heure de Paris annonçait
+  « 21:58 ».
+- **Défaut 2, l'échelle** : le rendu écrasait en deux niveaux l'échelle à
+  **trois** que portent les vues. `v_supervision_synthese` classe la latence en
+  `avertissement` dès 60 s là où la règle ne se déclenche qu'à 300 s. Une
+  latence de 148 s, saine au regard de la règle, était annoncée par une croix.
+- **Attendu après correction** : 21:58 UTC s'affiche 23:58 ; un horodatage naïf
+  est rendu tel quel ; un fuseau invalide dégrade vers UTC sans couper le
+  canal ; les quatre niveaux rendent quatre marques distinctes.
+- **Observé (08/09/2026)** : bilan affichant `00:10` quand le poste affiche
+  `00:10`, alerte passée de « depuis 21:54 » à « depuis 23:54 ». Quatre tests
+  unitaires verrouillent les quatre comportements.
+- **Verdict** : **PASS**.
+- **Ce que ces deux défauts apprennent** : ils portaient tous deux sur le
+  **rendu**, la partie qu'aucune assertion sur des données ne touche. Ils ne
+  pouvaient être vus que par un lecteur humain devant un vrai message. Annoncer
+  une panne qui n'en est pas une coûte la crédibilité d'un canal aussi sûrement
+  que de taire une vraie.
 
 ## Orchestration de l'ingestion temps réel (session 6)
 
@@ -1049,7 +1175,7 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 |---|---|---|
 | Popularité diffusée (Twitch) | Non branchée | Colonnes présentes mais nulles |
 | Catalogue RAWG | Non branché | `dim_games` alimentée depuis la watchlist |
-| Alertes vers un canal externe | Non construit | Les alertes sont persistées et remontées par Airflow, mais aucune notification par courriel ou messagerie n'est configurée |
+| ~~Alertes vers un canal externe~~ | **Construit le 07/09/2026** | Canal Telegram, TNOT-01 à TNOT-06. Il reste que rien ne surveille l'ordonnanceur lui-même : si Airflow s'arrête, le battement s'arrête avec lui et c'est l'absence du message qui alerte |
 
 ---
 
@@ -1065,7 +1191,8 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 | Couche Bronze | 6 | 0 | 0 |
 | Contrats dbt | 6 | 0 | 0 |
 | Promotion Snowflake | 4 | 0 | 0 |
-| **Total** | **55** | **0** | **0** |
+| Canal de notification | 6 | 0 | 0 |
+| **Total** | **61** | **0** | **0** |
 
 Le cloisonnement des rôles est décrit par 3 cas de la section Sécurité et par
 TBRZ-04, compté avec la couche Bronze. À l'exécution, ces quatre cas se
