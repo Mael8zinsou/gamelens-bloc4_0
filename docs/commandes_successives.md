@@ -2433,3 +2433,62 @@ curl -sS -m 5 -o /dev/null -w 'HTTP %{http_code}\n' -L http://localhost:3000/
 « Empty reply from server » est la bonne réponse, pas une panne : le serveur
 accepte la connexion, attend un message dans son protocole, n'en reconnait
 aucun et raccroche. Un port ouvert n'est pas un port web.
+## Phase 51. Lier les ports publiés à la boucle locale (procédure)
+
+Correction de ce que la phase 50 a révélé : les quatre ports étaient publiés sur
+`0.0.0.0`, donc sur toutes les interfaces réseau, alors que le mot de passe de
+la base est dans le dépôt (OBS-89).
+
+```yaml
+# docker-compose.yml, les quatre publications de ports
+- "127.0.0.1:5433:5432"
+- "127.0.0.1:9092:9092"
+- "127.0.0.1:8080:8080"
+- "127.0.0.1:3000:3000"
+```
+
+```bash
+# [BASH] Valider la syntaxe AVANT de toucher aux conteneurs
+docker compose config --quiet && echo "syntaxe OK"
+
+# [BASH] Recreer : un changement de liaison n'est pas pris par un simple restart
+docker compose up -d
+
+# [BASH] La liaison est-elle effective ? [::] doit avoir disparu aussi
+docker ps --format '{{.Names}}\t{{.Ports}}'
+# gamelens-postgres          127.0.0.1:5433->5432/tcp
+# gamelens-kafka             127.0.0.1:9092->9092/tcp
+# gamelens-airflow-apiserver 127.0.0.1:8080->8080/tcp
+# gamelens-grafana           127.0.0.1:3000->3000/tcp
+```
+
+Contrôle d'après changement, en trois temps, parce qu'un port qui ne repond plus
+ne se voit pas depuis la ligne de commande qui l'a modifie :
+
+```bash
+# [BASH] 1. Les interfaces web repondent toujours depuis l'hote
+curl -sS -m 10 -o /dev/null -w 'HTTP %{http_code}\n' -L http://localhost:8080/
+curl -sS -m 10 -o /dev/null -w 'HTTP %{http_code}\n' -L http://localhost:3000/
+# HTTP 200 pour les deux
+
+# [BASH] 2. Les donnees sont intactes
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT count(*) FROM speed.player_count_events"
+# 1275
+
+# [BASH] 3. La chaine PRODUIT encore, ce qui est le seul controle qui vaille
+docker exec gamelens-airflow-scheduler airflow dags trigger gamelens_ingestion_temps_reel
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT component, status, records_written FROM speed.pipeline_runs
+   WHERE started_at > now() - interval '5 minutes' ORDER BY started_at DESC"
+# kafka_to_postgres | success | 15
+# steam_producer    | success | 15
+# et la table passe de 1275 a 1290
+```
+
+Ce que la correction ne casse pas, verifie et non suppose : les conteneurs se
+joignent par le reseau Docker (`postgres:5432`, `kafka:9092`) et non par les
+ports publies ; `docker exec` ne les emprunte pas ; `localhost` **est**
+`127.0.0.1`, donc le navigateur passe, et la CI aussi, qui se connecte depuis le
+runner avec `POSTGRES_HOST: localhost`. Seul l'acces depuis un autre appareil du
+reseau disparait, et rien ne l'utilisait.

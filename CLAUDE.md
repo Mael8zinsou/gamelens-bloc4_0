@@ -189,6 +189,15 @@ sessions 11 et 12 manquaient dans deux d'entre eux.
   ne rescanne le dossier que toutes les 5 minutes.
 - Interface Airflow sur **http://localhost:8080**, Grafana sur **http://localhost:3000**,
   compte `admin` / `admin` pour les deux.
+- **Les quatre ports publiés sont liés à `127.0.0.1`**, pas à `0.0.0.0` :
+  `- "127.0.0.1:5433:5432"` et ses trois voisins. Sans adresse de liaison,
+  Docker publie sur toutes les interfaces réseau, et le mot de passe de la
+  base est dans le dépôt. Ne pas revenir à la forme courte. Rien n'en pâtit :
+  les conteneurs se joignent par le réseau Docker, `localhost` **est**
+  `127.0.0.1`, et la CI se connecte depuis le runner en local (OBS-89).
+- **PostgreSQL et Kafka ne répondent pas à un navigateur**, et c'est normal :
+  ils parlent leur protocole binaire sur TCP, pas HTTP. `curl` y rend
+  « Empty reply from server ». Seuls 8080 et 3000 sont des interfaces web.
 - **Un seul modèle de rôles** pour toute la plateforme, celui du Bloc 1 :
   `etl_service`, `analyst`, `dashboard_viewer`, plus `gamelens_app` comme propriétaire.
   Les rôles `gamelens_etl` et `gamelens_reader` d'une version antérieure ont été

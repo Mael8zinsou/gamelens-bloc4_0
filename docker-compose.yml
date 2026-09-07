@@ -113,7 +113,13 @@ services:
       # tourne deja sur le poste et retient le port 5432. Docker publie alors le
       # port sans erreur visible mais sans effet reel (cf. INC-004). Le port
       # INTERNE reste 5432 : les conteneurs se joignent via postgres:5432.
-      - "5433:5432"
+      # Lie a 127.0.0.1 et non a 0.0.0.0 : sans adresse, Docker publie sur
+      # TOUTES les interfaces reseau, et le mot de passe de cette base est
+      # dans le depot. Sur un wifi partage, n'importe qui sur le meme reseau
+      # atteindrait la base avec des identifiants publies. localhost reste
+      # joignable, les conteneurs se parlent par le reseau Docker, et la CI
+      # se connecte depuis le runner en local. Meme liaison sur les 3 autres.
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Les scripts d'initialisation s'executent dans l'ordre alphabetique, au
@@ -166,7 +172,7 @@ services:
       KAFKA_LOG_RETENTION_HOURS: 168
       CLUSTER_ID: gamelens-kraft-cluster-01
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
@@ -210,7 +216,7 @@ services:
     container_name: gamelens-airflow-apiserver
     command: api-server
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
       interval: 30s
@@ -314,7 +320,7 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro

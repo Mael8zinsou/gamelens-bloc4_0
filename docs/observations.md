@@ -2036,3 +2036,61 @@ humain. Un écart listé comme un manquement au moindre privilège se trouve êt
 la police d'assurance. Cela ne rend pas V-03 souhaitable ; cela rappelle qu'un
 écart de sécurité et un point unique de défaillance ne se rangent pas sur le
 même axe.
+## OBS-89. Le document avait écrit la condition qui invalidait son propre arbitrage
+
+Question du lecteur, apparemment anodine : pourquoi le navigateur n'atteint-il
+pas PostgreSQL ni Kafka ? Réponse courte, ils ne parlent pas HTTP, et c'est tout
+ce qu'il y avait à dire. En vérifiant, j'ai regardé une chose que la question ne
+demandait pas : **sur quelles interfaces** ces ports sont publiés.
+
+```
+gamelens-postgres    0.0.0.0:5433->5432/tcp
+gamelens-kafka       0.0.0.0:9092->9092/tcp
+```
+
+`0.0.0.0`, donc toutes les interfaces réseau. Les quatre lignes de
+`docker-compose.yml` étaient écrites `- "5433:5432"`, sans adresse de liaison,
+et Docker interprète cette absence comme « publie partout ». Personne ne l'avait
+choisi : c'est la forme courte, celle de tous les tutoriels.
+
+Le problème n'est pas le port ouvert, c'est ce qu'il y a derrière :
+`gamelens_app` / `devlocal_app`, un mot de passe **présent dans le dépôt et dans
+la documentation**.
+
+**Et voici ce qui rend l'observation intéressante.** La feuille de route
+d'exploitation porte une table de dette technique assumée, à trois colonnes : la
+dette, pourquoi elle est acceptable ici, et **ce qui la rendrait inacceptable**.
+La ligne concernée disait, mot pour mot :
+
+| Dette | Pourquoi c'est acceptable ici | Ce qui la rendrait inacceptable |
+|---|---|---|
+| Mots de passe de développement dans le dépôt | Ils n'ouvrent que des conteneurs locaux | **Toute exposition réseau** |
+
+Le document avait **écrit lui-même** la condition qui annulait son arbitrage. Et
+cette condition était remplie depuis le premier jour, dans le fichier voisin,
+sur quatre lignes.
+
+C'est une forme de défaillance que ce projet a déjà rencontrée plusieurs fois,
+et qui mérite d'être nommée une bonne fois : **une affirmation vraie sous une
+prémisse que personne ne vérifie**. La colonne « ce qui la rendrait
+inacceptable » est excellente à écrire et sans valeur si rien ne la relit. Elle
+n'est pas un test, c'est une intention, exactement comme la convention de
+conserver des preuves qui n'a produit aucune preuve pendant onze sessions
+(OBS-81).
+
+Je nuance ce qu'il faut nuancer : le pare-feu Windows bloque peut-être déjà ces
+ports entrants, et je ne peux pas le vérifier depuis la machine elle-même.
+L'exposition était **potentielle**, pas démontrée. Mais un arbitrage de sécurité
+qui repose sur un réglage qu'on n'a pas choisi et qu'on ne sait pas lire n'est
+pas un arbitrage.
+
+**Corrigé le jour même**, en neuf caractères par ligne :
+`- "127.0.0.1:5433:5432"`. Rien ne casse, et c'est vérifiable plutôt que
+supposé : les conteneurs se joignent par le réseau Docker et non par les ports
+publiés, `docker exec` ne les emprunte pas, `localhost` **est** `127.0.0.1` donc
+le navigateur et la CI passent toujours. Vérifié après recréation : les deux
+interfaces rendent HTTP 200, et un run d'ingestion déclenché à la main a collecté
+15 relevés et en a écrit 15, la table passant de 1 275 à 1 290.
+
+La phrase de la feuille de route est désormais vraie. Elle ne l'était pas quand
+elle a été écrite.

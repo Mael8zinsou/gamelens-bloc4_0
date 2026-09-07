@@ -1055,7 +1055,13 @@ donc jamais posées :
   l'un affecterait l'autre.
 - **Mots de passe de développement en clair** dans le dépôt (`devlocal_*`,
   `admin/admin`). Acceptable parce qu'ils ne donnent accès qu'à des conteneurs
-  locaux, mais c'est une habitude à ne pas prendre.
+  locaux, mais c'est une habitude à ne pas prendre. Et cette acceptabilité
+  reposait sur une prémisse fausse jusqu'au 07/09/2026 : écrits `- "5433:5432"`,
+  les ports étaient publiés sur toutes les interfaces réseau et non sur la seule
+  boucle locale. Retiens le mécanisme plus que le cas : **un arbitrage de
+  sécurité formulé au conditionnel doit avoir un contrôle qui vérifie sa
+  condition**, sinon c'est un souhait. La feuille de route de ce projet avait
+  même écrit la condition, « toute exposition réseau », sans jamais la relire.
 - **Le compte Snowflake expire.** Compte étudiant, 120 jours de validité depuis
   le 20/08/2026, donc une fin attendue à la mi-décembre. Rien n'est prévu pour
   ce jour-là : la couche Gold cible disparaîtra et il ne restera que le

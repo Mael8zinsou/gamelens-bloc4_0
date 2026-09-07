@@ -602,9 +602,14 @@ qui produit des « insufficient privileges » malgré des `GRANT SELECT` correct
 | Mots de passe PostgreSQL de développement | `docker-compose.yml`, valeurs `devlocal_*` | oui, assumé |
 | Compte Grafana et Airflow | `admin` / `admin` | oui, assumé |
 
-Les valeurs versionnées n'ouvrent que des conteneurs locaux. `.env`, `secrets/`,
-`*.pem` et `*.p8` sont ignorés par git, ce qui a été vérifié par
-`git check-ignore` et non supposé.
+Les valeurs versionnées n'ouvrent que des conteneurs locaux, et cette phrase a
+une condition qu'il faut expliciter parce qu'elle a longtemps été fausse : les
+quatre ports publiés sont liés à `127.0.0.1` depuis le 07/09/2026. Écrits sans
+adresse, ils l'étaient sur `0.0.0.0`, donc joignables depuis tout le réseau
+local. Voir OBS-89 et la phase 51 du journal des commandes.
+
+`.env`, `secrets/`, `*.pem` et `*.p8` sont ignorés par git, ce qui a été vérifié
+par `git check-ignore` et non supposé.
 
 ---
 
