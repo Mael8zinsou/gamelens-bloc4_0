@@ -89,7 +89,7 @@ CREATE OR REPLACE TABLE gamelens.mart.dim_stores (
     base_url     VARCHAR,
     source_type  VARCHAR NOT NULL COMMENT 'api ou scraping ; valeur controlee par test dbt accepted_values.'
 )
-COMMENT = 'Boutiques suivies pour la tarification (ex : Steam, GOG).';
+COMMENT = 'Boutiques suivies pour la tarification. Une seule a ce jour, Steam : le suivi GOG est hors perimetre depuis l arbitrage du Bloc 3 (3.3).';
 
 -- ----------------------------------------------------------------------------
 -- fact_prices (grain : un enregistrement par jeu, boutique, date de collecte)
@@ -104,7 +104,7 @@ CREATE OR REPLACE TABLE gamelens.mart.fact_prices (
     collected_at    TIMESTAMP_NTZ NOT NULL,
     CONSTRAINT uq_fact_prices_grain UNIQUE (game_id, store_id, collected_at)
 )
-COMMENT = 'Tarifs collectes par jeu et par boutique. Alimentee par le scraping GOG et les API de tarification (Bloc 1).';
+COMMENT = 'Tarifs collectes par jeu et par boutique. Alimentee par l API Steam appdetails (price_overview), qui remplace le scraping GOG sorti du perimetre par l arbitrage du Bloc 3 (3.3).';
 
 -- ----------------------------------------------------------------------------
 -- fact_popularity_history (grain : un enregistrement par jeu et par jour)

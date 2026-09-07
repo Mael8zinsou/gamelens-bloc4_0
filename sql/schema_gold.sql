@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS mart.dim_games (
 COMMENT ON TABLE mart.dim_games IS
     'Referentiel unifie des jeux suivis (portefeuille Kestrel Interactive + panel concurrent). Grain : un enregistrement par jeu.';
 COMMENT ON COLUMN mart.dim_games.critical_tier IS
-    'Categorie derivee de metacritic_score par le modele dbt (Bloc 1, Annexe 10) : >=85 Acclaimed, >=70 Favorable, sinon Mixed.';
+    'Acclaimed, Favorable ou Mixed. Vide a ce jour : la derivation depuis metacritic_score suppose un catalogue (RAWG ou IGDB) non branche.';
 
 -- ----------------------------------------------------------------------------
 -- dim_stores
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS mart.dim_stores (
 );
 
 COMMENT ON TABLE mart.dim_stores IS
-    'Boutiques suivies pour la tarification (ex : Steam, GOG).';
+    'Boutiques suivies pour la tarification. Une seule a ce jour, Steam : le suivi GOG est hors perimetre depuis l''arbitrage du Bloc 3 (3.3).';
 
 -- ----------------------------------------------------------------------------
 -- fact_prices (grain : un enregistrement par jeu, boutique, date de collecte)
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS mart.fact_prices (
 );
 
 COMMENT ON TABLE mart.fact_prices IS
-    'Tarifs collectes par jeu et par boutique. Alimentee par le scraping GOG et les API de tarification (Bloc 1).';
+    'Tarifs collectes par jeu et par boutique. Alimentee par l''API Steam appdetails (price_overview), qui remplace le scraping GOG sorti du perimetre par l''arbitrage du Bloc 3 (3.3).';
 
 CREATE INDEX IF NOT EXISTS idx_fact_prices_game_id ON mart.fact_prices (game_id);
 CREATE INDEX IF NOT EXISTS idx_fact_prices_collected_at ON mart.fact_prices (collected_at);
@@ -161,12 +161,12 @@ COMMENT ON COLUMN mart.dim_games.release_date IS 'Date de sortie commerciale. No
 COMMENT ON COLUMN mart.dim_games.metacritic_score IS
     'Note critique agregee, attendue entre 0 et 100. Bornes verifiees par controle applicatif.';
 COMMENT ON COLUMN mart.dim_games.critical_tier IS
-    'Acclaimed, Favorable ou Mixed. Derive de metacritic_score (Bloc 1, annexe 10).';
+    'Acclaimed, Favorable ou Mixed. Vide a ce jour : la derivation depuis metacritic_score suppose un catalogue (RAWG ou IGDB) non branche.';
 COMMENT ON COLUMN mart.dim_games.steam_appid IS 'Identifiant Steam. Clef naturelle, contrainte UNIQUE.';
 COMMENT ON COLUMN mart.dim_games.twitch_game_id IS 'Identifiant Twitch. Source non branchee a ce jour.';
 COMMENT ON COLUMN mart.dim_games.gog_slug IS
     'Identifiant GOG. Conserve bien que le suivi GOG soit hors perimetre depuis le Bloc 3.';
-COMMENT ON COLUMN mart.dim_games.rawg_id IS 'Identifiant RAWG, source catalogue.';
+COMMENT ON COLUMN mart.dim_games.rawg_id IS 'Identifiant RAWG, source catalogue. Source non branchee a ce jour.';
 COMMENT ON COLUMN mart.dim_games.gold_loaded_at IS 'Instant de promotion vers la couche Gold.';
 
 COMMENT ON COLUMN mart.dim_stores.store_id IS 'Clef primaire interne UUID.';

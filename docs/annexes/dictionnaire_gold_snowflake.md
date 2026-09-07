@@ -42,15 +42,15 @@ Referentiel unifie des jeux suivis (portefeuille Kestrel Interactive + panel con
 | `developer` | `TEXT(16777216)` | oui | Studio de developpement. |
 | `release_date` | `DATE` | oui | Date de sortie commerciale. Non alimentee a ce jour. |
 | `metacritic_score` | `NUMBER(3,0)` | oui | Note critique agregee, attendue entre 0 et 100. Bornes verifiees par verifier_gold.py, non par le moteur. |
-| `critical_tier` | `TEXT(16777216)` | oui | Acclaimed, Favorable ou Mixed. Derive de metacritic_score (Bloc 1, annexe 10). |
+| `critical_tier` | `TEXT(16777216)` | oui | Acclaimed, Favorable ou Mixed. Vide a ce jour : la derivation depuis metacritic_score suppose un catalogue (RAWG ou IGDB) non branche. |
 | `steam_appid` | `NUMBER(10,0)` | oui | Identifiant Steam, clef naturelle. Contrainte UNIQUE declaree mais non appliquee : le doublon est rattrape par controle applicatif. |
 | `twitch_game_id` | `TEXT(16777216)` | oui | Identifiant Twitch. Source non branchee a ce jour. |
 | `gog_slug` | `TEXT(16777216)` | oui | Identifiant GOG. Conserve bien que le suivi GOG soit hors perimetre depuis le Bloc 3. |
-| `rawg_id` | `NUMBER(10,0)` | oui | Identifiant RAWG, source catalogue. |
+| `rawg_id` | `NUMBER(10,0)` | oui | Identifiant RAWG, source catalogue. Source non branchee a ce jour. |
 | `gold_loaded_at` | `TIMESTAMP_NTZ` | non | Instant de promotion vers la couche Gold. |
 
 ### `mart.dim_stores` (table)
-Boutiques suivies pour la tarification (ex : Steam, GOG).
+Boutiques suivies pour la tarification. Une seule a ce jour, Steam : le suivi GOG est hors perimetre depuis l'arbitrage du Bloc 3 (3.3).
 
 | Colonne | Type | Nul | Description |
 |---|---|---|---|
@@ -72,7 +72,7 @@ Agregats journaliers de popularite jouee et diffusee, promus depuis la couche Si
 | `max_viewer_count` | `NUMBER(10,0)` | oui | Pic d'audience diffusee. Non alimente. |
 
 ### `mart.fact_prices` (table)
-Tarifs collectes par jeu et par boutique. Alimentee par le scraping GOG et les API de tarification (Bloc 1).
+Tarifs collectes par jeu et par boutique. Alimentee par l'API Steam appdetails (price_overview), qui remplace le scraping GOG sorti du perimetre par l'arbitrage du Bloc 3 (3.3).
 
 | Colonne | Type | Nul | Description |
 |---|---|---|---|

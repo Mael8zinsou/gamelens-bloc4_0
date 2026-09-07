@@ -68,11 +68,11 @@ Referentiel unifie des jeux suivis (portefeuille Kestrel Interactive + panel con
 | `developer` | `text` | oui |  | Studio de developpement. |
 | `release_date` | `date` | oui |  | Date de sortie commerciale. Non alimentee a ce jour. |
 | `metacritic_score` | `smallint` | oui |  | Note critique agregee, attendue entre 0 et 100. Bornes verifiees par controle applicatif. |
-| `critical_tier` | `text` | oui |  | Acclaimed, Favorable ou Mixed. Derive de metacritic_score (Bloc 1, annexe 10). |
+| `critical_tier` | `text` | oui |  | Acclaimed, Favorable ou Mixed. Vide a ce jour : la derivation depuis metacritic_score suppose un catalogue (RAWG ou IGDB) non branche. |
 | `steam_appid` | `integer` | oui |  | Identifiant Steam. Clef naturelle, contrainte UNIQUE. |
 | `twitch_game_id` | `text` | oui |  | Identifiant Twitch. Source non branchee a ce jour. |
 | `gog_slug` | `text` | oui |  | Identifiant GOG. Conserve bien que le suivi GOG soit hors perimetre depuis le Bloc 3. |
-| `rawg_id` | `integer` | oui |  | Identifiant RAWG, source catalogue. |
+| `rawg_id` | `integer` | oui |  | Identifiant RAWG, source catalogue. Source non branchee a ce jour. |
 | `gold_loaded_at` | `timestamp with time zone` | non | `now()` | Instant de promotion vers la couche Gold. |
 
 Contraintes :
@@ -83,7 +83,7 @@ Contraintes :
 - `uq_dim_games_steam_appid` : `UNIQUE (steam_appid)`
 
 ### `mart.dim_stores` (table)
-Boutiques suivies pour la tarification (ex : Steam, GOG).
+Boutiques suivies pour la tarification. Une seule a ce jour, Steam : le suivi GOG est hors perimetre depuis l'arbitrage du Bloc 3 (3.3).
 
 | Colonne | Type | Nul | Defaut | Description |
 |---|---|---|---|---|
@@ -116,7 +116,7 @@ Contraintes :
 - `fact_popularity_history_pkey` : `PRIMARY KEY (game_id, day)`
 
 ### `mart.fact_prices` (table)
-Tarifs collectes par jeu et par boutique. Alimentee par le scraping GOG et les API de tarification (Bloc 1).
+Tarifs collectes par jeu et par boutique. Alimentee par l'API Steam appdetails (price_overview), qui remplace le scraping GOG sorti du perimetre par l'arbitrage du Bloc 3 (3.3).
 
 | Colonne | Type | Nul | Defaut | Description |
 |---|---|---|---|---|

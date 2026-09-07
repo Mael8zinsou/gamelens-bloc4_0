@@ -2585,3 +2585,83 @@ print(re.sub(r'</?[bi]>', '', composer_battement(etat_plateforme())))"
 
 Rappel de fond : la base stocke en UTC et doit continuer. Seul l'affichage est
 converti, par `GAMELENS_TIMEZONE`, au plus tard possible.
+
+## Phase 55. Corriger un commentaire publié dans les annexes (procédure)
+
+Trois temps, et sauter le deuxième produit une correction **fantôme** : le
+fichier source dit le vrai, l'annexe publiée dit toujours le faux, et la CI
+valide (OBS-95). Le générateur lit le catalogue de la base, pas les fichiers.
+
+```bash
+# [BASH] 1. EDITER les sources. Deux couches, donc deux a trois fichiers.
+#    sql/schema_gold.sql                  -> PostgreSQL (MIXTE, editer en octets)
+#    sql/commentaires_gold_snowflake.sql  -> Snowflake, SEUL fichier rejouable
+#    sql/schema_gold_snowflake.sql        -> clause COMMENT =, jamais rejouee
+#
+#    Un COMMENT ON TABLE ne peut vivre QUE dans le fichier de commentaires :
+#    le fichier de schema porte des CREATE OR REPLACE TABLE (24 occurrences).
+
+# [BASH] 2. APPLIQUER aux bases vivantes. C'est l'etape qu'on oublie.
+python - > /tmp/comm.sql <<'FIN'
+import re
+from pathlib import Path
+t = Path("sql/schema_gold.sql").read_text(encoding="utf-8")
+print("\n".join(re.findall(r"COMMENT ON (?:TABLE|COLUMN) mart\.[^;]+;", t)))
+FIN
+docker exec -i gamelens-postgres psql -U gamelens_app -d gamelens \
+  -v ON_ERROR_STOP=1 < /tmp/comm.sql
+
+docker compose run --rm snowflake-cli \
+  python entrepot/executer_sql.py sql/commentaires_gold_snowflake.sql
+# -> 34 reussie(s), 0 en erreur   (COMMENT ON est idempotent et non destructif)
+
+# [BASH] 3. REGENERER les deux annexes, puis verifier comme le fait la CI
+python outils/generer_dictionnaire.py
+docker compose run --rm snowflake-cli \
+  python outils/generer_dictionnaire.py --cible snowflake
+python outils/generer_dictionnaire.py --verifier
+docker compose run --rm snowflake-cli \
+  python outils/generer_dictionnaire.py --cible snowflake --verifier
+```
+
+Controle de bon sens avant de committer : les deux dictionnaires doivent porter
+le meme texte pour une meme table.
+
+```bash
+# [BASH] Les deux couches disent-elles la meme chose ?
+grep -h "Boutiques suivies\|Tarifs collectes par jeu" \
+  docs/annexes/dictionnaire_donnees.md \
+  docs/annexes/dictionnaire_gold_snowflake.md
+# -> 4 lignes, identiques deux a deux
+
+# [BASH] Reste-t-il une affirmation fausse ?
+grep -rn -i "scraping GOG" docs/annexes/ sql/ | grep -v "remplace le scraping GOG"
+# -> seul le commentaire d'en-tete qui RACONTE l'historique doit sortir
+```
+
+Note d'ecriture : `sql/schema_gold.sql` echappe les apostrophes en les doublant
+(`l''arbitrage`). Les eviter en ecrivant « l arbitrage » passe le SQL mais
+produit du francais fautif dans une annexe que le jury peut ouvrir.
+
+## Phase 56. Inventorier les sources de donnees reellement appelees (diagnostic)
+
+Repond a « Steam est-elle vraiment la seule source ? » sans se fier aux
+documents, qui decrivent une intention et non un etat.
+
+```bash
+# [BASH] Tous les appels sortants du code, sans exception
+grep -rn "https://" --include="*.py" ingestion/ entrepot/ supervision/ outils/
+# -> 2 endpoints Steam, 1 Telegram. Deux points d'appel, UN fournisseur.
+
+# [SQL] Les identifiants des sources declarees sont-ils resolus ?
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT count(*) AS titres,
+          count(twitch_game_id) AS avec_twitch,
+          count(rawg_id) AS avec_rawg
+     FROM speed.game_mapping"
+# -> 15 | 0 | 0
+
+# [BASH] Combien de boutiques la promotion cree-t-elle reellement ?
+grep -n -A3 "session.create_dataframe" entrepot/snowpark_promotion.py
+# -> une seule, Steam, ecrite en dur
+```

@@ -2203,3 +2203,101 @@ chemin critique de ce qu'il surveille.** Le même raisonnement avait conduit à
 séparer `evaluer_regles`, qui réussit toujours, de `remonter_alertes_critiques`,
 qui échoue en présence d'une alerte. La notification est le troisième étage de
 la même idée.
+
+## OBS-94. L'entrée qui décrivait l'écart le minorait, et personne ne l'avait vérifiée
+
+La liste des écarts gelés portait depuis la session 11 : « Le commentaire de
+`fact_prices` annonce encore le scraping GOG. **La cible Snowflake, elle, est
+juste** : c'est `sql/commentaires_gold_snowflake.sql` qui l'a corrigée de son
+côté. »
+
+La seconde phrase était fausse. `sql/commentaires_gold_snowflake.sql` ne
+contenait que des `COMMENT ON COLUMN`, pas un seul `COMMENT ON TABLE`. Or les
+deux commentaires fautifs sont des commentaires de **table**. Ils ne pouvaient
+donc pas y avoir été corrigés, et ils remontaient identiques dans les **deux**
+dictionnaires publiés en annexe.
+
+**Comment l'erreur s'est installée.** Le fichier de commentaires existe parce
+que le fichier de schéma contient des `CREATE OR REPLACE TABLE` et ne peut pas
+être rejoué. Sachant cela, il était naturel de supposer qu'il couvrait tout ce
+que le schéma documente. Il ne couvrait que les colonnes. La supposition était
+raisonnable, et c'est bien le problème : **une supposition raisonnable écrite au
+présent devient un fait pour le lecteur suivant**, et elle a réduit de moitié
+l'écart perçu pendant trois semaines.
+
+**Ce que la correction a changé de nature.** Le manque n'était pas dans un
+commentaire, il était dans **l'absence de tout moyen d'en corriger un**. Les
+quatre tables portent donc maintenant leur `COMMENT ON TABLE`, y compris les
+deux dont le texte était déjà juste. Combler seulement les deux fautifs aurait
+laissé le piège intact pour la fois suivante.
+
+Rapprochement avec OBS-91 : là, deux défauts n'avaient été vus que par un humain
+lisant un vrai message. Ici, un défaut n'a été vu qu'en allant **relire ce que
+le document affirmait**, au lieu de le croire. Les deux disent la même chose de
+la vérification : elle ne vaut que si elle sort du système qui l'a produite.
+
+## OBS-95. Corriger le fichier source ne corrige rien : le générateur lit la base
+
+Piège rencontré en corrigeant les commentaires, et qui aurait produit une
+correction fantôme.
+
+`CLAUDE.md` décrit les dictionnaires comme générés depuis « les `COMMENT ON` des
+fichiers de `sql/` ». C'est vrai de l'intention, faux du mécanisme :
+`outils/generer_dictionnaire.py` interroge `obj_description()` côté PostgreSQL
+et `information_schema` côté Snowflake, c'est-à-dire le **catalogue vivant**.
+
+Conséquence : éditer le `.sql` puis régénérer ne change **rien**, sans le
+moindre message. Et le scénario est pire qu'inefficace, il est trompeur : le
+fichier source dit désormais le vrai, l'annexe publiée dit toujours le faux, et
+la CI valide, puisqu'elle compare l'annexe au catalogue et non au fichier. Un
+lecteur relisant le `.sql` conclurait que la correction a été faite.
+
+Le chemin réel est en trois temps : éditer le `.sql`, **appliquer** le
+`COMMENT ON` à la base, régénérer. Consigné en phase 55 et corrigé dans les
+faits d'environnement de `CLAUDE.md`.
+
+La leçon générale : **quand une documentation est générée, la question n'est
+jamais « où est écrite la vérité » mais « d'où le générateur la lit ».** Les
+deux endroits se ressemblent assez pour être confondus.
+
+## OBS-96. La faiblesse n'est pas « une seule source », c'est « un seul fournisseur »
+
+Le lecteur a demandé pourquoi Steam est la seule source du projet. En allant
+vérifier, la formulation elle-même s'est révélée trop douce.
+
+Le projet appelle **deux** endpoints, `GetNumberOfCurrentPlayers` et
+`appdetails`. Deux points d'appel, une seule société. Une décision de Valve ne
+retire pas la moitié de la donnée, elle la retire **en totalité**. V-10 disait
+« dépendance à une API tierce » ; il dit maintenant « fournisseur unique », ce
+qui est la même chose en plus honnête et se défend mieux à l'oral que de se le
+faire relever.
+
+**La bonne raison de ce choix, meilleure que celle qui était écrite.** Le
+rapport d'analyse justifiait en 4.4 par le périmètre : une chaîne complète vaut
+mieux que quatre déclarées. C'est vrai mais faible. La raison forte est que
+**Steam est la seule source qui réponde sans authentification et sans quota**,
+sur ses deux endpoints. C'est ce qui a rendu applicable la règle du bloc :
+rejouer la chaîne des dizaines de fois, en CI, sur conteneur jetable, depuis un
+clone neuf, **sans jamais mettre un secret sur le chemin critique du premier
+test**.
+
+Ce n'est pas un hasard isolé mais un biais constant de la plateforme, le même
+qui rend le canal Telegram facultatif ou la clef Snowflake absente en CI sans
+casser l'étage `tests` : **fonctionner avec rien de configuré**. Steam est la
+seule source qui satisfait cette propriété, et toutes les alternatives
+examinées (Twitch, IGDB, RAWG, GG.deals, ITAD) demandent une clef ou un jeton.
+
+**La contrepartie, à énoncer soi-même** : le projet n'a donc jamais éprouvé le
+renouvellement d'un jeton sur une **source**. La paire de clefs RSA couvre
+l'entrepôt, pas l'ingestion.
+
+**Ce que l'examen des alternatives a appris.** Elles ne mesurent pas la même
+chose, et n'en ajouter une n'a de valeur que si elle ajoute un **axe**. Twitch
+mesure l'audience diffusée, seul indicateur avancé du lot. RAWG et IGDB
+mesurent un catalogue, donc du statique. GG.deals et ITAD mesurent des tarifs
+multi-boutiques, ce pour quoi `dim_stores` existe et ne tient qu'une ligne. Deux
+faits vérifiés le 08/09 déplacent l'arbitrage : **IGDB s'authentifie par les
+identifiants Twitch**, ce qui disqualifie RAWG par simple économie, et
+**GG.deals impose une attribution avec lien actif** là où ITAD ne l'impose pas.
+Enfin `all-api.fr`, cité dans la question, est un **annuaire d'API et non une
+source** : il liste précisément IGDB, RAWG, Giant Bomb et Steam Store.

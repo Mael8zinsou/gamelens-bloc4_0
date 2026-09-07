@@ -142,7 +142,9 @@ consignes qui se contredit fait perdre du temps à qui le lit.
 
 ## État d'avancement
 
-Mis à jour le 02/09/2026 en fin de session 12 : support de soutenance, preuves
+Mis à jour le 08/09/2026 en session 13 : canal de notification externe (V-02
+et V-07 refermés), puis correction des commentaires annonçant des sources
+absentes. Session 12 : support de soutenance, preuves
 capturées, feuille du jury, puis rattrapage des quatre fichiers de suivi, où les
 sessions 11 et 12 manquaient dans deux d'entre eux.
 
@@ -284,8 +286,12 @@ sessions 11 et 12 manquaient dans deux d'entre eux.
   génération s'arrête si elles divergent. La matrice de droits de la section 3
   est lue en direct par `SHOW GRANTS`.
 - **Les dictionnaires de `docs/annexes/` sont GÉNÉRÉS, jamais édités à la main.**
-  Source : les `COMMENT ON` des fichiers de `sql/`. Après toute modification de
-  schéma, lancer `python outils/generer_dictionnaire.py` (et `--cible snowflake`
+  Source : les `COMMENT ON` des fichiers de `sql/`. **Piège** : le générateur ne
+  lit pas ces fichiers, il lit le **catalogue vivant** (`obj_description` côté
+  PostgreSQL, `information_schema` côté Snowflake). Corriger un commentaire dans
+  `sql/` puis régénérer ne change donc rien : il faut d'abord **appliquer** le
+  `COMMENT ON` à la base. Voir la phase 55. Après toute modification de schéma,
+  lancer `python outils/generer_dictionnaire.py` (et `--cible snowflake`
   pour la couche Gold), sinon la CI échoue. Le fichier ne porte volontairement
   aucune date de génération : elle ferait échouer la comparaison à chaque run.
 - **`sql/commentaires_gold_snowflake.sql` documente les colonnes Snowflake**,
@@ -495,9 +501,9 @@ donc traités, et le plus important de ceux qui restent est V-03.
 
 ### Écarts connus, gelés
 
-Aucun ne bloque. Les trois premiers sont aussi des points de vigilance de la
-feuille de route ; les deux derniers sont des écarts entre l'annoncé et le réel,
-du même genre que celui qu'a refermé DA-10, en plus petit.
+Aucun ne bloque. Les trois sont aussi des points de vigilance de la feuille de
+route. Les écarts entre l'annoncé et le réel qui figuraient ici, du même genre
+que celui qu'a refermé DA-10 en plus petit, ont été traités le 08/09/2026.
 
 Cette liste comptait sept entrées jusqu'au 07/09/2026, et le conseil qui suivait
 était de ne pas les refermer une par une, la tentation étant le mécanisme même
@@ -505,9 +511,11 @@ qui produit du travail justifié mais hors priorité. Ce conseil valait sous le
 gel du dépôt, décidé pour protéger la préparation de l'oral. Le gel a été levé
 par le lecteur pour reprendre les travaux sur la plateforme, et V-02 et V-07 ont
 été traités : c'est une décision de priorité, pas un contournement de la règle.
+Elle est passée à trois le 08/09, les deux commentaires fautifs ayant été
+corrigés en marge de l'analyse des sources de données.
 
 Ce qui reste vrai, et qu'il faut garder : **nommer une limite de sa propre
-plateforme est un exercice que le jury cherche à provoquer.** Les cinq écarts
+plateforme est un exercice que le jury cherche à provoquer.** Les trois écarts
 ci-dessous valent mieux assumés à l'oral que corrigés en silence, et V-03 est
 désormais celui qu'il faut savoir énoncer le premier.
 
@@ -522,20 +530,32 @@ désormais celui qu'il faut savoir énoncer le premier.
   31/08** (0,4372 puis 0,6899 crédit). La part recule parce que l'entrepôt du
   projet sert davantage, pas parce que le problème se résorbe. Citer la mesure
   datée, jamais le pourcentage seul (OBS-57).
-- **`dim_games.critical_tier` est vide** alors que le commentaire de la colonne
-  annonce qu'elle est « dérivée de metacritic_score par le modèle dbt ». Ce
-  modèle n'existe pas, et il ne pourrait rien dériver aujourd'hui puisque
-  `metacritic_score` est vide lui aussi, faute de catalogue RAWG branché. Le
-  traiter suppose soit de brancher RAWG, soit de corriger le commentaire.
-  Identifié en session 8.
-- **Le commentaire de `fact_prices` dans `sql/schema_gold.sql` annonce encore
-  « Alimentee par le scraping GOG »**, alors que GOG est hors périmètre depuis
-  l'arbitrage du Bloc 3 et que la tarification passe par l'API Steam. Le
-  commentaire remonte tel quel dans `docs/annexes/dictionnaire_donnees.md`,
-  qu'un jury peut ouvrir. La cible Snowflake, elle, est juste : c'est
-  `sql/commentaires_gold_snowflake.sql` qui l'a corrigée de son côté.
-  Identifié en session 11. Correction : deux lignes plus
-  `python outils/generer_dictionnaire.py`.
+- ~~**`dim_games.critical_tier` est vide** alors que son commentaire annonçait une
+  dérivation par un modèle dbt inexistant, et le commentaire de `fact_prices`
+  annonçait encore « Alimentee par le scraping GOG ».~~ **Traités le
+  08/09/2026**, en réponse au point 5 du lecteur sur les sources de données. Les
+  deux commentaires disent désormais le vrai, dans les deux couches, et les
+  dictionnaires ont été régénérés.
+
+  Deux enseignements valent plus que la correction elle-même.
+
+  D'abord, **cette entrée affirmait à son tour quelque chose de faux** : « la
+  cible Snowflake, elle, est juste ». Elle ne l'était pas.
+  `sql/commentaires_gold_snowflake.sql` ne contenait que des
+  `COMMENT ON COLUMN`, jamais un seul `COMMENT ON TABLE`. Les commentaires de
+  table ne vivaient donc que dans la clause `COMMENT =` du fichier de schéma,
+  celui qu'on ne peut pas rejouer sans détruire la couche de démonstration.
+  L'écart était deux fois plus large qu'annoncé, et il l'est resté trois
+  semaines parce que personne n'avait vérifié l'affirmation qui le minorait.
+
+  Ensuite, le manque n'était pas dans un commentaire mais dans **l'absence de
+  tout moyen de le corriger**. Les quatre tables portent maintenant leur
+  `COMMENT ON TABLE`, y compris les deux dont le texte était déjà juste. Voir
+  OBS-94.
+
+  Ce qui subsiste, désormais déclaré plutôt que masqué : `critical_tier` et
+  `metacritic_score` restent vides, faute de catalogue branché. C'est une
+  conséquence de la source unique, pas un défaut de schéma.
 
 ## Conventions de travail
 

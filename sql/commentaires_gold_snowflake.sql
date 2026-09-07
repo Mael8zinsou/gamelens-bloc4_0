@@ -32,13 +32,13 @@ COMMENT ON COLUMN dim_games.release_date IS 'Date de sortie commerciale. Non ali
 COMMENT ON COLUMN dim_games.metacritic_score IS
     'Note critique agregee, attendue entre 0 et 100. Bornes verifiees par verifier_gold.py, non par le moteur.';
 COMMENT ON COLUMN dim_games.critical_tier IS
-    'Acclaimed, Favorable ou Mixed. Derive de metacritic_score (Bloc 1, annexe 10).';
+    'Acclaimed, Favorable ou Mixed. Vide a ce jour : la derivation depuis metacritic_score suppose un catalogue (RAWG ou IGDB) non branche.';
 COMMENT ON COLUMN dim_games.steam_appid IS
     'Identifiant Steam, clef naturelle. Contrainte UNIQUE declaree mais non appliquee : le doublon est rattrape par controle applicatif.';
 COMMENT ON COLUMN dim_games.twitch_game_id IS 'Identifiant Twitch. Source non branchee a ce jour.';
 COMMENT ON COLUMN dim_games.gog_slug IS
     'Identifiant GOG. Conserve bien que le suivi GOG soit hors perimetre depuis le Bloc 3.';
-COMMENT ON COLUMN dim_games.rawg_id IS 'Identifiant RAWG, source catalogue.';
+COMMENT ON COLUMN dim_games.rawg_id IS 'Identifiant RAWG, source catalogue. Source non branchee a ce jour.';
 COMMENT ON COLUMN dim_games.gold_loaded_at IS 'Instant de promotion vers la couche Gold.';
 
 -- ----------------------------------------------------------------------------
@@ -77,3 +77,25 @@ COMMENT ON COLUMN fact_popularity_history.max_player_count IS 'Pic de frequentat
 COMMENT ON COLUMN fact_popularity_history.avg_viewer_count IS
     'Moyenne de l''audience diffusee. Nulle tant que la source Twitch n''est pas branchee.';
 COMMENT ON COLUMN fact_popularity_history.max_viewer_count IS 'Pic d''audience diffusee. Non alimente.';
+
+-- ----------------------------------------------------------------------------
+-- Commentaires de TABLE
+-- ----------------------------------------------------------------------------
+-- Ajoutes en session 13. Ce fichier n'avait jusque-la que des COMMENT ON COLUMN,
+-- ce qui laissait les commentaires de table incorrigibles : ils ne vivaient que
+-- dans la clause COMMENT = de sql/schema_gold_snowflake.sql, fichier qui ne peut
+-- pas etre rejoue sans detruire la couche de demonstration. Deux d'entre eux
+-- annoncaient donc encore le scraping GOG, hors perimetre depuis le Bloc 3, et
+-- remontaient tels quels dans le dictionnaire publie en annexe.
+--
+-- Les quatre tables sont couvertes, y compris celles dont le texte etait juste :
+-- le manque n'etait pas dans un commentaire, il etait dans l'absence de tout
+-- moyen de les corriger.
+COMMENT ON TABLE dim_games IS
+    'Referentiel unifie des jeux suivis (portefeuille Kestrel Interactive + panel concurrent). Grain : un enregistrement par jeu.';
+COMMENT ON TABLE dim_stores IS
+    'Boutiques suivies pour la tarification. Une seule a ce jour, Steam : le suivi GOG est hors perimetre depuis l''arbitrage du Bloc 3 (3.3).';
+COMMENT ON TABLE fact_prices IS
+    'Tarifs collectes par jeu et par boutique. Alimentee par l''API Steam appdetails (price_overview), qui remplace le scraping GOG sorti du perimetre par l''arbitrage du Bloc 3 (3.3).';
+COMMENT ON TABLE fact_popularity_history IS
+    'Agregats journaliers de popularite jouee et diffusee, promus depuis la couche Silver speed (Bloc 1, 3.4).';
