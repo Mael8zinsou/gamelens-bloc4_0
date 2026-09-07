@@ -21,9 +21,8 @@ from __future__ import annotations
 
 import datetime as dt
 
-import pytest
-
 import notifications
+import pytest
 
 
 @pytest.fixture
@@ -139,7 +138,9 @@ def test_duree_courte_en_minutes():
 
 def test_duree_longue_en_heures():
     debut = dt.datetime(2026, 9, 1, 8, 0)
-    msg = notifications.composer_fermeture("fraicheur", debut, debut + dt.timedelta(hours=6, minutes=20))
+    msg = notifications.composer_fermeture(
+        "fraicheur", debut, debut + dt.timedelta(hours=6, minutes=20)
+    )
     assert "6 h 20" in msg
 
 
@@ -164,16 +165,16 @@ def test_battement_nominal_dit_quil_ny_a_rien():
 
 def test_battement_denonce_une_supervision_muette():
     """Le coeur de V-07 : le temoin doit nommer l'absence du surveille."""
-    msg = notifications.composer_battement(
-        _etat(supervision_muette=True, supervision_age_min=310)
-    )
+    msg = notifications.composer_battement(_etat(supervision_muette=True, supervision_age_min=310))
     assert "LA SUPERVISION EST MUETTE" in msg
     assert "310" in msg
 
 
 def test_battement_liste_les_alertes_ouvertes():
     msg = notifications.composer_battement(
-        _etat(alertes_ouvertes=[("retard_entrepot_gold", "critique", dt.datetime(2026, 9, 6, 3, 0))])
+        _etat(
+            alertes_ouvertes=[("retard_entrepot_gold", "critique", dt.datetime(2026, 9, 6, 3, 0))]
+        )
     )
     assert "1 alerte(s) ouverte(s)" in msg
     assert "retard_entrepot_gold" in msg
@@ -222,7 +223,7 @@ def test_lheure_affichee_est_locale_et_non_utc():
     L'horodatage arrive en UTC de PostgreSQL, ce qui est correct au stockage.
     Il devenait faux au moment precis ou un humain le lisait.
     """
-    utc = dt.datetime(2026, 9, 7, 21, 58, tzinfo=dt.timezone.utc)
+    utc = dt.datetime(2026, 9, 7, 21, 58, tzinfo=dt.UTC)
     msg = notifications.composer_battement(_etat(horodatage=utc))
     assert "23:58" in msg, "l heure doit etre celle du lecteur, pas celle du serveur"
     assert "21:58" not in msg
@@ -241,6 +242,6 @@ def test_un_horodatage_naif_nest_pas_devine():
 def test_un_fuseau_invalide_ne_casse_pas_le_message(monkeypatch):
     """Une variable d'environnement fautive degrade l'affichage, pas le canal."""
     monkeypatch.setattr(notifications, "FUSEAU_AFFICHAGE", "Mars/Olympus_Mons")
-    utc = dt.datetime(2026, 9, 7, 21, 58, tzinfo=dt.timezone.utc)
+    utc = dt.datetime(2026, 9, 7, 21, 58, tzinfo=dt.UTC)
     msg = notifications.composer_battement(_etat(horodatage=utc))
     assert "21:58" in msg  # repli en UTC, mais un message part

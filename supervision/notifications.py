@@ -154,7 +154,8 @@ def _fuseau():
     except Exception as exc:  # nom de fuseau invalide, base tzdata absente
         logger.warning(
             "fuseau %s inutilisable (%s), les heures resteront en UTC",
-            FUSEAU_AFFICHAGE, type(exc).__name__,
+            FUSEAU_AFFICHAGE,
+            type(exc).__name__,
         )
         return None
 

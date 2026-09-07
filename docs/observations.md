@@ -2305,3 +2305,39 @@ source** : il liste précisément IGDB, RAWG, Giant Bomb et Steam Store.
 **Suite donnee le 08/09** : la section 4.4 du rapport d'analyse porte desormais
 l'argument fort plutot que celui du perimetre, la requalification en fournisseur
 unique, et le tableau des alternatives evaluees sur l'axe qu'elles ajoutent.
+
+## OBS-97. « 57 tests au vert » ne voulait pas dire « la CI passe »
+
+Le canal de notification a ete annonce deux fois comme verifie, avec le meme
+chiffre : 57 tests au vert. C'etait exact et insuffisant. Au premier `push`,
+l'etage **Qualite du code** a echoue, et les six etages suivants ont ete sautes.
+
+Trois erreurs `ruff`, toutes dans du code ecrit la veille : un bloc d'imports
+non trie et deux `dt.timezone.utc` la ou la version de Python visee expose
+`dt.UTC`. Puis, une fois le lint corrige, l'etage **Format** a echoue a son
+tour sur trois fichiers, tous ecrits la veille egalement. Il n'avait jamais ete
+atteint : le lint echouant avant lui, sa propre rougeur restait invisible.
+
+**Ce que l'erreur apprend.** Rien ici ne relevait de la logique, tout du style,
+et aucun test ne pouvait le voir. La verification locale que je lancais,
+`pytest tests`, n'etait pas la verification que la CI lance : celle-ci
+enchaine `ruff check` et `ruff format --check` **avant** les tests. Annoncer
+« au vert » sur la foi d'une commande qui n'est pas celle de la chaine, c'est
+annoncer autre chose que ce que le lecteur comprend.
+
+La regle qui s'en degage, et qui vaut au-dela : **rejouer localement la
+commande exacte de la CI, pas son intention.** La version compte aussi, le
+depot epinglant `ruff==0.6.9` ; un linter plus recent aurait signale d'autres
+regles et masque celles-ci.
+
+Rapprochement avec OBS-91 et OBS-94. Trois fois de suite, le defaut n'a pas ete
+trouve par le dispositif de verification en place mais par un regard exterieur :
+un humain lisant un message, une relecture de ce qu'un document affirmait, une
+chaine d'integration continue. **Une verification ne prouve que ce qu'elle
+regarde**, et sa portee est toujours plus etroite que la confiance qu'on lui
+accorde.
+
+Le silence entre les deux etages merite d'etre note : la CI etait rouge depuis
+les commits du canal, et rien ne l'avait dit, faute d'avoir pousse. Le canal de
+notification, lui, surveille la plateforme ; personne ne surveillait la chaine
+qui la valide.

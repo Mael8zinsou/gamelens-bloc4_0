@@ -80,11 +80,11 @@ def battement():
             print(f"Bilan envoye a {etat['horodatage']:%d/%m %H:%M}.")
 
         if etat["supervision_muette"]:
-            print(
-                f"ATTENTION : supervision muette depuis {etat['supervision_age_min']} minutes."
-            )
-        print(f"{len(etat['alertes_ouvertes'])} alerte(s) ouverte(s), "
-              f"{len(etat['composants_muets'])} composant(s) sans execution recente.")
+            print(f"ATTENTION : supervision muette depuis {etat['supervision_age_min']} minutes.")
+        print(
+            f"{len(etat['alertes_ouvertes'])} alerte(s) ouverte(s), "
+            f"{len(etat['composants_muets'])} composant(s) sans execution recente."
+        )
 
         return {
             "envoye": resultat["envoye"],
