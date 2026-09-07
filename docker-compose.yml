@@ -53,6 +53,12 @@ x-airflow-commun: &airflow-commun
     KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     PYTHONPATH: /opt/gamelens/ingestion:/opt/gamelens/supervision:/opt/gamelens/entrepot
     GAMELENS_ROOT: /opt/gamelens
+    # Canal de notification externe (V-02). Les deux variables sont
+    # FACULTATIVES et vides par defaut : sans elles, la notification est un
+    # no-op silencieux et la plateforme demarre normalement. Un depot
+    # fraichement clone ne doit pas exiger un compte de messagerie.
+    TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     # ------------------------------------------------------------------------
     # Acces a Snowflake depuis l'ordonnanceur, pour le DAG de promotion vers
     # l'entrepot. Ces variables sont les MEMES que celles lues par

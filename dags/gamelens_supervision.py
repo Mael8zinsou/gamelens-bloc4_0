@@ -15,6 +15,12 @@ constater un probleme sont deux choses differentes. C'est une seconde tache qui
 echoue en presence d'une alerte critique. Sans cette separation, un run en
 echec ne permettrait pas de distinguer « la plateforme va mal » de « le moteur
 d'alertes est casse », qui appellent des reactions opposees.
+
+La notification externe est une TROISIEME tache, en PARALLELE de la remontee et
+non en amont. Enchainee, une panne du service de messagerie aurait laisse la
+remontee en `upstream_failed` : le canal cense signaler les incidents aurait
+empeche de les signaler. Les deux taches lisent le meme resultat d'evaluation
+et n'ont aucune raison de dependre l'une de l'autre.
 """
 
 from __future__ import annotations
@@ -96,7 +102,47 @@ def supervision():
             )
         print(f"{len(ouvertes)} avertissement(s) ouvert(s), aucune alerte critique.")
 
-    remonter_alertes_critiques(evaluer_regles())
+    @task
+    def notifier_changements(resultat: dict) -> dict:
+        """Annonce sur le canal externe les ouvertures critiques et les fermetures.
+
+        Comble V-02. Ne recoit `resultat` que pour dependre de l'evaluation :
+        la selection de ce qui doit partir est relue en base, pas heritee de
+        cette valeur. Un envoi rate est ainsi repris au cycle suivant, la ou
+        une liste passee de tache a tache aurait ete perdue.
+
+        Reussit sans rien faire si aucun canal n'est configure. Echoue si un
+        canal configure ne delivre pas : un canal declare qui ne marche pas est
+        une panne, et la taire reproduirait le defaut que ce module corrige.
+        """
+        from notifications import notifier_et_tracer
+
+        # Appele MEME sans canal configure, et c'est deliberé : l'execution est
+        # alors tracee avec zero envoi mais un records_in non nul s'il y avait
+        # de quoi notifier. La trace dit donc « il y avait 2 alertes a annoncer
+        # et aucun canal pour le faire », ce qu'un court-circuit aurait tu.
+        bilan = notifier_et_tracer()
+
+        if not bilan["configure"]:
+            print(
+                "Canal externe non configure : aucune notification envoyee. "
+                "Renseigner TELEGRAM_BOT_TOKEN et TELEGRAM_CHAT_ID, voir .env.example."
+            )
+        else:
+            print(
+                f"{len(bilan['ouvertures'])} ouverture(s) et "
+                f"{len(bilan['fermetures'])} fermeture(s) annoncees."
+            )
+        return {
+            "ouvertures": len(bilan["ouvertures"]),
+            "fermetures": len(bilan["fermetures"]),
+            "configure": bilan["configure"],
+        }
+
+    # Les deux taches aval sont PARALLELES, pas enchainees : voir l'en-tete.
+    evaluation = evaluer_regles()
+    notifier_changements(evaluation)
+    remonter_alertes_critiques(evaluation)
 
 
 supervision()

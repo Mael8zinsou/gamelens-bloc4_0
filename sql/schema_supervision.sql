@@ -146,8 +146,19 @@ CREATE TABLE IF NOT EXISTS speed.alertes (
     valeur        NUMERIC,
     seuil         NUMERIC,
     declenchee_le TIMESTAMPTZ NOT NULL DEFAULT now(),
-    resolue_le    TIMESTAMPTZ
+    resolue_le    TIMESTAMPTZ,
+    -- Etat de NOTIFICATION, distinct de l'etat de l'alerte. Il vit en base et
+    -- non en memoire pour qu'un envoi rate soit repris au cycle suivant : on
+    -- ne garantit pas l'envoi, on rend le reessai automatique et inoffensif.
+    notifiee_le             TIMESTAMPTZ,
+    resolution_notifiee_le  TIMESTAMPTZ
 );
+
+-- Chemin de mise a jour pour une instance deja initialisee : les scripts de
+-- docker-entrypoint-initdb.d ne rejouent que sur un volume vierge, et le
+-- CREATE TABLE ci-dessus est donc ignore sur une base existante.
+ALTER TABLE speed.alertes ADD COLUMN IF NOT EXISTS notifiee_le            TIMESTAMPTZ;
+ALTER TABLE speed.alertes ADD COLUMN IF NOT EXISTS resolution_notifiee_le TIMESTAMPTZ;
 
 COMMENT ON TABLE speed.alertes IS
     'Historique des alertes declenchees. Persistees pour pouvoir mesurer la duree d un incident, pas seulement son occurrence.';
@@ -242,3 +253,10 @@ COMMENT ON COLUMN speed.alertes.declenchee_le IS 'Premiere evaluation ayant cons
 COMMENT ON COLUMN speed.alertes.resolue_le IS
     'Evaluation ayant constate le retour sous seuil. Nul tant que l''alerte est ouverte. '
     'L''ecart avec declenchee_le mesure la duree d''incident.';
+
+COMMENT ON COLUMN speed.alertes.notifiee_le IS
+    'Instant ou l''ouverture a ete annoncee sur le canal externe. Nul si jamais annoncee : '
+    'seules les alertes critiques le sont, les avertissements attendent le bilan periodique.';
+COMMENT ON COLUMN speed.alertes.resolution_notifiee_le IS
+    'Instant ou la fermeture a ete annoncee. Une fermeture n''est annoncee que si '
+    'l''ouverture l''a ete, sinon un message sortirait de nulle part.';
