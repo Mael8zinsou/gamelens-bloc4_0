@@ -2301,3 +2301,7 @@ identifiants Twitch**, ce qui disqualifie RAWG par simple économie, et
 **GG.deals impose une attribution avec lien actif** là où ITAD ne l'impose pas.
 Enfin `all-api.fr`, cité dans la question, est un **annuaire d'API et non une
 source** : il liste précisément IGDB, RAWG, Giant Bomb et Steam Store.
+
+**Suite donnee le 08/09** : la section 4.4 du rapport d'analyse porte desormais
+l'argument fort plutot que celui du perimetre, la requalification en fournisseur
+unique, et le tableau des alternatives evaluees sur l'axe qu'elles ajoutent.

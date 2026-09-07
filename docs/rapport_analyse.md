@@ -180,15 +180,54 @@ portefeuille et panel concurrent réunis, multiplie la volumétrie par environ 1
 soit de l'ordre de **550 Mo par an**. La cadence d'appel, elle, devient le vrai
 facteur limitant bien avant le stockage.
 
-### 4.4 Ce qui n'est pas branché, et pourquoi c'est dit ici
+### 4.4 Une seule source, un seul fournisseur : le choix et son prix
 
-Deux des quatre sources analysées au Bloc 1 ne sont pas raccordées : RAWG et
-Twitch. Les colonnes correspondantes existent dans le schéma et restent nulles.
+Deux des quatre sources analysées au Bloc 1 ne sont pas raccordées, RAWG et
+Twitch, et le suivi GOG est sorti du périmètre par l'arbitrage du Bloc 3. Les
+colonnes correspondantes existent dans le schéma et restent nulles.
 
-Ce n'est pas un oubli mais un arbitrage de périmètre, cohérent avec le principe
-du bloc : mieux vaut une chaîne complète et éprouvée sur une source que quatre
-chaînes déclarées et non exécutées. La conséquence est portée honnêtement dans
-le cahier de recettes, qui liste ces sources parmi ce qui n'est pas couvert.
+**La raison n'est pas seulement un arbitrage de périmètre.** Steam est la seule
+source examinée qui réponde **sans authentification et sans quota**, sur ses
+deux endpoints. C'est ce qui a rendu applicable la règle de travail du bloc :
+rejouer la chaîne des dizaines de fois, dans l'intégration continue, sur
+conteneur jetable, depuis un clone neuf, **sans jamais placer un secret sur le
+chemin critique du premier test**.
+
+Ce n'est pas un cas isolé mais un biais constant de la plateforme, le même qui
+rend le canal de notification facultatif et qui permet à l'étage de tests de
+tourner sans la clef Snowflake : **fonctionner avec rien de configuré**. Chacune
+des alternatives examinées ci-dessous demande une clef ou un jeton.
+
+**Le prix de ce choix, énoncé plutôt que subi.** Ce n'est pas une source unique,
+c'est un **fournisseur unique** : les deux endpoints appartiennent à Valve, donc
+une décision de Valve ne retire pas une part de la donnée mais sa totalité.
+C'est le point de vigilance V-10 de la feuille de route, requalifié en ce sens.
+Second effet, moins visible : la plateforme n'a jamais éprouvé le renouvellement
+d'un jeton **sur une source**, la paire de clefs RSA ne couvrant que l'entrepôt.
+
+**Les alternatives, évaluées sur l'axe qu'elles ajoutent** et non sur leur
+richesse. En raccorder une ne vaut que si elle mesure autre chose.
+
+| Source | Axe ajouté | Accès, vérifié le 08/09/2026 |
+|---|---|---|
+| Twitch Helix | Audience diffusée, **seul indicateur avancé** | OAuth `client_credentials` |
+| IGDB | Catalogue | **Mêmes identifiants que Twitch**, 4 req/s |
+| RAWG | Catalogue | Clef propre, 20 000 requêtes par mois |
+| GG.deals | Tarifs multi-boutiques | Clef gratuite, **attribution avec lien actif obligatoire** |
+| IsThereAnyDeal | Tarifs multi-boutiques | Clef gratuite, 1 000 requêtes par 5 minutes |
+| GOG | Tarifs | **Scraping, pas une API** : sorti du périmètre au Bloc 3 |
+
+Deux faits orientent la suite. **IGDB s'authentifie par les identifiants
+Twitch**, une seule inscription ouvrant les deux, ce qui disqualifie RAWG par
+simple économie de moyens. Et Twitch est la seule à apporter un axe réellement
+neuf, l'audience diffusée précédant les ventes, là où un catalogue n'apporte que
+du statique. La priorité de raccordement est donc Twitch, puis IGDB, et le suivi
+tarifaire multi-boutiques ensuite : `dim_stores` existe déjà pour l'accueillir
+et ne porte aujourd'hui qu'une seule ligne.
+
+L'état actuel est porté honnêtement partout où il se lit. Le cahier de recettes
+liste ces sources parmi ce qui n'est pas couvert, et le dictionnaire de données
+porte, colonne par colonne, la mention « source non branchée à ce jour ».
 
 ## 5. Les contraintes
 
