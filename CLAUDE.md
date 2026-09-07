@@ -202,6 +202,13 @@ sessions 11 et 12 manquaient dans deux d'entre eux.
   `GAMELENS_SERVICE` en `TYPE = SERVICE`, authentifié par **paire de clés RSA** :
   Snowflake impose la MFA aux utilisateurs humains, ce qu'un pipeline ne peut pas
   satisfaire. Clé privée dans `secrets/`, ignorée par git.
+  **Ce choix a pré-empté la Phase 3 de Snowflake**, qui supprime le 09/09/2026
+  les connexions par mot de passe seul et le type `LEGACY_SERVICE` :
+  `GAMELENS_SERVICE` était déjà conforme, aucune brique n'a été touchée. Le
+  compte humain `MAEL8ZINSOU`, lui, était en mot de passe seul ; passé en
+  `TYPE = PERSON` avec MFA le 07/09/2026. **Une paire de clés ne donne pas
+  accès à Snowsight** : pour un humain, la MFA est la seule voie. Voir V-14 de
+  la feuille de route et la phase 49 pour la commande de contrôle.
 - **L'outillage Snowflake (dbt, Snowpark) vit dans son propre conteneur**, jamais dans
   l'environnement Python du poste : Snowpark impose `snowflake-connector-python` 4.x,
   incompatible avec `dbt-snowflake` 1.8, et remonte `requests` épinglé pour l'ingestion.

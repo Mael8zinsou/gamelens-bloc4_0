@@ -1972,3 +1972,67 @@ plateforme, à savoir que rien ne porte une alerte jusqu'à un humain. Le README
 du sous-dossier le signalait comme risque de lecture depuis la session 11, sans
 que les documents concernés ne le disent. Signaler un risque de lecture dans un
 troisième document ne le corrige pas.
+
+---
+
+# Session 13, 7 septembre 2026 : reprise des travaux sur la plateforme
+
+Objet : la préparation de la soutenance est mise en pause. Retour au projet
+lui-même, sur une liste de remarques du lecteur.
+
+## OBS-88. Une contrainte contournée trois semaines plus tôt a pré-empté une dépréciation
+
+Snowflake affiche une bannière : au **09/09/2026**, fin des connexions par mot
+de passe seul et suppression du type `LEGACY_SERVICE`. « Your account currently
+has users who are relying on password-only sign-ins. »
+
+La bannière ne dit pas **lesquels**, et c'est la seule question qui compte. Un
+`SHOW USERS` a tranché en une requête :
+
+| Utilisateur | Type | Mot de passe | Clé RSA | MFA |
+|---|---|---|---|---|
+| `GAMELENS_SERVICE` | `SERVICE` | non | **oui** | non |
+| `MAEL8ZINSOU` | non défini | **oui** | non | **non** |
+
+**La plateforme n'était pas exposée.** Tout ce qui tourne, les 4 DAG, dbt,
+Snowpark, la recette de la CI, passe par `GAMELENS_SERVICE`, dont
+l'authentification par paire de clés est exactement ce que la nouvelle politique
+exige.
+
+Ce qui rend l'affaire intéressante est que **cette conformité n'a pas été
+anticipée**. La décision du 20/08 de passer par une clé répondait à une
+contrainte sans aucun rapport : Snowflake imposait déjà la MFA aux utilisateurs
+humains, et un pipeline ne peut pas la satisfaire. Le compte de service a donc
+été créé en `TYPE = SERVICE` pour contourner un obstacle du moment, et ce
+contournement s'est trouvé être, trois semaines plus tard, la cible exacte d'une
+politique annoncée depuis.
+
+**La leçon vaut au-delà du cas.** Ce n'est pas de la chance, ou pas seulement :
+la contrainte contournée et la dépréciation annoncée procèdent du même
+mouvement du fournisseur, qui durcit l'authentification. Se plier proprement à
+une contrainte du moment, plutôt que chercher à la neutraliser, aligne souvent
+sur la direction que prend le fournisseur. Le raccourci qui aurait consisté à
+donner un mot de passe au compte de service aurait marché en août et cassé le
+09 septembre.
+
+**Et la leçon opérationnelle, plus terre à terre.** Une annonce de dépréciation
+ne dit pas ce qu'elle casse chez vous, elle dit ce qui change chez le
+fournisseur. Le mouvement réflexe, lire la bannière et s'inquiéter, ne produit
+rien. Le seul geste utile est d'interroger son propre compte, et il a coûté une
+requête.
+
+Le compte humain, lui, était bien concerné : mot de passe seul, ni MFA, ni clé,
+ni jeton. Traité le jour même, `TYPE = PERSON` et MFA enrôlée. La perte
+encourue n'était pas celle du service mais celle de Snowsight, donc de tout
+accès humain, y compris pour vérifier V-01. À noter, parce que cela ferme une
+porte de secours qu'on croit ouverte : **une paire de clés ne permet pas de se
+connecter à Snowsight**, elle sert aux pilotes et aux connecteurs. Pour un
+humain, la MFA n'était pas une option parmi d'autres, c'était la seule.
+
+Dernier point, inconfortable et honnête : le filet de sécurité en cas de
+verrouillage était **V-03**, le fait que `GAMELENS_SERVICE` tourne en
+`ACCOUNTADMIN`. Ce compte aurait pu réinitialiser l'authentification du compte
+humain. Un écart listé comme un manquement au moindre privilège se trouve être
+la police d'assurance. Cela ne rend pas V-03 souhaitable ; cela rappelle qu'un
+écart de sécurité et un point unique de défaillance ne se rangent pas sur le
+même axe.

@@ -2356,3 +2356,80 @@ une trentaine de lignes ont changé (OBS-68). Écrire depuis Python avec
 | Incident sur la plateforme | aucun |
 | Briques ajoutées ou retirées | aucune |
 | Tests unitaires | non rejoués, aucun code de production modifié |
+
+---
+
+# Session 13, 7 septembre 2026 : reprise des travaux sur la plateforme
+
+## Phase 49. Vérifier l'exposition du compte à une dépréciation fournisseur (procédure)
+
+À rejouer à chaque annonce de Snowflake touchant l'authentification. Le principe
+vaut au-delà : une bannière dit ce qui change chez le fournisseur, jamais ce
+qu'elle casse chez vous (OBS-88).
+
+```bash
+# [BASH] Qui, sur ce compte, s'authentifie comment ?
+docker compose --profile outillage run --rm --no-deps snowflake-cli python -c "
+import sys; sys.path.insert(0, 'entrepot')
+from connexion_snowflake import connexion
+c = connexion()
+with c.cursor() as cur:
+    cur.execute('SHOW USERS')
+    cols = [d[0].lower() for d in cur.description]
+    for l in cur.fetchall():
+        d = dict(zip(cols, l))
+        print(d['name'], '| type', d['type'], '| mdp', d['has_password'],
+              '| cle', d['has_rsa_public_key'], '| mfa', d['has_mfa'])
+c.close()"
+
+# Avant, le 07/09/2026 au matin :
+# GAMELENS_SERVICE | type SERVICE | mdp false | cle true  | mfa false
+# MAEL8ZINSOU      | type None    | mdp true  | cle false | mfa false   <- expose
+
+# Apres correction, le meme jour :
+# GAMELENS_SERVICE | type SERVICE | mdp false | cle true  | mfa false
+# MAEL8ZINSOU      | type PERSON  | mdp true  | cle false | mfa true
+```
+
+`SHOW USERS` rend une trentaine de colonnes. Les cinq qui tranchent sont `type`,
+`has_password`, `has_rsa_public_key`, `has_mfa` et `has_pat` : elles disent par
+quelles voies chaque compte peut entrer, ce qu'aucune bannière ne dit.
+
+La correction elle-même se fait dans Snowsight, l'enrôlement MFA n'étant pas
+scriptable. Le type, lui, l'est :
+
+```sql
+-- [SQL] Poser le type explicitement, pour que le prochain controle soit lisible
+ALTER USER MAEL8ZINSOU SET TYPE = PERSON;
+```
+
+## Phase 50. Savoir quels ports parlent HTTP et lesquels n'en parlent pas (diagnostic)
+
+Question récurrente : pourquoi un navigateur n'obtient rien sur PostgreSQL ni
+sur Kafka ? Parce qu'ils ne parlent pas HTTP. La démonstration tient en quatre
+appels.
+
+```bash
+# [BASH] Ce que l'hote publie reellement
+docker ps --format '{{.Names}}\t{{.Ports}}'
+# gamelens-postgres          0.0.0.0:5433->5432/tcp
+# gamelens-kafka             0.0.0.0:9092->9092/tcp
+# gamelens-airflow-apiserver 0.0.0.0:8080->8080/tcp
+# gamelens-grafana           0.0.0.0:3000->3000/tcp
+
+# [BASH] Les deux ports de donnees, interroges en HTTP
+curl -sS -m 5 -o /dev/null -w 'HTTP %{http_code}\n' http://localhost:5433/
+# curl: (52) Empty reply from server     <- la connexion TCP est acceptee,
+curl -sS -m 5 -o /dev/null -w 'HTTP %{http_code}\n' http://localhost:9092/
+# curl: (52) Empty reply from server     <- puis rien, car HTTP n'est pas leur langue
+
+# [BASH] Les deux interfaces web
+curl -sS -m 5 -o /dev/null -w 'HTTP %{http_code}\n' -L http://localhost:8080/
+# HTTP 200
+curl -sS -m 5 -o /dev/null -w 'HTTP %{http_code}\n' -L http://localhost:3000/
+# HTTP 200
+```
+
+« Empty reply from server » est la bonne réponse, pas une panne : le serveur
+accepte la connexion, attend un message dans son protocole, n'en reconnait
+aucun et raccroche. Un port ouvert n'est pas un port web.
