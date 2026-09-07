@@ -59,6 +59,9 @@ x-airflow-commun: &airflow-commun
     # fraichement clone ne doit pas exiger un compte de messagerie.
     TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
     TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    # La plateforme stocke en UTC. Ce reglage ne concerne QUE l'affichage
+    # des messages destines a un humain, jamais l'ecriture en base.
+    GAMELENS_TIMEZONE: ${GAMELENS_TIMEZONE:-Europe/Paris}
     # ------------------------------------------------------------------------
     # Acces a Snowflake depuis l'ordonnanceur, pour le DAG de promotion vers
     # l'entrepot. Ces variables sont les MEMES que celles lues par

@@ -209,3 +209,38 @@ def test_les_trois_niveaux_dindicateur_sont_distingues():
     assert "! Latence" in msg
     assert "✗ Alertes ouvertes" in msg
     assert "? Jamais mesure" in msg
+
+
+# ---------------------------------------------------------------------------
+# 4. Fuseau : la base stocke en UTC, le lecteur lit son heure
+# ---------------------------------------------------------------------------
+
+
+def test_lheure_affichee_est_locale_et_non_utc():
+    """Signale par le lecteur le 07/09/2026 : deux heures de retard apparent.
+
+    L'horodatage arrive en UTC de PostgreSQL, ce qui est correct au stockage.
+    Il devenait faux au moment precis ou un humain le lisait.
+    """
+    utc = dt.datetime(2026, 9, 7, 21, 58, tzinfo=dt.timezone.utc)
+    msg = notifications.composer_battement(_etat(horodatage=utc))
+    assert "23:58" in msg, "l heure doit etre celle du lecteur, pas celle du serveur"
+    assert "21:58" not in msg
+
+
+def test_un_horodatage_naif_nest_pas_devine():
+    """Un horodatage sans fuseau ne porte pas de quoi le convertir.
+
+    Le rendre tel quel est le seul comportement honnete : deviner produirait un
+    decalage silencieux, pire que le decalage visible qu'on vient de corriger.
+    """
+    naif = dt.datetime(2026, 9, 7, 21, 58)
+    assert notifications._local(naif) is naif
+
+
+def test_un_fuseau_invalide_ne_casse_pas_le_message(monkeypatch):
+    """Une variable d'environnement fautive degrade l'affichage, pas le canal."""
+    monkeypatch.setattr(notifications, "FUSEAU_AFFICHAGE", "Mars/Olympus_Mons")
+    utc = dt.datetime(2026, 9, 7, 21, 58, tzinfo=dt.timezone.utc)
+    msg = notifications.composer_battement(_etat(horodatage=utc))
+    assert "21:58" in msg  # repli en UTC, mais un message part

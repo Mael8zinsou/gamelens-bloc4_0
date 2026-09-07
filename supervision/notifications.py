@@ -54,6 +54,11 @@ from pathlib import Path
 
 import requests
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "ingestion"))
 
 from common import configurer_logs, connexion_pg, execution  # noqa: E402
@@ -68,6 +73,13 @@ DELAI_S = 10
 SEUIL_SUPERVISION_MUETTE_MIN = 45
 
 CRITIQUE = "critique"
+
+# La plateforme STOCKE en UTC, ce qui est juste et ne doit pas changer : un
+# horodatage sans fuseau est un horodatage faux des qu'il franchit une
+# frontiere ou un changement d'heure. Mais un message destine a un humain
+# doit porter SON heure. La conversion se fait donc au plus tard possible, a
+# la composition, et jamais a l'ecriture.
+FUSEAU_AFFICHAGE = os.getenv("GAMELENS_TIMEZONE", "Europe/Paris")
 
 
 # --------------------------------------------------------------------------
@@ -133,6 +145,33 @@ def _sans_jeton(texte: str, jeton: str) -> str:
     return texte.replace(jeton, "[JETON]") if jeton else texte
 
 
+def _fuseau():
+    """Le fuseau d'affichage, ou None si indisponible."""
+    if ZoneInfo is None:
+        return None
+    try:
+        return ZoneInfo(FUSEAU_AFFICHAGE)
+    except Exception as exc:  # nom de fuseau invalide, base tzdata absente
+        logger.warning(
+            "fuseau %s inutilisable (%s), les heures resteront en UTC",
+            FUSEAU_AFFICHAGE, type(exc).__name__,
+        )
+        return None
+
+
+def _local(moment):
+    """Convertit un horodatage AVERTI vers le fuseau d'affichage.
+
+    Un horodatage naif est rendu tel quel : il ne porte pas l'information
+    necessaire a une conversion, et deviner son fuseau produirait un decalage
+    silencieux, ce qui est pire que le decalage visible qu'on corrige ici.
+    """
+    zone = _fuseau()
+    if moment is None or zone is None or moment.tzinfo is None:
+        return moment
+    return moment.astimezone(zone)
+
+
 def _e(valeur) -> str:
     """Echappe pour le mode HTML de Telegram."""
     return html.escape(str(valeur), quote=False)
@@ -155,6 +194,7 @@ MARQUES = {"nominal": "✓", "avertissement": "!", CRITIQUE: "✗", "inconnu": "
 
 
 def composer_ouverture(regle: str, severite: str, message: str, depuis) -> str:
+    depuis = _local(depuis)
     pastille = PASTILLES.get(severite, "⚪")
     return (
         f"{pastille} <b>{_e(severite.upper())}</b>  {_e(regle)}\n"
@@ -164,7 +204,10 @@ def composer_ouverture(regle: str, severite: str, message: str, depuis) -> str:
 
 
 def composer_fermeture(regle: str, depuis, jusqu_a) -> str:
+    # La duree se calcule AVANT conversion : elle est independante du fuseau,
+    # et la convertir des deux cotes serait un calcul de plus pour rien.
     minutes = int((jusqu_a - depuis).total_seconds() // 60)
+    depuis, jusqu_a = _local(depuis), _local(jusqu_a)
     duree = f"{minutes} min" if minutes < 120 else f"{minutes // 60} h {minutes % 60:02d}"
     return (
         f"\U0001f7e2 <b>REFERMEE</b>  {_e(regle)}\n"
@@ -179,7 +222,8 @@ def composer_battement(etat: dict) -> str:
     Une alerte qui ne part pas est indiscernable d'une plateforme saine ; un
     battement qui ne part pas se remarque.
     """
-    lignes = [f"\U0001f4c5 <b>GameLens</b>  bilan du {etat['horodatage']:%d/%m a %H:%M}", ""]
+    horodatage = _local(etat["horodatage"])
+    lignes = [f"\U0001f4c5 <b>GameLens</b>  bilan du {horodatage:%d/%m a %H:%M}", ""]
 
     if etat["supervision_muette"]:
         lignes += [
@@ -200,7 +244,8 @@ def composer_battement(etat: dict) -> str:
         lignes.append(f"<b>{len(ouvertes)} alerte(s) ouverte(s)</b>")
         for regle, severite, depuis in ouvertes:
             pastille = PASTILLES.get(severite, "⚪")
-            lignes.append(f"{pastille} {_e(regle)}, depuis {depuis:%d/%m %H:%M}")
+            local = _local(depuis)
+            lignes.append(f"{pastille} {_e(regle)}, depuis {local:%d/%m %H:%M}")
     else:
         lignes.append("Aucune alerte ouverte.")
 
@@ -316,10 +361,16 @@ def etat_plateforme() -> dict:
             ouvertes = cur.fetchall()
 
             cur.execute(
-                """SELECT composant, to_char(derniere_execution, 'DD/MM HH24:MI')
+                # Formate en SQL, donc dans le fuseau de la SESSION, qui est
+                # UTC : _local() ne le verra jamais puisqu'il recoit deja du
+                # texte. La conversion doit donc etre faite ici, sans quoi ce
+                # seul champ resterait decale au milieu d'un message correct.
+                """SELECT composant,
+                          to_char(derniere_execution AT TIME ZONE %s, 'DD/MM HH24:MI')
                      FROM speed.v_indicateur_fiabilite
                     WHERE derniere_execution < now() - INTERVAL '26 hours'
-                    ORDER BY derniere_execution"""
+                    ORDER BY derniere_execution""",
+                (FUSEAU_AFFICHAGE,),
             )
             muets = cur.fetchall()
     finally:
