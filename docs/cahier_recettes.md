@@ -908,11 +908,19 @@ Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt privé
 ## TBRZ-06. Volumétrie mesurée plutôt qu'estimée
 
 - **Objet** : trancher l'objection de volume par la mesure.
-- **Résultat observé** : 78 octets par réponse de fréquentation, 238 par
-  réponse tarifaire, soit environ 114 Ko par jour et **41 Mo par an** à la
-  cadence en place.
-- **Verdict** : PASS. Le chiffre alimente la politique de conservation de la
-  feuille de route (C4.3.2).
+- **Résultat observé (20/08/2026)** : 78 octets par réponse de fréquentation,
+  238 par réponse tarifaire, soit environ 114 Ko par jour et **41 Mo par an** à
+  la cadence d'alors, 15 titres et une source.
+- **Remesuré le 08/09/2026**, et le premier résultat était doublement dépassé :
+  les 78 et 238 octets étaient les tailles de la **charge JSON archivée**, pas
+  celles de la ligne, qui pèse en plus une centaine d'octets de métadonnées ;
+  et le panel élargi à 150 titres avec une seconde source porte la ligne à
+  **176 octets côté Steam, 3 231 côté Twitch**, soit **17,5 Go par an**.
+- **Verdict** : PASS sur la méthode, le chiffre étant daté à chaque fois. Le
+  point de vigilance V-05 a été requalifié de faible à forte en conséquence.
+- **Ce que le cas enseigne** : le nombre était juste, ce qu'il prétendait
+  décrire ne l'était pas. Personne ne va vérifier un chiffre qui a l'air
+  mesuré.
 
 ## Promotion ordonnancée vers Snowflake (session 10)
 

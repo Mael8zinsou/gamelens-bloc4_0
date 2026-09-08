@@ -125,7 +125,7 @@ def architecture():
 
     boite(40, 140, 210, 52, "Steam fréquentation", "GetNumberOfCurrentPlayers")
     boite(40, 204, 210, 52, "Steam tarifs", "appdetails / price_overview")
-    boite(40, 268, 210, 52, "Twitch, RAWG", "OAuth, catalogue")
+    boite(40, 268, 210, 52, "Twitch audience", "helix/streams, OAuth")
 
     boite(280, 140, 200, 74, "bronze.reponses_brutes", couleur=ORANGE)
     t.texte(292, 178, "archive de tout appel,", 10.5, ENCRE_2)
@@ -151,15 +151,16 @@ def architecture():
     t.fleche(740, 214, 794, 171)
     t.fleche(740, 234, 794, 253)
 
-    bas = 350
-    t.bloc(40, bas, 1100, 108, fond=GRIS_PALE, bord=FILET)
-    t.texte(60, bas + 26, "Apache Airflow orchestre les quatre chaînes", 13.5,
+    bas = 342
+    t.bloc(40, bas, 1100, 140, fond=GRIS_PALE, bord=FILET)
+    t.texte(60, bas + 26, "Apache Airflow orchestre les cinq chaînes", 13.5,
             ENCRE, gras=True)
     dags = [
-        ("gamelens_ingestion_temps_reel", "toutes les 15 min"),
+        ("gamelens_ingestion_temps_reel", "toutes les 15 min, Steam et Twitch"),
         ("gamelens_promotion_gold", "02h30 UTC, une journée par run"),
         ("gamelens_promotion_snowflake", "03h00 UTC, MERGE de tout l'historique"),
         ("gamelens_supervision", "toutes les 15 min"),
+        ("gamelens_battement", "08h et 20h, il surveille la supervision"),
     ]
     for i, (nom, cadence) in enumerate(dags):
         x = 60 + (i % 2) * 545
@@ -185,7 +186,7 @@ def ci_etages():
     etages = [
         ("1", "Qualité", "ruff, format"),
         ("2", "Tests", "pytest"),
-        ("3", "Intégrité DAG", "4 DAG chargés"),
+        ("3", "Intégrité DAG", "5 DAG chargés"),
         ("4", "Intégration", "socle jetable"),
         ("5", "Recette entrepôt", "base Snowflake jetable"),
         ("6", "Publication", "image sur ghcr.io"),
@@ -284,11 +285,11 @@ def couts():
 
 
 def recettes():
-    """Magnitude comparee sur huit categories : barres, une seule teinte."""
-    t = Toile(1180, 420)
+    """Magnitude comparee sur onze categories : barres, une seule teinte."""
+    t = Toile(1180, 486)
 
     t.texte(40, 44, "Cahier de recettes", 20, ENCRE, gras=True)
-    t.texte(40, 68, "55 cas, aucun partiel, aucun en attente. Les trois familles "
+    t.texte(40, 68, "70 cas, aucun partiel, aucun en attente. Les trois familles "
                     "exigées, plus celles du projet", 12.5, ENCRE_2)
 
     familles = [
@@ -297,15 +298,18 @@ def recettes():
         ("Ingestion orchestrée", 6, False),
         ("Couche Bronze", 6, False),
         ("Contrats dbt", 6, False),
+        ("Canal de notification", 6, False),
+        ("Seconde source, Twitch", 6, False),
         ("Fonctionnels", 5, True),
         ("Promotion Snowflake", 4, False),
+        ("Panel élargi", 3, False),
         ("Sécurité", 3, True),
     ]
     maximum = max(v for _, v, _ in familles)
-    x0, y0 = 300, 118
+    x0, y0 = 300, 114
     largeur_max = 700
-    hauteur = 24
-    pas = 32
+    hauteur = 22
+    pas = 30
 
     for i, (nom, valeur, exigee) in enumerate(familles):
         y = y0 + i * pas
@@ -323,8 +327,8 @@ def recettes():
     t.texte(x0 - 14, y0 - 16, "familles exigées par la grille en bleu", 10.5,
             BLEU, ancre="rs")
 
-    t.ligne([(40, 384), (1140, 384)], FILET, 1)
-    t.texte(40, 404,
+    t.ligne([(40, 450), (1140, 450)], FILET, 1)
+    t.texte(40, 470,
             "Format retenu : PASS ou FAIL vérifié sur un résultat attendu, et non "
             "\u00ab la requête s'exécute sans erreur \u00bb.", 12, ENCRE_2)
 

@@ -2778,3 +2778,72 @@ docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
 
 Piege documente en OBS-100 : les chiffres publies avant le 08/09/2026 etaient
 des tailles de CHARGE presentees comme des tailles de ligne.
+
+## Phase 61. Contrôler la cohérence des chiffres annoncés (procédure)
+
+À rejouer avant tout dépôt, et après toute session qui ajoute ou retire une
+brique. Le principe est de **compter les objets** plutôt que de relire les
+phrases qui les annoncent.
+
+```bash
+# [SH] (procedure) Compter ce qui existe reellement
+grep -c "^## DA-" docs/documentation_technique.md      # -> 13
+grep -c "^## OBS-" docs/observations.md                # -> 106
+grep -c "^## T[A-Z]" docs/cahier_recettes.md           # -> 70
+grep -o "^## INC-[0-9]*" docs/journal_incidents.md | wc -l   # -> 9
+ls dags/*.py | wc -l                                   # -> 5
+
+# [SH] (procedure) Puis chercher ce que les documents ANNONCENT
+grep -rn "55 PASS\|11 décisions\|quatre DAG\|4 DAG\|27 min 30" \
+     docs/*.md CLAUDE.md README.md | grep -v "commandes_successives\|observations"
+```
+
+Le second `grep` exclut volontairement les deux journaux : ils sont
+chronologiques, et « quatre DAG » y est **juste** dans une entrée datée du 31/08.
+Un contrôle de cohérence qui ne distingue pas une affirmation présente d'une
+trace historique produit du bruit et finit par ne plus être lancé.
+
+Ce qu'il a trouvé le 08/09 : `CLAUDE.md` annonçait 55 cas de recette à une ligne
+et 70 à une autre, ainsi que l'ancienne volumétrie à une ligne et la nouvelle à
+une autre. Un fichier de consignes qui se contredit lui-même est pire
+qu'incomplet, et celui-ci le disait déjà de lui-même à propos d'un autre
+passage.
+
+## Phase 62. Mettre à jour le support après une modification de la plateforme (procédure)
+
+L'ordre compte, parce que chaque étape lit la sortie de la précédente.
+
+```bash
+# [PY] 1. Les visuels D'ABORD : le support les incorpore
+python outils/visuels.py
+
+# [PY] 2. Le support, qui ecrit aussi la numerotation des diapositives
+python outils/generer_support.py
+# -> 31 diapositives du Markdown, 34 dans le PPTX
+# -> duree annoncee : 28:00 sur 30:00
+
+# [PY] 3. La feuille du jury, qui lit plan_soutenance.md + le support + la numerotation
+python outils/generer_feuille_jury.py
+# -> 31 sous-criteres, 31 associes a au moins une diapositive
+
+# [PY] 4. Controle de la grille, phase 47
+python - <<'PY'
+import re
+from pathlib import Path
+t = Path("docs/support_soutenance.md").read_text(encoding="utf-8")
+vus = {int(n) for b in re.findall(r"^    criteres: (.+)$", t, re.M)
+       for n in re.findall(r"\d+", b)}
+print("manquants sur 1..31 :", sorted(set(range(1, 32)) - vus) or "aucun")
+PY
+```
+
+**Les minutes ne se corrigent pas à la main.** Insérer une diapositive décale
+tout ce qui suit, et la version de répétition porte la minute en pied de page :
+une minute fausse ferait répéter sur un faux budget. Elles sont recalculées en
+une passe depuis les champs `duree`, qui sont la seule saisie.
+
+Fait le 08/09 : une diapositive insérée en section 4 a porté le budget de 27:30
+à 28:10. Vingt secondes ont été reprises sur l'annonce du plan, qui se lit vite,
+pour revenir à **28:00 de contenu et 2:00 de marge**. Le déroulé minuté de
+`docs/plan_soutenance.md` a été mis à jour dans le même mouvement : deux
+documents qui annoncent deux budgets différents ne servent plus à répéter.

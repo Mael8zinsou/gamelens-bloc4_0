@@ -354,12 +354,13 @@ des composants ci-dessous.
 Chaque composant est présenté avec le rôle qu'il tient ici, l'alternative
 sérieuse qui a été écartée, et la raison de l'arbitrage. Les décisions
 d'architecture complètes, avec leur contrepartie, sont en `documentation_technique.md`
-sous les identifiants DA-01 à DA-11.
+sous les identifiants DA-01 à DA-13.
 
 ### 7.1 Collecte : Python et `requests`
 
 **Rôle** : interroger les API sources, archiver la réponse brute, publier la
-mesure. Environ 1 400 relevés par jour à 15 titres.
+mesure. Environ 1 400 relevés par jour sur les 150 titres du panel, deux
+sources confondues.
 
 **Alternative écartée** : un outil d'ingestion prêt à l'emploi de type Airbyte
 ou Meltano. Écarté parce qu'aucun connecteur ne couvre `GetNumberOfCurrentPlayers`,
@@ -375,8 +376,8 @@ Ce risque est un point de vigilance en section 9.
 second s'arrête, le premier continue et rien n'est perdu, dans la limite de la
 rétention de 168 heures.
 
-**Alternative écartée** : écrire directement en base. À 15 titres, cela
-fonctionnerait, et il faut le dire franchement. Le tampon résout un problème
+**Alternative écartée** : écrire directement en base. À 150 titres et deux
+sources, cela fonctionnerait encore, et il faut le dire franchement. Le tampon résout un problème
 d'échelle que le commanditaire n'a pas encore, et il répond à une exigence
 explicite du référentiel sur les pipelines temps réel.
 

@@ -75,7 +75,7 @@ l'attention qu'elle n'aurait pas à la vingt-cinquième minute.
     type: puces
     section: Ouverture
     minute: 00:20
-    duree: 0:40
+    duree: 0:30
     competence: -
     criteres: -
     visuel: -
@@ -109,7 +109,7 @@ pas : le cloisonnement des rôles, l'orchestrateur, le tableau de bord.
 
     type: puces
     section: 1. Le besoin, l'existant, les contraintes
-    minute: 01:00
+    minute: 00:50
     duree: 1:00
     competence: C4.1.1
     criteres: 1, 2
@@ -135,7 +135,7 @@ suivante.
 ## D04. L'existant, et pourquoi ne pas simplement acheter
 
     type: duo
-    minute: 02:00
+    minute: 01:50
     duree: 0:50
     competence: C4.1.1
     criteres: 5, 2
@@ -166,7 +166,7 @@ balance décrédibiliserait le reste. Le dire si la question vient.
 ## D05. L'environnement et les contraintes
 
     type: puces
-    minute: 02:50
+    minute: 02:40
     duree: 0:40
     competence: C4.1.1
     criteres: 3, 4
@@ -174,10 +174,10 @@ balance décrédibiliserait le reste. Le dire si la question vient.
 
 ### Puces
 
-- Quatre sources : RAWG, Steam fréquentation, Steam tarifs, Twitch
-- Aucune ne diffuse de flux : on échantillonne, on ne s'abonne pas
-- Volumétrie mesurée : 78 octets par relevé de fréquentation, 238 par relevé tarifaire
-- Environ 41 Mo par an, ce qui écarte d'emblée toute solution dimensionnée pour le volume
+- Deux fournisseurs raccordés : Steam pour la fréquentation et les tarifs, Twitch pour l'audience
+- Aucun ne diffuse de flux : on échantillonne, on ne s'abonne pas
+- 150 titres suivis, le catalogue de Kestrel et son panel concurrent, relevés toutes les 15 minutes
+- Volumétrie mesurée : 176 octets par ligne archivée côté Steam, 3 231 côté Twitch
 - Contraintes : un seul poste, aucun budget d'infrastructure, une échéance de soutenance
 - Ce cadrage a décidé la suite : couche Bronze en PostgreSQL et non en stockage objet, entrepôt dimensionné XS
 
@@ -187,8 +187,17 @@ La contrainte structurante n'est pas le volume, c'est que **les sources ne
 diffusent pas de flux**. Le « temps réel » de ce projet est un échantillonnage
 périodique, et il faut le dire soi-même avant que le jury ne le demande.
 
-Les 41 Mo par an justifient à eux seuls beaucoup de choix ultérieurs, dont la
-couche Bronze en PostgreSQL plutôt qu'en stockage objet.
+Sur le volume, assumer la révision plutôt que la taire, parce qu'elle est plus
+instructive que le chiffre. Ce rapport a annoncé **41 Mo par an** pendant trois
+semaines, et ce nombre a été corrigé deux fois le 08/09 : d'abord parce qu'il
+désignait la taille de la charge JSON et non celle de la ligne archivée, ensuite
+parce qu'une réponse Twitch décrit jusqu'à cent diffusions. La projection réelle
+est de **17,5 Go par an**, dont 16 pour la seule audience.
+
+Ce qui compte est que la conclusion tienne et que la marge ait fondu : 17,5 Go
+restent tenables pour PostgreSQL, mais le point de vigilance V-05 est passé de
+faible à forte. Un registre de risques se relit quand l'architecture change, pas
+seulement quand un risque se matérialise.
 
 La grille demande que ce rapport **permette de cadrer le travail de conception**.
 Le dire en quittant la diapositive, avec un exemple et non en général : c'est
@@ -200,12 +209,12 @@ cette analyse qui a écarté le stockage objet, et non un arbitrage pris plus ta
 
     type: visuel
     section: 2. Les composants et leur cout
-    minute: 03:30
+    minute: 03:20
     duree: 1:10
     competence: C4.1.2
     criteres: 6, 7
     visuel: annexes/visuel_architecture.png
-    legende: Quatre sources, trois couches, deux cibles Gold, quatre chaines orchestrees.
+    legende: Deux fournisseurs, trois couches, deux cibles Gold, cinq chaines orchestrees.
 
 ### Puces
 
@@ -230,7 +239,7 @@ Ne pas réciter le tableau. Le jury lit plus vite qu'on ne parle.
 ## D07. Points de vigilance : la dépendance fournisseur
 
     type: puces
-    minute: 04:40
+    minute: 04:30
     duree: 0:50
     competence: C4.1.2
     criteres: 8
@@ -257,7 +266,7 @@ Snowflake en une journée. Dire ce que le repli couvre et ce qu'il ne couvre pas
 ## D08. Les coûts, mesurés et non estimés
 
     type: visuel
-    minute: 05:30
+    minute: 05:20
     duree: 1:00
     competence: C4.1.2
     criteres: 9
@@ -290,7 +299,7 @@ consommation absolue de COMPUTE_WH a augmenté, c'est sa part qui recule.
 
     type: visuel
     section: 3. Le schema de donnees
-    minute: 06:30
+    minute: 06:20
     duree: 1:10
     competence: C4.2.1
     criteres: 10, 12
@@ -323,7 +332,7 @@ la main ment tôt ou tard.
 ## D10. Les modalités d'accès, démontrées
 
     type: direct
-    minute: 07:40
+    minute: 07:30
     duree: 0:50
     competence: C4.2.1
     criteres: 11
@@ -357,7 +366,7 @@ PPTX. Si le direct ne répond pas en dix secondes, passer au repli sans commente
 ## D11. Ce que Snowflake n'applique pas
 
     type: duo
-    minute: 08:30
+    minute: 08:20
     duree: 1:00
     competence: C4.2.1
     criteres: 10, 12
@@ -396,7 +405,7 @@ soumet le même jeu fautif pour vérifier qu'ils restent d'accord.
 
     type: puces
     section: 4. Les pipelines, trois methodes
-    minute: 09:30
+    minute: 09:20
     duree: 0:30
     competence: C4.2.2
     criteres: 13, 14, 15
@@ -404,8 +413,8 @@ soumet le même jeu fautif pour vérifier qu'ils restent d'accord.
 
 ### Puces
 
-- Un pipeline temps réel : Steam vers Kafka vers PostgreSQL
-- Un orchestrateur : Airflow, quatre DAG
+- Un pipeline temps réel : Steam et Twitch vers Kafka vers PostgreSQL
+- Un orchestrateur : Airflow, cinq DAG
 - Un calcul distribué : Snowpark, sur le compute Snowflake
 
 ### Notes
@@ -419,7 +428,7 @@ jamais sacrifier si le temps déborde.
 ## D13. Méthode 1, le pipeline temps réel
 
     type: puces
-    minute: 10:00
+    minute: 09:50
     duree: 1:20
     competence: C4.2.2
     criteres: 13
@@ -427,18 +436,26 @@ jamais sacrifier si le temps déborde.
 
 ### Puces
 
-- Steam GetNumberOfCurrentPlayers, sans authentification, quinze titres
+- Deux sources, 150 titres : Steam sans authentification, Twitch en OAuth client_credentials
 - Kafka en mode KRaft, sans ZooKeeper : c'est bien Apache Kafka
-- Un topic déclaré explicitement, un consommateur qui écrit en Silver speed
-- Idempotence prouvée par rejeu : quinze messages relus, zéro inséré
+- Un topic par source, un seul consommateur paramétré qui choisit sa table sur le topic
+- Idempotence prouvée par rejeu : 735 messages relus sur les deux topics, zéro inséré
 - Orchestré toutes les quinze minutes, avec porte de sortie et reprise vérifiée
 
 ### Notes
 
 L'idempotence est le point à défendre, et elle se prouve par le **rejeu des
-offsets** : on remet le consommateur au début, on relit quinze messages, et rien
-ne s'insère. Un test qui vérifie seulement que la requête ne plante pas ne prouve
-rien.
+offsets** : on remet le consommateur au début des deux topics, on relit
+735 messages, et rien ne s'insère. Un test qui vérifie seulement que la requête
+ne plante pas ne prouve rien.
+
+Si le jury demande comment la seconde source a été absorbée : le consommateur a
+été **paramétré, pas dupliqué**. Un second module aurait été plus rapide à
+écrire et sans risque pour le chemin déjà éprouvé, mais il aurait figé deux
+exemplaires de la garantie de livraison, donc deux endroits où la corriger le
+jour où elle se révèle fausse. C'est précisément pour cela que le rejeu a été
+refait après la modification, et sur un périmètre quarante-neuf fois plus large
+que la preuve d'origine.
 
 Dire honnêtement que le « temps réel » est ici un échantillonnage périodique,
 puisque la source ne diffuse pas de flux. Cette honnêteté a plus de valeur que
@@ -449,10 +466,52 @@ et la reprise automatique a été vérifiée.
 
 ---
 
-## D14. Méthode 2, l'orchestrateur
+## D14. Deux sources, parce qu'elles ne mesurent pas la même chose
+
+    type: puces
+    minute: 11:10
+    duree: 0:40
+    competence: C4.1.1
+    criteres: 1, 13
+    visuel: -
+
+### Puces
+
+- B1 demandait la popularité jouée ET diffusée : les deux moitiés sont collectées
+- Steam dit qui joue, Twitch dit qui regarde, et leur rapport ne se déduit d'aucun des deux
+- Le même jour, à la même heure : Rust, 0,05 spectateur par joueur. Fall Guys, 13,6
+- L'audience diffusée monte avant les ventes : un indicateur d'avance, pas une redondance
+- Critère de raccordement : l'axe qu'une source ajoute, jamais sa richesse
+
+### Notes
+
+Quarante secondes, et c'est la seule diapositive où la plateforme **répond à une
+question métier** au lieu de montrer sa plomberie. La seconde source a été
+raccordée le 08/09 : le dire si on le demande, ne pas l'annoncer soi-même, la
+date n'ajoute rien au propos. Ne pas la sacrifier en
+premier si le temps déborde, malgré son apparence de supplément.
+
+Le chiffre à faire entendre est Fall Guys : 544 joueurs connectés et 7 408
+personnes en train de le regarder. Treize fois plus de spectateurs que de
+joueurs. Un éditeur qui ne suivrait que la fréquentation conclurait que ce titre
+est mort, et il se tromperait.
+
+Si le jury demande pourquoi Twitch plutôt que RAWG, IGDB ou GG.deals, la réponse
+est le critère et non la source : RAWG et IGDB apportent du catalogue, donc du
+statique ; GG.deals apporte des tarifs, un axe déjà couvert. Twitch était la
+seule à ajouter une mesure que Steam ne donne pas. Ajouter, si la question va
+plus loin, qu'IGDB serait la prochaine parce qu'elle s'authentifie avec les
+**mêmes identifiants que Twitch**, déjà en place.
+
+Répondre ici, et pas plus tard, à l'objection de dimensionnement : c'est la
+diapositive qui la désamorce.
+
+---
+
+## D15. Méthode 2, l'orchestrateur
 
     type: direct
-    minute: 11:20
+    minute: 11:50
     duree: 1:20
     competence: C4.2.2
     criteres: 14
@@ -461,7 +520,7 @@ et la reprise automatique a été vérifiée.
 ### Puces
 
 - Airflow 3.1.8, en conteneurs : il ne tourne pas nativement sous Windows
-- Quatre DAG : ingestion toutes les 15 min, deux promotions nocturnes, supervision
+- Cinq DAG : ingestion toutes les 15 min, deux promotions nocturnes, supervision, battement
 - Deux promotions distinctes, et non une seule : c'est un choix, pas un oubli
 - Portes de fraîcheur, testées en négatif sur les deux promotions
 
@@ -469,8 +528,12 @@ et la reprise automatique a été vérifiée.
 
 **DIRECT 2**, environ soixante secondes, local, aucun réseau requis.
 
-Montrer la liste des quatre DAG, leur historique de runs, puis le graphe de
+Montrer la liste des cinq DAG, leur historique de runs, puis le graphe de
 `gamelens_promotion_gold` et ses six tâches.
+
+Le cinquième, `gamelens_battement`, mérite dix secondes : il ne produit aucune
+donnée, il ne sert qu'à dénoncer l'arrêt de la supervision. Un dispositif qui se
+surveille lui-même ne prouve rien ; il fallait un DAG séparé.
 
 Expliquer les deux promotions séparées : Snowflake est un service tiers facturé
 dont l'indisponibilité ne doit pas emporter la promotion locale. Les fusionner
@@ -480,10 +543,10 @@ Repli : `docs/preuves/c14_airflow_dags.txt` et la capture d'écran.
 
 ---
 
-## D15. Méthode 3, le calcul distribué
+## D16. Méthode 3, le calcul distribué
 
     type: puces
-    minute: 12:40
+    minute: 13:10
     duree: 1:00
     competence: C4.2.2
     criteres: 15
@@ -510,10 +573,10 @@ La preuve arrive à la diapositive suivante.
 
 ---
 
-## D16. La preuve : le SQL que Snowpark génère
+## D17. La preuve : le SQL que Snowpark génère
 
     type: preuve
-    minute: 13:40
+    minute: 14:10
     duree: 1:20
     competence: C4.2.2
     criteres: 15
@@ -541,11 +604,11 @@ côté serveur.
 
 ---
 
-## D17. L'intégration et le déploiement continus
+## D18. L'intégration et le déploiement continus
 
     type: visuel
     section: 5. Integration et deploiement continus
-    minute: 15:00
+    minute: 15:30
     duree: 1:20
     competence: C4.2.3
     criteres: 16
@@ -574,10 +637,10 @@ n'a en général rien vérifié.
 
 ---
 
-## D18. Six étages au vert, sur le dernier run
+## D19. Six étages au vert, sur le dernier run
 
     type: capture
-    minute: 16:20
+    minute: 16:50
     duree: 1:10
     competence: C4.2.3
     criteres: 16
@@ -606,11 +669,11 @@ variable d'environnement, en contenu PEM.
 
 ---
 
-## D19. La supervision : ce que l'on surveille, et pourquoi
+## D20. La supervision : ce que l'on surveille, et pourquoi
 
     type: puces
     section: 6. Supervision et alertes
-    minute: 17:30
+    minute: 18:00
     duree: 1:00
     competence: C4.3.1
     criteres: 17, 18
@@ -635,10 +698,10 @@ d'outil de restitution.
 
 ---
 
-## D20. Les indicateurs, à l'écran
+## D21. Les indicateurs, à l'écran
 
     type: direct
-    minute: 18:30
+    minute: 19:00
     duree: 1:00
     competence: C4.3.1
     criteres: 19
@@ -663,10 +726,10 @@ Repli : la capture d'écran, à la diapositive suivante du PPTX.
 
 ---
 
-## D21. Les alertes, et leur cycle de vie
+## D22. Les alertes, et leur cycle de vie
 
     type: puces
-    minute: 19:30
+    minute: 20:00
     duree: 1:00
     competence: C4.3.1
     criteres: 20
@@ -679,6 +742,7 @@ Repli : la capture d'écran, à la diapositive suivante du PPTX.
 - Une alerte au plus par règle : sans cela, 96 lignes par jour pour un seul incident
 - Fenêtre par composant, et non fenêtre unique : 24 h pour les collectes fréquentes, 26 h pour les quotidiennes
 - Un incident réel de quatre jours a été détecté puis refermé seul, en moins de cinq minutes
+- Notification Telegram immédiate des alertes critiques, mesurée à 2 secondes
 
 ### Notes
 
@@ -689,16 +753,24 @@ La fenêtre par composant est un piège évité et qui vaut d'être raconté : u
 fenêtre unique de 24 heures déclarerait muet, à chaque cycle, un composant qui ne
 tourne qu'une fois par jour.
 
-Enchaîner directement sur la limite, diapositive 29 : rien ne prévient un humain.
-Mieux vaut l'annoncer ici que de laisser le jury le découvrir.
+Le canal externe est récent, 07/09, et il vaut d'être présenté par le manque
+qu'il comble plutôt que par la fonctionnalité : avant lui, une alerte de
+fraîcheur est restée ouverte **6 jours et 20 heures** parce que personne ne la
+regardait. Le système la voyait, il ne le disait à personne.
+
+Deux propriétés à citer, parce qu'elles sont testées et contre-intuitives. Sans
+jeton configuré, la notification est un no-op qui rend un succès ; avec un jeton
+présent mais injoignable, elle trace un échec. Un dispositif d'alerte ne doit
+jamais faire tomber la chaîne qu'il surveille, mais son propre silence ne doit
+pas être silencieux.
 
 ---
 
-## D22. La feuille de route d'exploitation
+## D23. La feuille de route d'exploitation
 
     type: puces
     section: 7. Feuille de route d'exploitation
-    minute: 20:30
+    minute: 21:00
     duree: 1:00
     competence: C4.3.2
     criteres: 21, 22, 23
@@ -722,23 +794,23 @@ coupure du broker Kafka a été exécutée, et le pipeline a repris seul.
 
 ---
 
-## D23. Les points de vigilance
+## D24. Les points de vigilance
 
     type: chiffre
-    minute: 21:30
+    minute: 22:00
     duree: 1:00
     competence: C4.3.2
     criteres: 24
-    chiffre: 11
-    legende: points de vigilance ouverts, sur treize numérotés
+    chiffre: 9
+    legende: points de vigilance ouverts, sur quatorze numérotés et cinq refermés
 
 ### Puces
 
 - Nommés, numérotés, et pour deux d'entre eux datés
-- V-12 et V-13 ont été refermés le 31/08 : la feuille de route vit
+- Cinq refermés en cours de projet, dont V-02 et V-07 le 07/09 : la feuille de route vit
 - V-01, expiration du compte Snowflake : le seul réellement bloquant
-- V-02, aucun canal de notification : l'écart le plus important avec une plateforme exploitée
 - V-03, l'utilisateur de service tourne avec des droits trop larges
+- V-05, la couche Bronze sans conservation définie : requalifié de faible à FORTE le 08/09
 - COMPUTE_WH à réduire : mesuré à 32 % de la consommation au 31/08
 
 ### Notes
@@ -747,17 +819,26 @@ Nommer ses propres limites, avec leur numéro et leur mesure, avant que le jury 
 les cherche. C'est un exercice qu'un jury de professionnels cherche à provoquer,
 et le devancer vaut mieux que le subir.
 
-V-02 est chiffré : une alerte de fraîcheur est restée ouverte 6 jours et 20
-heures en août, et a été détectée en 90 minutes une fois regardée. Le chiffre
-rend l'aveu crédible.
+**V-05 est l'histoire à raconter, et elle tient en trois phrases.** Ce point
+était classé faible depuis l'origine, et ce classement était juste au moment où
+il a été posé : la couche Bronze grossissait alors de 41 Mo par an. Le
+raccordement de Twitch l'a fait passer à 17,5 Go sans que personne ne touche à
+V-05, parce qu'une réponse d'audience décrit jusqu'à cent diffusions là où un
+compteur de joueurs tient dans un entier. Un registre de risques se relit quand
+l'architecture change, pas seulement quand un risque se matérialise.
+
+Si le jury demande pourquoi ne pas tronquer ce qu'on archive : ce serait décider
+aujourd'hui de ce dont on aura besoin demain, ce que la couche Bronze existe
+précisément pour éviter. C'est la durée de conservation qui doit devenir une
+décision, pas le contenu.
 
 ---
 
-## D24. La documentation technique
+## D25. La documentation technique
 
     type: puces
     section: 8. Documentation technique
-    minute: 22:30
+    minute: 23:00
     duree: 1:00
     competence: C4.3.3
     criteres: 25
@@ -765,7 +846,7 @@ rend l'aveu crédible.
 
 ### Puces
 
-- Onze décisions d'architecture, datées, chacune avec sa contrepartie
+- Treize décisions d'architecture, datées, chacune avec sa contrepartie
 - Traçabilité champ par champ, de la source à la couche Gold
 - Deux annexes GÉNÉRÉES depuis le catalogue des bases, jamais écrites à la main
 - L'intégration continue échoue si une annexe ne correspond plus au schéma
@@ -782,11 +863,11 @@ vraiment prise.
 
 ---
 
-## D25. Le cahier de recettes
+## D26. Le cahier de recettes
 
     type: visuel
     section: 9. Cahier de recettes
-    minute: 23:30
+    minute: 24:00
     duree: 0:45
     competence: C4.4.1
     criteres: 26, 27
@@ -795,8 +876,8 @@ vraiment prise.
 
 ### Puces
 
-- 55 cas, 0 partiel, 0 en attente
-- Fonctionnels : 5. Structurels : 19. Sécurité : 3. Plus les catégories propres au projet
+- 70 cas, 0 partiel, 0 en attente
+- Fonctionnels : 5. Structurels : 19. Sécurité : 3. Plus les huit catégories propres au projet
 - Format retenu : PASS ou FAIL vérifié sur un résultat attendu
 - Et non « la requête s'exécute sans erreur », qui ne prouve rien
 
@@ -807,14 +888,15 @@ cahier est structuré sur ces trois-là. Montrer la table de synthèse.
 
 Le format est le point de méthode : chaque cas énonce son résultat attendu avant
 son résultat obtenu. Le premier cas conforme à ce format était le rejeu des
-offsets Kafka, quinze relus et zéro inséré.
+offsets Kafka, quinze relus et zéro inséré ; le même contrôle en compte
+aujourd'hui 735, sur deux topics.
 
 ---
 
-## D26. Éprouvé en négatif
+## D27. Éprouvé en négatif
 
     type: puces
-    minute: 24:15
+    minute: 24:45
     duree: 0:45
     competence: C4.4.1
     criteres: 27
@@ -826,22 +908,32 @@ offsets Kafka, quinze relus et zéro inséré.
 - Les deux filets d'intégrité sont soumis au même jeu de données fautif
 - Les tests de sécurité valident aussi les refus : treize cas, en 20 cas paramétrés
 - Les portes de fraîcheur ont été testées en coupant réellement la source
+- Le panel : cinq identifiants Steam désignaient un autre jeu, et répondaient tous en HTTP 200
 
 ### Notes
 
 C'est la différence entre un cahier de recettes et une liste de vœux. Trois
 exemples suffisent, ne pas les énumérer tous.
 
-Le cas du broker Kafka coupé est le plus parlant : on a arrêté le conteneur, on a
-vérifié que le pipeline échouait proprement, puis qu'il reprenait seul.
+Le cas du broker Kafka coupé est le plus parlant sur la reprise : on a arrêté le
+conteneur, vérifié que le pipeline échouait proprement, puis qu'il reprenait
+seul.
+
+Le cas du panel est le plus parlant sur la nature d'un contrôle. En portant le
+panel à 150 titres, cinq identifiants présumés désignaient un autre jeu :
+`Void Bastards` pointait sur *Warhammer 40,000: Mechanicus*. Aucun n'aurait
+produit d'erreur. Ils auraient collecté des données parfaitement valides sur les
+mauvais jeux, indéfiniment, avec une fraîcheur bonne et des tests au vert. Ce
+que le contrôle vérifie n'est donc pas l'absence d'erreur mais une
+**correspondance** : le nom rendu par Steam est confronté au nom attendu.
 
 ---
 
-## D27. Un incident réel : INC-004
+## D28. Un incident réel : INC-004
 
     type: preuve
     section: 10. Un incident reel
-    minute: 25:00
+    minute: 25:30
     duree: 1:00
     competence: C4.4.2
     criteres: 28
@@ -866,10 +958,10 @@ Raconter cet enchaînement lentement : c'est la partie que le jury retient.
 
 ---
 
-## D28. La méthode, et ce qu'elle a donné
+## D29. La méthode, et ce qu'elle a donné
 
     type: visuel
-    minute: 26:00
+    minute: 26:30
     duree: 1:00
     competence: C4.4.2
     criteres: 29, 30, 31
@@ -882,7 +974,7 @@ Raconter cet enchaînement lentement : c'est la partie que le jury retient.
 - Une Alpine en locale C ne peut répondre qu'en anglais ASCII : le français prouvait l'imposture
 - Communication, immédiat : mention en daily, tout poste avec un PostgreSQL local se bloquera pareil
 - Puis un prérequis ajouté à la procédure d'installation, et cette entrée de journal pour la trace
-- Résultat vérifié par l'exécution : 15 titres écrits, chaîne complète, rejeu idempotent à 0 inséré
+- Résultat vérifié par l'exécution : la chaîne complète, et le rejeu idempotent à 0 inséré
 
 ### Notes
 
@@ -911,23 +1003,23 @@ lecteur futur de « corriger » l'anomalie apparente et de réintroduire l'incid
 
 ---
 
-## D29. Ce que je n'ai pas fait
+## D30. Ce que je n'ai pas fait
 
     type: chiffre
     section: Cloture
-    minute: 27:00
+    minute: 27:30
     duree: 0:30
     competence: -
     criteres: -
-    chiffre: 6 j 20 h
-    legende: une alerte de fraîcheur restée ouverte en août, sans que personne ne soit prévenu
+    chiffre: × 437
+    legende: l'écart entre le volume annuel que mon rapport annonçait et celui que j'ai mesuré
 
 ### Puces
 
-- Aucun canal de notification : les alertes sont persistées, personne n'est prévenu
-- La supervision ne se surveille pas elle-même
-- L'utilisateur de service tourne avec des droits trop larges
-- Les trois sont documentés, chiffrés, et non corrigés faute de priorité
+- Aucune politique de conservation, et l'assiette du risque a été multipliée par 437
+- L'utilisateur de service tourne toujours en ACCOUNTADMIN
+- Un seul environnement : ni recette, ni production séparées
+- Tous documentés et numérotés. Deux autres y figuraient début septembre, et sont refermés
 
 ### Notes
 
@@ -938,12 +1030,24 @@ Ne pas s'excuser. Énoncer, dire pourquoi ça n'a pas été traité, et s'arrêt
 jury de professionnels sait qu'une plateforme a toujours une dette ; ce qu'il
 veut savoir, c'est si le candidat la connaît.
 
+Le 437 est le plus honnête des trois aveux, et il se raconte en deux phrases.
+Mon propre rapport d'analyse annonçait 41 Mo par an ; la mesure du 08/09 en
+donne 17,5 Go. Une partie de l'écart vient d'une décision que j'ai prise, porter
+le panel à 150 titres et brancher une seconde source ; l'autre vient d'une
+erreur de désignation, les octets annoncés étaient ceux de la charge JSON et non
+de la ligne archivée. Ni l'une ni l'autre ne se voyait dans le document.
+
+La dernière puce est ce qui sépare une dette d'un renoncement : le canal de
+notification absent et la supervision qui ne se surveillait pas figuraient sur
+cette diapositive au début du mois, et ils n'y sont plus. Le dire, sans
+insister, et sans donner la date de soi-même.
+
 ---
 
-## D30. Questions
+## D31. Questions
 
     type: couverture
-    minute: 27:30
+    minute: 28:00
     duree: 0:00
     competence: -
     criteres: -
@@ -970,9 +1074,9 @@ elles remplacent le cadre automatiquement.
 
 | Identifiant | Fichier attendu | Diapo | Où le prendre | Réseau |
 |---|---|---|---|---|
-| `github_actions` | `docs/captures/github_actions.png` | D17 | GitHub, onglet Actions, les 6 étages d'un run vert | requis |
-| `airflow` | `docs/captures/airflow.png` | D14 | http://localhost:8080, les 4 DAG puis un graphe | non |
-| `grafana` | `docs/captures/grafana.png` | D20 | http://localhost:3000, le tableau de bord entier | non |
+| `github_actions` | `docs/captures/github_actions.png` | D19 | GitHub, onglet Actions, les 6 étages d'un run vert | requis |
+| `airflow` | `docs/captures/airflow.png` | D15 | http://localhost:8080, les 5 DAG puis un graphe | non |
+| `grafana` | `docs/captures/grafana.png` | D21 | http://localhost:3000, le tableau de bord entier | non |
 
 Celle marquée « réseau requis » est à prendre **avant le dépôt du 09/09**.
 
@@ -989,5 +1093,5 @@ secondes, passer au repli sans commenter l'incident.
 | Identifiant | Diapo | Durée | Repli |
 |---|---|---|---|
 | `cloisonnement_roles` | D10 | ~40 s | `docs/preuves/c11_cloisonnement_roles.txt` |
-| `airflow` | D14 | ~60 s | `docs/preuves/c14_airflow_dags.txt` et la capture |
-| `grafana` | D20 | ~60 s | la capture |
+| `airflow` | D15 | ~60 s | `docs/preuves/c14_airflow_dags.txt` et la capture |
+| `grafana` | D21 | ~60 s | la capture |

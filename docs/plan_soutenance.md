@@ -53,31 +53,35 @@ chacun. Cette arithmétique interdit deux choses : raconter le projet dans
 l'ordre où il a été construit, et accorder le même temps à chaque compétence.
 C4.3.3 porte un seul critère, C4.1.1 en porte cinq.
 
-Le budget ci-dessous alloue **27 min 30 de contenu et garde 2 min 30 de marge**.
+Le budget ci-dessous alloue **28 minutes de contenu et garde 2 minutes de marge**.
 Un plan qui remplit les trente minutes exactement est un plan qui déborde. La
 marge n'est pas du vide : c'est ce qui absorbe une question posée en cours de
 route, un démarrage lent, un moment en direct qui traîne.
 
-Les trois compétences éliminatoires reçoivent **11 minutes sur 27 min 30**, soit
-40 % du temps pour 30 % des compétences. C'est délibéré.
+Les trois compétences éliminatoires reçoivent **11 min 40 sur 28 minutes**, soit
+42 % du temps pour 30 % des compétences. C'est délibéré.
 
 ## 3. Le déroulé minuté
 
 | | Section | Durée | Cumul | Compétence |
 |---|---|---|---|---|
 | 0 | Ouverture et annonce du plan | 1:00 | 1:00 | |
-| 1 | Le besoin, l'existant, les contraintes | 2:30 | 3:30 | C4.1.1 |
-| 2 | Les composants retenus, et ce qu'ils coûtent | 3:00 | 6:30 | C4.1.2 |
-| 3 | Le schéma de données | 3:00 | 9:30 | **C4.2.1** |
-| 4 | Les pipelines, trois méthodes | 5:30 | 15:00 | **C4.2.2** |
-| 5 | L'intégration et le déploiement continus | 2:30 | 17:30 | **C4.2.3** |
-| 6 | La supervision et les alertes | 3:00 | 20:30 | C4.3.1 |
-| 7 | La feuille de route d'exploitation | 2:00 | 22:30 | C4.3.2 |
-| 8 | La documentation technique | 1:00 | 23:30 | C4.3.3 |
-| 9 | Le cahier de recettes | 1:30 | 25:00 | C4.4.1 |
-| 10 | L'incident et sa méthode d'investigation | 2:00 | 27:00 | C4.4.2 |
-| 11 | Les limites assumées | 0:30 | 27:30 | |
-| | *marge* | *2:30* | *30:00* | |
+| 1 | Le besoin, l'existant, les contraintes | 2:30 | 3:20 | C4.1.1 |
+| 2 | Les composants retenus, et ce qu'ils coûtent | 3:00 | 6:20 | C4.1.2 |
+| 3 | Le schéma de données | 3:00 | 9:20 | **C4.2.1** |
+| 4 | Les pipelines, trois méthodes | 6:10 | 15:30 | **C4.2.2** |
+| 5 | L'intégration et le déploiement continus | 2:30 | 18:00 | **C4.2.3** |
+| 6 | La supervision et les alertes | 3:00 | 21:00 | C4.3.1 |
+| 7 | La feuille de route d'exploitation | 2:00 | 23:00 | C4.3.2 |
+| 8 | La documentation technique | 1:00 | 24:00 | C4.3.3 |
+| 9 | Le cahier de recettes | 1:30 | 25:30 | C4.4.1 |
+| 10 | L'incident et sa méthode d'investigation | 2:00 | 27:30 | C4.4.2 |
+| 11 | Les limites assumées | 0:30 | 28:00 | |
+| | *marge* | *2:00* | *30:00* | |
+
+La section 4 a gagné 40 secondes le 08/09, une diapositive ayant été ajoutée
+pour la seconde source. Les 20 secondes manquantes ont été reprises sur
+l'annonce du plan, qui se lit vite.
 
 **L'ouverture annonce le plan.** Vingt secondes pour dire au jury dans quel ordre
 les dix livrables vont défiler. Deux professionnels avec une grille en main
@@ -100,7 +104,7 @@ qui est montré à l'écran à ce moment-là.
 |---|---|---|
 | 1 | Les besoins | Les 3 besoins B1/B2/B3, traduits en exigences techniques |
 | 2 | Les enjeux du projet | L'arbitrage construire ou acheter, et ce qu'il engage |
-| 3 | L'environnement | 4 sources, volumétrie mesurée, contrainte d'échantillonnage |
+| 3 | L'environnement | 2 fournisseurs raccordés, volumétrie mesurée, contrainte d'échantillonnage |
 | 4 | Les contraintes (coût, délais, complexité) | Le tableau des contraintes du rapport |
 | 5 | L'état de l'existant | Ce que les outils du marché font **bien**, avant ce qu'ils font mal |
 
@@ -132,7 +136,7 @@ subie.
 
 | # | Critère, verbatim | Preuve montrée |
 |---|---|---|
-| 13 | un pipeline temps réel (ex : SQL, Python) | Steam vers Kafka vers PostgreSQL, et le rejeu des offsets qui prouve l'idempotence |
+| 13 | un pipeline temps réel (ex : SQL, Python) | Steam et Twitch vers Kafka vers PostgreSQL, et le rejeu des 735 offsets qui prouve l'idempotence |
 | 14 | un orchestrateur (ex : Apache Airflow) | **DIRECT 2** : les 5 DAG et leur historique de runs |
 | 15 | des calculs distribués (ex : Spark) | Snowpark, le SQL généré et l'historique de session |
 
@@ -173,7 +177,7 @@ démonstration dépend entièrement d'une capture.
 
 | # | Critère, verbatim | Preuve montrée |
 |---|---|---|
-| 25 | Le choix de la documentation technique présentée permet une bonne utilisation de l'infrastructure DATA | 11 décisions d'architecture datées avec leur contrepartie, et les 2 annexes **générées** depuis le catalogue, vérifiées par la CI |
+| 25 | Le choix de la documentation technique présentée permet une bonne utilisation de l'infrastructure DATA | 13 décisions d'architecture datées avec leur contrepartie, et les 2 annexes **générées** depuis le catalogue, vérifiées par la CI |
 
 Le critère porte sur le **choix** de la documentation. L'argument n'est donc pas
 le volume, c'est le mécanisme : un dictionnaire de données généré ne peut pas
@@ -183,7 +187,7 @@ mentir sur le schéma, et la CI échoue s'il diverge.
 
 | # | Critère, verbatim | Preuve montrée |
 |---|---|---|
-| 26 | Le cahier de recettes et de tests reprend l'ensemble des fonctionnalités attendues | 55 cas, 0 partiel, 0 en attente |
+| 26 | Le cahier de recettes et de tests reprend l'ensemble des fonctionnalités attendues | 70 cas, 0 partiel, 0 en attente |
 | 27 | Les tests fonctionnels, structurels et de sécurité exécutés sont conformes au plan défini | La synthèse : 5 fonctionnels, 19 structurels, 3 de sécurité, plus les catégories propres au projet |
 
 Le critère nomme **trois** familles de tests. Le cahier est déjà structuré sur
@@ -233,7 +237,7 @@ suivante. Règle de scène : si le direct ne répond pas en dix secondes, passer
 repli sans commenter l'incident. Le jury évalue une infrastructure data, pas une
 manipulation de terminal sous pression.
 
-Trois minutes de direct sur 27 min 30. C'est peu, et c'est voulu : le direct sert
+Trois minutes de direct sur 28 minutes. C'est peu, et c'est voulu : le direct sert
 à prouver que la plateforme tourne, pas à porter la démonstration.
 
 ## 7. Les preuves à produire
@@ -303,8 +307,8 @@ première session. Les questions à attendre, et où se trouve la réponse :
 | Pourquoi pas Spark ? | Un Spark local aurait tourné en mono-machine. Le critère porte sur le calcul distribué. |
 | Pourquoi deux couches Gold ? | Snowflake est un service tiers facturé ; son indisponibilité ne doit pas emporter la promotion locale. |
 | Vos contraintes ne sont pas appliquées ? | Non, et c'est vérifié empiriquement. L'intégrité est reportée sur deux filets rejoués à chaque push. |
-| Qui est prévenu quand une alerte se déclenche ? | Personne. C'est l'écart le plus important avec une plateforme exploitée, et il est chiffré. |
-| Pourquoi Bronze en PostgreSQL et pas S3 ? | Écart assumé : le support change, la propriété recherchée est la même, 41 Mo par an. |
+| Qui est prévenu quand une alerte se déclenche ? | Un canal Telegram, depuis le 07/09, en 2 secondes mesurées. Avant lui, personne : une alerte est restée ouverte 6 jours et 20 heures. |
+| Pourquoi Bronze en PostgreSQL et pas S3 ? | Écart assumé : le support change, la propriété recherchée est la même. 17,5 Go par an restent tenables, mais la marge a fondu, voir V-05. |
 | Votre utilisateur de service est ACCOUNTADMIN ? | Oui. Connu, documenté, non corrigé faute de priorité. |
 | Que se passe-t-il si Snowflake tombe ? | La promotion locale continue. C'est précisément pourquoi il y a deux DAG. |
 
@@ -314,7 +318,7 @@ exercice que le jury cherche à provoquer.**
 
 ## 9. Ce qui ne sera pas dit
 
-Avec 31 critères en 27 minutes, tout ce qui n'est pas sur la grille se coupe. La
+Avec 31 critères en 28 minutes, tout ce qui n'est pas sur la grille se coupe. La
 liste est écrite pour que ces sujets ne reviennent pas par la fenêtre pendant la
 construction du support :
 

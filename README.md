@@ -60,7 +60,8 @@ tout l'historique par MERGE. Voir DA-11 dans `docs/documentation_technique.md`.
 La couche Bronze est une table PostgreSQL et non un stockage objet, ecart
 assume avec le `Bronze (S3)` annonce au Bloc 1 : le support change, la propriete
 recherchee est la meme, et un service tiers de plus n'apportait rien a cette
-echelle (41 Mo par an, mesures).
+echelle (17,5 Go par an mesures le 08/09/2026, 41 Mo avant le raccordement
+de Twitch).
 
 ## Demarrage
 
@@ -192,8 +193,8 @@ correspond plus au catalogue.
 | C4.2.3, CI/CD | 6 etages, base Snowflake jetable, image publiee | `.github/workflows/ci.yml` |
 | C4.3.1, supervision | 5 indicateurs SQL, 6 regles, Grafana comme code | `sql/schema_supervision.sql`, `supervision/`, `docker/grafana/` |
 | C4.3.2, exploitation | 10 sections, 13 points de vigilance | `docs/feuille_route_exploitation.md` |
-| C4.3.3, documentation technique | 11 decisions datees, 2 annexes generees | `docs/documentation_technique.md` |
-| C4.4.1, recettes | 55 PASS, 0 partiel, 0 en attente | `docs/cahier_recettes.md` |
+| C4.3.3, documentation technique | 13 decisions datees, 2 annexes generees | `docs/documentation_technique.md` |
+| C4.4.1, recettes | 70 PASS, 0 partiel, 0 en attente | `docs/cahier_recettes.md` |
 | C4.4.2, incident reel | INC-004 retenu, 9 incidents documentes | `docs/journal_incidents.md` |
 | A4.1, rapport d'analyse | Couts mesures, dependance fournisseur par composant | `docs/rapport_analyse.md` |
 

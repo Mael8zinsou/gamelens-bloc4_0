@@ -2478,3 +2478,88 @@ qu'une seconde source ajoute du volume sans ajouter d'information. Ce tableau y
 répond : le rapport entre les deux axes n'existe dans ni l'une ni l'autre des
 sources, il naît de leur jointure. C'est la justification la plus concrète de la
 couche Gold, dont c'est précisément le métier.
+
+## OBS-103. Le support avouait deux manques qui n'existaient plus
+
+Le support de soutenance a été construit en session 12. Deux sessions plus
+tard, sa diapositive de clôture, intitulée « ce que je n'ai pas fait »,
+énonçait encore trois aveux dont **deux étaient refermés** : aucun canal de
+notification, et une supervision qui ne se surveille pas elle-même. Le canal
+Telegram et le DAG témoin les avaient traités le 07/09.
+
+L'attention se porte spontanément sur le risque inverse, un document qui
+promettrait plus que la plateforme ne tient. Celui-ci faisait le contraire :
+projeté tel quel, il aurait fait **perdre au candidat du travail réellement
+fait**, et il l'aurait fait sur la diapositive précisément conçue pour ouvrir
+les quinze minutes d'échange. Le jury aurait creusé un manque comblé.
+
+La leçon n'est pas « tenir ses documents à jour », qui ne s'applique jamais
+faute d'être une action. Elle est plus étroite : **la partie d'un document qui
+énonce des limites se périme plus vite que le reste**, parce qu'elle est
+exactement la liste de ce qu'on va traiter ensuite. C'est celle qu'il faut
+relire en premier, pas en dernier.
+
+## OBS-104. Une hiérarchie de risques s'est inversée sans qu'on touche à ses deux termes
+
+La feuille de route affirmait, mesures à l'appui : « la base de métadonnées
+d'Airflow est le premier poste de croissance, **et de loin** ». C'était vrai
+quand la phrase a été écrite, 0,8 Go par an contre 41 Mo pour la couche Bronze.
+
+Le raccordement de Twitch a porté Bronze à 17,5 Go par an. Le classement s'est
+donc inversé, d'un facteur vingt, **sans que ni la ligne Airflow ni la ligne
+Bronze n'aient été modifiées**. Aucune des deux mesures n'était fausse ; c'est
+leur comparaison qui l'était devenue, et une comparaison n'appartient à aucune
+des deux lignes qu'elle relie.
+
+Conséquence pratique, et c'est ce qui rend l'erreur coûteuse : une feuille de
+route sert à dire à un exploitant **où regarder d'abord**. Celle-ci l'envoyait
+purger la mauvaise table.
+
+Ce qu'il faut en retenir tient en une règle de relecture : quand une seule
+ligne d'un tableau comparatif change d'ordre de grandeur, c'est **le tableau
+entier** qu'il faut relire, pas la ligne.
+
+## OBS-105. Générer un document ne le rend pas vrai
+
+Les annexes de `docs/annexes/` sont générées depuis le catalogue vivant des
+bases, et c'est ce qui garantit qu'elles ne peuvent pas mentir sur le schéma.
+Par analogie, on s'attendait à ce que les cinq visuels du support, eux aussi
+générés par `outils/visuels.py`, soient à jour pour la même raison.
+
+Ils ne l'étaient pas. Le visuel des recettes affichait « 55 cas », celui de la
+chaîne d'intégration « 4 DAG chargés », et celui de l'architecture annonçait une
+source **RAWG** qui n'a jamais été branchée, en la rangeant dans la même boîte
+que Twitch qui l'est. Trois chiffres faux dans des images qu'on aurait projetées
+en croyant les avoir vérifiées, du seul fait qu'un script les produisait.
+
+La différence entre les deux familles n'est pas qu'une soit générée et l'autre
+non : **les deux le sont**. Elle est dans la source. Le dictionnaire lit
+`information_schema` ; le visuel lit des constantes écrites à la main dans son
+propre code. Générer déplace le lieu de la vérité, cela ne la crée pas. Un
+générateur dont les constantes sont saisies est un document écrit à la main,
+avec une étape de plus et une confiance imméritée.
+
+## OBS-106. « 486 instances par jour » n'avait jamais été mesuré
+
+Même tableau que OBS-104, ligne voisine. La croissance de la base Airflow était
+justifiée par « quatre DAG produisant environ 486 instances de tâches par jour »,
+dans une section dont le titre annonce des mesures.
+
+Le nombre a été recalculé pour cinq DAG, et cela a demandé d'aller lire le
+nombre réel de tâches par DAG : 4 pour l'ingestion, 3 pour la supervision,
+6 et 3 pour les promotions, 1 pour le battement. À leurs cadences déclarées,
+cela donne **683 instances par jour**, et non 486 augmenté d'un cinquième. Le
+486 supposait une supervision à une seule tâche ; elle en a trois.
+
+En cherchant à vérifier ce chiffre dans l'historique, une seconde chose est
+apparue, et elle vaut plus que la première. Le compte réel par journée donne
+77, 171, 64, 80, 130, avec **des journées entières absentes** : 03 au 06/09,
+28 au 30/08, 21 au 25/08. La plateforme n'est pas allumée en continu, c'est un
+poste de développement qu'on éteint. Aucune projection quotidienne ne pouvait
+donc être une mesure, et celle-ci ne l'était pas : c'était un calcul, présenté
+dans une section de mesures.
+
+Même famille qu'OBS-100, où 78 octets désignaient une charge JSON et non une
+ligne. Le motif se répète assez pour être nommé : **un nombre placé à côté de
+nombres mesurés hérite de leur crédibilité sans l'avoir méritée.** La correction
+tient en un mot dans la phrase, « projette » au lieu de « produit ».

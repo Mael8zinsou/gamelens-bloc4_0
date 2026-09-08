@@ -125,11 +125,11 @@ consignes qui se contredit fait perdre du temps à qui le lit.
   ✅ `docs/feuille_route_exploitation.md`, 10 sections, 13 points de vigilance
   dont 2 datés, procédures éprouvées avant d'être prescrites.
 - **C4.3.3**, documentation technique.
-  ✅ `docs/documentation_technique.md`, 11 décisions d'architecture datées avec
+  ✅ `docs/documentation_technique.md`, 13 décisions d'architecture datées avec
   leur contrepartie, traçabilité champ par champ, matrice de droits, plus
   2 annexes générées depuis le catalogue et vérifiées par la CI.
 - **C4.4.1**, cahier de recettes et de tests.
-  ✅ `docs/cahier_recettes.md`, **55 PASS, 0 partiel, 0 en attente**. Format
+  ✅ `docs/cahier_recettes.md`, **70 PASS, 0 partiel, 0 en attente**. Format
   retenu : PASS/FAIL vérifié sur un résultat attendu, pas seulement "la requête
   s'exécute sans erreur". Le test d'idempotence de la session 1 (rejeu des
   offsets Kafka, 0 inséré sur 15 relus) est le premier cas conforme à ce
@@ -143,11 +143,12 @@ consignes qui se contredit fait perdre du temps à qui le lit.
 
 ## État d'avancement
 
-Mis à jour le 08/09/2026 en session 13 : canal de notification externe (V-02
-et V-07 refermés), puis correction des commentaires annonçant des sources
-absentes. Session 12 : support de soutenance, preuves
-capturées, feuille du jury, puis rattrapage des quatre fichiers de suivi, où les
-sessions 11 et 12 manquaient dans deux d'entre eux.
+Mis à jour le 08/09/2026 en session 14 : contrôle de cohérence des chiffres
+annoncés contre les objets réellement comptés, puis remise à jour du support de
+soutenance, qui datait de la session 12 et avouait deux manques refermés depuis
+(OBS-103). Session 13 : canal de notification externe (V-02 et V-07 refermés),
+panel porté à 150 titres et raccordement de Twitch. Session 12 : support de
+soutenance, preuves capturées, feuille du jury.
 
 | Élément | Statut |
 |---|---|
@@ -165,12 +166,12 @@ sessions 11 et 12 manquaient dans deux d'entre eux.
 | **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. **Canal externe depuis le 07/09/2026** : notification Telegram immédiate des alertes critiques (mesurée à 2 s), plus `gamelens_battement` à 8h et 20h, DAG séparé qui dénonce l'arrêt de la supervision. V-02 et V-07 refermés, DA-12. |
 | **C4.3.2 feuille de route d'exploitation** | ✅ **Écrite** : `docs/feuille_route_exploitation.md`, 10 sections. Tâches quotidiennes à trimestrielles, planification de maintenance, 13 points de vigilance dont 2 datés, durées d'incident mesurées, procédures d'intervention éprouvées avant d'être prescrites. |
 | **A4.1 rapport d'analyse** | ✅ **Écrit** : `docs/rapport_analyse.md`. Deux parties, calquées sur les deux livrables de la grille. Besoins métiers traduits en exigences, état de l'existant, contraintes, puis les composants un par un avec l'alternative écartée, l'analyse de dépendance fournisseur composant par composant, et une estimation des coûts **mesurée** sur l'historique de facturation, pas estimée. |
-| **C4.3.3 documentation technique** | ✅ **Écrite** : `docs/documentation_technique.md`. Point d'entrée, 11 décisions d'architecture datées avec leur contrepartie, traçabilité champ par champ, référence de configuration, matrice de droits, plus **2 annexes générées** depuis le catalogue et vérifiées par la CI. |
+| **C4.3.3 documentation technique** | ✅ **Écrite** : `docs/documentation_technique.md`. Point d'entrée, 13 décisions d'architecture datées avec leur contrepartie, traçabilité champ par champ, référence de configuration, matrice de droits, plus **2 annexes générées** depuis le catalogue et vérifiées par la CI. |
 | **dbt sur Snowflake** | ✅ **Construit et exécuté** : 29 contrats déclaratifs sur 4 sources, 1 modèle (la vue de tableau de bord, sortie d'un script SQL non rejouable). Éprouvés en positif et en négatif, sur base jetable et sur la couche de démonstration. |
 | Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **70 PASS, 0 partiel, 0 en attente**. |
 | Incident réel documenté | ✅ **INC-004 retenu** pour le C4.4.2. 9 incidents au total, INC-001 à INC-009, tous réellement vécus. Le dernier, INC-009, est né de la correction de V-12. |
-| **Support de soutenance** | ✅ **Construit** : `docs/support_soutenance.md` est la source, deux PPTX en sont des sorties, la version projetée sans marquage de conformité et la version de répétition avec. 30 diapositives, 33 replis compris, **27:30 de contenu sur 30:00**. Organisé sur la grille et non chronologiquement : les 31 sous-critères ont chacun leur diapositive, vérifié par script (phase 47). |
-| **Preuves et feuille du jury** | ✅ 10 preuves textuelles datées dans `docs/preuves/`, rejouables par `outils/capturer_preuves.py`. 5 visuels plus le schéma de données, tous générés. `docs/feuille_jury.pdf` met les 31 critères en regard des numéros de diapositive, depuis trois sources et sans saisie manuelle. **Reste 1 capture d'écran**, GitHub Actions, réseau requis. |
+| **Support de soutenance** | ✅ **Construit, remis à jour le 08/09/2026** : `docs/support_soutenance.md` est la source, deux PPTX en sont des sorties, la version projetée sans marquage de conformité et la version de répétition avec. **31 diapositives**, 34 replis compris, **28:00 de contenu sur 30:00**. Organisé sur la grille et non chronologiquement : les 31 sous-critères ont chacun leur diapositive, vérifié par script (phase 47). |
+| **Preuves et feuille du jury** | ✅ 10 preuves textuelles datées dans `docs/preuves/`, rejouables par `outils/capturer_preuves.py`. 5 visuels plus le schéma de données, tous générés, **et tous régénérés le 08/09** : trois portaient des chiffres périmés écrits en dur dans `outils/visuels.py`, voir OBS-105. `docs/feuille_jury.pdf` met les 31 critères en regard des numéros de diapositive, depuis trois sources et sans saisie manuelle. **Reste 1 capture d'écran**, GitHub Actions, réseau requis. |
 
 ## Faits d'environnement à ne pas redécouvrir
 
@@ -287,8 +288,10 @@ sessions 11 et 12 manquaient dans deux d'entre eux.
 - **La couche Bronze est une table PostgreSQL, pas un stockage objet.** Écart
   assumé avec le `Bronze (S3)` annoncé au Bloc 1 : le support change, la
   propriété recherchée est la même, et un service tiers de plus n'apportait
-  rien à cette échelle. Volumétrie mesurée : 78 octets par relevé de
-  fréquentation, 238 par relevé tarifaire, environ 41 Mo par an.
+  rien à cette échelle. Volumétrie mesurée le 08/09/2026 : **176 octets par
+  ligne archivée côté Steam, 3 231 côté Twitch**, soit 17,5 Go par an. Les
+  « 78 et 238 octets » d'une version antérieure étaient les tailles de la
+  charge JSON et non de la ligne : faute de désignation, pas de mesure.
 - **`bronze.reponses_brutes` n'accorde aucun UPDATE ni DELETE**, pas même à
   `etl_service`. Une archive modifiable n'est plus une archive. Ne pas
   « corriger » ce qui ressemble à un oubli de droits : c'est testé (TBRZ-04).
@@ -484,12 +487,13 @@ contenu.
 ### Ce qu'il reste à faire, dans l'ordre
 
 1. **Répéter.** C'est désormais le premier poste de travail, et de loin. Le
-   budget annonce 27:30 de contenu pour 30:00, mais un budget calculé n'est pas
+   budget annonce 28:00 de contenu pour 30:00, mais un budget calculé n'est pas
    un budget tenu. Répéter sur `docs/support_soutenance_repetition.pptx`, qui
    porte en pied de page l'identifiant, la minute, la compétence et les critères
    de chaque diapositive. La version projetée n'en porte rien, délibérément.
 2. **Une capture d'écran manque** : GitHub Actions, réseau requis, laissant un
-   cadre vide sur la diapositive 20. Les autres sont prises.
+   cadre vide sur la diapositive 21 du PPTX. Les autres sont prises, et le
+   dernier run est vert, donc la capture est immédiate.
 3. **Convertir les six livrables écrits en PDF.** Ils n'existent qu'en Markdown,
    et un correcteur qui ouvre un `.md` sur DigiformaCertif verra du texte brut
    avec ses `##` et ses `|---|`, alors qu'ils contiennent beaucoup de tableaux.

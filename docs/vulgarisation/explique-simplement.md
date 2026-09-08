@@ -665,12 +665,12 @@ fichier pour le sien, et son écran de contrôle a cessé de s'allumer pendant
 douze minutes. Personne n'a été prévenu : la surveillance regarde la chaîne de
 production, pas l'écran qui permet de la regarder.
 
-### « Pourquoi une file d'attente pour quinze jeux ? »
+### « Pourquoi une file d'attente pour cent cinquante jeux ? »
 
 J'ai expliqué le tampon entre le collecteur et le rangeur avec l'image du passe
-d'une cuisine. L'image est juste. Mais sur quinze jeux, le rangeur n'est jamais
-débordé. Le collecteur pourrait écrire directement en base et personne ne
-verrait la différence.
+d'une cuisine. L'image est juste. Mais même à cent cinquante jeux, dix fois plus
+qu'au départ, le rangeur n'est jamais débordé. Le collecteur pourrait écrire
+directement en base et personne ne verrait la différence.
 
 La justification honnête n'est donc pas « ça résout un problème que j'ai », mais
 « ça résout un problème que j'aurais à plus grande échelle, et l'exercice
@@ -685,9 +685,11 @@ et que le registre de l'entrepôt le prouve.
 
 Ce que ce registre prouve exactement, c'est que le calcul a eu lieu **ailleurs**.
 Il ne prouve pas qu'il a été **découpé et réparti sur plusieurs machines**, parce
-que sur quinze jeux et quatre journées de relevés, comptés le 31 août, il n'y a
-rien à répartir. L'entrepôt a très probablement traité ça sur un seul fil
-d'exécution.
+que sur cent cinquante jeux et huit journées de relevés, comptés le 8 septembre,
+il n'y a toujours rien à répartir. L'entrepôt a très probablement traité ça sur
+un seul fil d'exécution. Le passage de quinze à cent cinquante titres n'a pas
+changé cette réponse, et il faut le dire : il aurait fallu changer d'ordre de
+grandeur, pas de dizaine.
 
 La formulation exacte serait donc : le mécanisme qui permet la répartition est
 en place et vérifiable, la répartition elle-même n'est pas démontrée. C'est une
