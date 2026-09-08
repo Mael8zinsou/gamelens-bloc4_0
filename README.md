@@ -194,6 +194,7 @@ couche de demonstration sans message d'erreur. Passer par
 | `docs/preuves/` | Sorties reelles capturees, avec leur en-tete de provenance |
 | `docs/feuille_jury.pdf` | Feuille A4 a imprimer en deux exemplaires, GENEREE |
 | `docs/support_soutenance.md` | Support de soutenance, diapo par diapo : la SOURCE du PPTX |
+| `docs/script_soutenance.md` | Idee generale, objectif de la presentation, et le texte parle mot pour mot |
 | `docs/captures/` | Captures d'ecran d'interfaces, deposees a la main |
 | `docs/vulgarisation/` | Deux versions vulgarisees du projet, pour un junior et pour un non-specialiste |
 

@@ -2563,3 +2563,38 @@ Même famille qu'OBS-100, où 78 octets désignaient une charge JSON et non une
 ligne. Le motif se répète assez pour être nommé : **un nombre placé à côté de
 nombres mesurés hérite de leur crédibilité sans l'avoir méritée.** La correction
 tient en un mot dans la phrase, « projette » au lieu de « produit ».
+
+## OBS-107. Le budget minuté n'avait jamais été confronté à du texte
+
+Le support annonce **28:00 de contenu sur 30:00** depuis sa construction, et ce
+chiffre est calculé : il est la somme des champs `duree` de chaque diapositive,
+que le générateur additionne à chaque exécution. Il n'a jamais été faux.
+
+Il n'avait simplement jamais été **vérifié contre quoi que ce soit**. Une durée
+saisie à la main dit combien de temps on s'accorde, pas combien de temps il faut.
+
+Écrire le texte parlé mot pour mot, puis compter les mots à cent cinquante mots
+par minute, a produit le premier contrôle qui confronte les deux. Trois
+diapositives étaient injouables dans le temps qu'elles s'étaient donné : D01, la
+couverture, à **+62 %** ; D30, la clôture, à **+61 %** ; D05 à +39 %. Les deux
+extrêmes sont les deux diapositives les plus courtes du support, 20 et 30
+secondes, et c'est le motif : **plus une case est petite, plus il est facile d'y
+mettre trop.** Une minute annoncée pardonne vingt mots de trop, vingt secondes
+n'en pardonnent aucun.
+
+Le contrôle a aussi montré des écarts en dessous du budget qui ne sont **pas**
+des défauts, et les distinguer était la moitié du travail : les trois
+démonstrations en direct sont à moitié muettes parce que l'essentiel de leur
+temps est de la manipulation, et les diapositives à figure le sont parce que le
+jury lit pendant qu'on parle. Un contrôle qui ne fait pas cette distinction
+signale huit diapositives sur trente et une et ne sera plus jamais lancé.
+
+Total après correction : **3 882 mots pour 28 minutes**, soit 139 mots par
+minute. Sous le budget, ce qui est le bon sens de l'écart.
+
+La leçon générale dépasse la soutenance. **Un budget que rien ne consomme n'est
+pas un budget, c'est une intention.** Tant qu'aucun contenu réel n'est confronté
+à l'enveloppe qu'on lui a réservée, l'enveloppe ne dit rien. C'est vrai d'une
+durée de présentation, d'une estimation de charge, et d'une projection de
+volumétrie, ce dont OBS-101 et OBS-106 sont deux autres exemplaires dans ce
+même projet.

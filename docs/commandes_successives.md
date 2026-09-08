@@ -2847,3 +2847,39 @@ Fait le 08/09 : une diapositive insérée en section 4 a porté le budget de 27:
 pour revenir à **28:00 de contenu et 2:00 de marge**. Le déroulé minuté de
 `docs/plan_soutenance.md` a été mis à jour dans le même mouvement : deux
 documents qui annoncent deux budgets différents ne servent plus à répéter.
+
+## Phase 63. Écrire et vérifier le script parlé (procédure)
+
+`docs/script_soutenance.md` porte ce qui est **dit**, quand
+`docs/support_soutenance.md` porte ce qui est **à l'écran**. Deux fichiers, deux
+lecteurs, et un risque de divergence qui se contrôle en deux commandes.
+
+```bash
+# [PY] 1. Les identifiants, leur nombre et leur ordre doivent coincider
+python - <<'FIN'
+import re
+from pathlib import Path
+a = re.findall(r"^## (D\d\d)\.", Path("docs/support_soutenance.md").read_text(encoding="utf-8"), re.M)
+b = re.findall(r"^## (D\d\d)\.", Path("docs/script_soutenance.md").read_text(encoding="utf-8"), re.M)
+print(f"support {len(a)}, script {len(b)}, identiques et ordonnes : {a == b}")
+FIN
+# -> support 31, script 31, identiques et ordonnes : True
+```
+
+Le second contrôle compte les mots du texte parlé et les confronte à la durée
+déclarée, à 150 mots par minute. Il est écrit en toutes lettres dans le script
+lui-même, section « Le calibrage du texte parlé ».
+
+```
+# -> 3882 mots pour 28:00, soit 139 mots par minute
+```
+
+**Le budget est saisi une seule fois**, dans les champs `duree` du support. Les
+minutes du script en sont la somme cumulée, et `outils/generer_support.py` rend
+le total à chaque exécution. Si les deux divergent, c'est le script qui a tort.
+
+**Piège rencontré, et déjà documenté ailleurs.** Le bloc de commande ci-dessus
+contient lui-même un heredoc. Écrit dans un heredoc bash, son délimiteur ferme
+celui de l'extérieur et le script est tronqué en plein milieu. Deux issues :
+choisir un délimiteur intérieur différent, comme ici, et passer par un fichier
+plutôt que par un heredoc dès que le contenu inséré ressemble à du shell.
