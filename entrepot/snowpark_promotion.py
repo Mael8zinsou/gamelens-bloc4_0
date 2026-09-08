@@ -70,6 +70,10 @@ def extraire_silver() -> dict[str, pd.DataFrame]:
             SELECT steam_appid, day, avg_player_count, max_player_count, observation_count
             FROM speed.v_daily_player_stats
         """,
+        "DAILY_VIEWERS": """
+            SELECT steam_appid, day, avg_viewer_count, max_viewer_count, observation_count
+            FROM speed.v_daily_viewer_stats
+        """,
         "PRICE_SNAPSHOTS": """
             SELECT steam_appid, price_final, price_initial, discount_percent,
                    currency, collected_at
@@ -123,6 +127,16 @@ def charger_staging(session: Session, jeux: dict[str, pd.DataFrame]) -> None:
         print(f"  {nom:<18} {len(cadre):>5} ligne(s) televersee(s)")
 
 
+def _table_de_transit_existe(session: Session, nom: str) -> bool:
+    """La table de transit a-t-elle ete televersee lors de cette execution ?
+
+    SHOW TABLES plutot qu'un SELECT protege par try : une table absente ferait
+    lever le SELECT, et rattraper une exception pour en deduire une absence
+    masquerait toute autre erreur du meme appel.
+    """
+    return bool(session.sql(f"SHOW TABLES LIKE '{nom}' IN SCHEMA {SCHEMA_STAGING}").collect())
+
+
 def promouvoir_dimensions(session: Session) -> int:
     """Alimente mart.dim_games depuis le referentiel de transit.
 
@@ -173,13 +187,39 @@ def promouvoir_faits(session: Session) -> int:
     """
     stats = session.table(f"{SCHEMA_STAGING}.DAILY_STATS")
     dimensions = session.table("mart.dim_games").select("GAME_ID", "STEAM_APPID")
+    jointes = stats.join(dimensions, stats["STEAM_APPID"] == dimensions["STEAM_APPID"])
 
-    source = stats.join(dimensions, stats["STEAM_APPID"] == dimensions["STEAM_APPID"]).select(
-        dimensions["GAME_ID"].alias("GAME_ID"),
-        stats["DAY"].alias("DAY"),
-        stats["AVG_PLAYER_COUNT"].alias("AVG_PLAYER_COUNT"),
-        stats["MAX_PLAYER_COUNT"].alias("MAX_PLAYER_COUNT"),
-    )
+    # charger_staging saute les cadres vides : tant qu'aucune audience n'a ete
+    # collectee, la table de transit n'existe pas. La promotion doit rester
+    # correcte dans ce cas plutot que d'echouer, l'audience etant une source
+    # facultative. On teste donc la presence de la table, on ne la suppose pas.
+    if _table_de_transit_existe(session, "DAILY_VIEWERS"):
+        audience = session.table(f"{SCHEMA_STAGING}.DAILY_VIEWERS")
+        # Jointure EXTERNE : un titre sans identifiant Twitch resolu garde sa
+        # frequentation jouee, audience a NULL. Une jointure interne le ferait
+        # disparaitre de la table de faits.
+        source = jointes.join(
+            audience,
+            (stats["STEAM_APPID"] == audience["STEAM_APPID"]) & (stats["DAY"] == audience["DAY"]),
+            how="left",
+        ).select(
+            dimensions["GAME_ID"].alias("GAME_ID"),
+            stats["DAY"].alias("DAY"),
+            stats["AVG_PLAYER_COUNT"].alias("AVG_PLAYER_COUNT"),
+            stats["MAX_PLAYER_COUNT"].alias("MAX_PLAYER_COUNT"),
+            audience["AVG_VIEWER_COUNT"].alias("AVG_VIEWER_COUNT"),
+            audience["MAX_VIEWER_COUNT"].alias("MAX_VIEWER_COUNT"),
+        )
+    else:
+        print("  DAILY_VIEWERS absent, promotion sans audience diffusee")
+        source = jointes.select(
+            dimensions["GAME_ID"].alias("GAME_ID"),
+            stats["DAY"].alias("DAY"),
+            stats["AVG_PLAYER_COUNT"].alias("AVG_PLAYER_COUNT"),
+            stats["MAX_PLAYER_COUNT"].alias("MAX_PLAYER_COUNT"),
+            F.lit(None).cast("NUMBER(12,2)").alias("AVG_VIEWER_COUNT"),
+            F.lit(None).cast("NUMBER(12,0)").alias("MAX_VIEWER_COUNT"),
+        )
 
     cible = session.table("mart.fact_popularity_history")
     resultat = cible.merge(
@@ -190,6 +230,8 @@ def promouvoir_faits(session: Session) -> int:
                 {
                     "AVG_PLAYER_COUNT": source["AVG_PLAYER_COUNT"],
                     "MAX_PLAYER_COUNT": source["MAX_PLAYER_COUNT"],
+                    "AVG_VIEWER_COUNT": source["AVG_VIEWER_COUNT"],
+                    "MAX_VIEWER_COUNT": source["MAX_VIEWER_COUNT"],
                 }
             ),
             F.when_not_matched().insert(
@@ -198,6 +240,8 @@ def promouvoir_faits(session: Session) -> int:
                     "DAY": source["DAY"],
                     "AVG_PLAYER_COUNT": source["AVG_PLAYER_COUNT"],
                     "MAX_PLAYER_COUNT": source["MAX_PLAYER_COUNT"],
+                    "AVG_VIEWER_COUNT": source["AVG_VIEWER_COUNT"],
+                    "MAX_VIEWER_COUNT": source["MAX_VIEWER_COUNT"],
                 }
             ),
         ],

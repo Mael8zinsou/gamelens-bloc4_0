@@ -1,4 +1,4 @@
-"""Ingestion temps reel Steam vers Kafka vers Silver speed, cadencee (C4.2.2).
+"""Ingestion temps reel, deux sources vers Kafka vers Silver speed (C4.2.2).
 
 Comble le trou structurel constate le 26/08/2026 : la chaine batch etait
 orchestree, la chaine temps reel ne l'etait pas. `steam_producer.py` et
@@ -44,7 +44,25 @@ est indisponible au moment ou il tourne, la tache echoue, l'offset n'est pas
 valide, et les messages restent dans Kafka. Le run suivant les reprend. Sans le
 tampon, la collecte serait perdue avec l'echec de l'ecriture.
 
-## Trois taches, dont une porte de sortie
+## Deux sources, dont une qui ne peut pas casser l'autre
+
+Depuis le 08/09/2026 le DAG collecte aussi l'audience diffusee sur Twitch. Les
+deux producteurs tournent EN PARALLELE, et la tache Twitch ne fait jamais
+echouer le run.
+
+Ce n'est pas de la complaisance. Twitch est une source facultative greffee sur
+une chaine eliminatoire : si sa tache echouait, la consommation passerait en
+upstream_failed et la collecte Steam, deja publiee sur Kafka, ne serait pas
+ecrite en base. Une source d'appoint casserait la source principale. C'est le
+defaut que DA-12 nomme a propos du canal de notification, un dispositif
+accessoire pose sur le chemin critique de l'essentiel.
+
+L'echec n'est pas tu pour autant. `twitch_producer.main()` ouvre `execution()`,
+qui inscrit l'echec dans `speed.pipeline_runs` avant de le propager ; la regle
+critique `echecs_composants` le releve au cycle de supervision suivant. La
+panne est constatee la ou on la cherche, sans etre placee la ou elle nuit.
+
+## Quatre taches, dont une porte de sortie
 
 La derniere tache n'est pas decorative. Sans elle, un run ou le producteur
 n'aurait rien collecte et le consommateur rien ecrit se terminerait en succes :
@@ -125,12 +143,49 @@ def ingestion_temps_reel():
         return code
 
     @task
-    def consommer_vers_silver(amont: int) -> int:
+    def collecter_audience_twitch() -> dict:
+        """Un cycle de collecte Twitch. NE LEVE JAMAIS.
+
+        Voir l'en-tete du module pour le raisonnement complet. En resume : une
+        source facultative ne doit pas pouvoir empecher l'ecriture de la source
+        principale, et son echec doit rester visible ailleurs, dans
+        speed.pipeline_runs que la supervision interroge.
+
+        Sans identifiants, twitch_producer rend 0 sans rien tenter : un depot
+        fraichement clone et la chaine d'integration continue n'ont pas de
+        compte Twitch et doivent fonctionner. Meme asymetrie que le canal de
+        notification.
+        """
+        import sys
+
+        if RACINE_INGESTION not in sys.path:
+            sys.path.insert(0, RACINE_INGESTION)
+        import twitch_producer
+
+        try:
+            code = twitch_producer.main(["--once"])
+        except Exception as exc:  # noqa: BLE001 - voir la docstring
+            print(
+                f"Collecte Twitch en echec : {type(exc).__name__}: {exc}. "
+                "Le run continue ; l'echec est trace dans speed.pipeline_runs et "
+                "sera releve par la regle echecs_composants."
+            )
+            return {"statut": "echec", "detail": f"{type(exc).__name__}: {exc}"[:200]}
+        return {"statut": "ok" if code == 0 else "echec", "detail": f"code {code}"}
+
+    @task
+    def consommer_vers_silver(amont: int, audience: dict) -> int:
         """Draine le topic vers la couche Silver speed, puis rend la main.
 
-        L'argument `amont` n'est pas utilise : il n'existe que pour imposer
-        l'ordre des taches, ce qui est plus lisible qu'un enchainement declare
-        separement.
+        Draine les DEUX topics : le consommateur est abonne a celui de la
+        frequentation et a celui de l'audience, et choisit sa table sur le
+        topic d'origine de chaque message.
+
+        Les arguments `amont` et `audience` ne sont pas utilises : ils
+        n'existent que pour imposer l'ordre des taches, ce qui est plus lisible
+        qu'un enchainement declare separement. `audience` porte en outre le
+        compte rendu de la collecte Twitch, consultable dans les journaux de la
+        tache sans ouvrir ceux du producteur.
 
         `--depuis-le-debut` ne signifie pas "tout relire a chaque fois".
         L'option pilote `auto_offset_reset`, que Kafka ne consulte QUE lorsque
@@ -228,13 +283,35 @@ def ingestion_temps_reel():
                 "c'est precisement ce que ce controle existe pour attraper."
             )
 
+        # 4. L'audience diffusee, RAPPORTEE sans etre exigee. Le controle
+        #    reste strict sur la source principale et muet sur la source
+        #    facultative : exiger ici ce que la supervision surveille deja
+        #    ferait echouer la chaine eliminatoire pour une panne de tiers.
+        (spectateurs,) = hook.get_first(
+            f"""
+            SELECT count(*)
+            FROM speed.viewer_count_events
+            WHERE ingested_at >= now() - interval '{FENETRE_CONTROLE_MIN} minutes'
+            """
+        )
+        print(f"Audience diffusee sur la meme fenetre : {spectateurs} releve(s).")
+
         print(
             f"\nIngestion conforme : {ecrits} evenement(s), {titres} titre(s), "
-            f"fraicheur {age} min, deux composants traces."
+            f"fraicheur {age} min, deux composants traces, "
+            f"{spectateurs} releve(s) d'audience."
         )
-        return {"evenements": ecrits, "titres": titres, "fraicheur_min": float(age)}
+        return {
+            "evenements": ecrits,
+            "titres": titres,
+            "fraicheur_min": float(age),
+            "audience": spectateurs,
+        }
 
-    controler_ingestion(consommer_vers_silver(collecter_et_publier()))
+    # Les deux producteurs sont PARALLELES. La tache Twitch ne levant jamais,
+    # une panne de la source facultative ne peut pas empecher l'ecriture de la
+    # source principale (voir l'en-tete du module).
+    controler_ingestion(consommer_vers_silver(collecter_et_publier(), collecter_audience_twitch()))
 
 
 ingestion_temps_reel()

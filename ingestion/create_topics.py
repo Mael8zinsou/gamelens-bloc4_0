@@ -6,8 +6,9 @@ valeurs par defaut du broker. Les topics sont donc declares ici, de maniere
 idempotente, pour que ces deux parametres soient des decisions et non des
 effets de bord.
 
-Partitionnement : une seule partition. Le volume actuel est de 15 evenements
-par minute, tres loin du seuil ou le parallelisme apporte quoi que ce soit, et
+Partitionnement : une seule partition. Le volume actuel est de 150 evenements
+par cycle et par source, tres loin du seuil ou le parallelisme apporte quoi
+que ce soit, et
 une partition unique donne l'ordre total gratuitement. Le producer publie
 malgre tout avec l'appid en cle : le jour ou le nombre de partitions augmente,
 l'ordre reste garanti par titre, sans rien changer au code.
@@ -28,6 +29,19 @@ RETENTION_7_JOURS_MS = str(7 * 24 * 60 * 60 * 1000)
 TOPICS = [
     NewTopic(
         name="gamelens.steam.player_count",
+        num_partitions=1,
+        replication_factor=1,
+        topic_configs={
+            "retention.ms": RETENTION_7_JOURS_MS,
+            "cleanup.policy": "delete",
+        },
+    ),
+    # Audience diffusee. Topic SEPARE et non un type d'evenement de plus
+    # sur le topic existant : les deux flux n'ont ni la meme cadence de
+    # panne ni le meme puits, et un consumer qui rejoue les offsets d'une
+    # source ne doit pas rejouer ceux de l'autre.
+    NewTopic(
+        name="gamelens.twitch.viewer_count",
         num_partitions=1,
         replication_factor=1,
         topic_configs={

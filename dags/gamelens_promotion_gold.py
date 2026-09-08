@@ -157,14 +157,24 @@ def promotion_gold():
             cur.execute(
                 """
                 INSERT INTO mart.fact_popularity_history
-                    (game_id, day, avg_player_count, max_player_count)
-                SELECT g.game_id, v.day, v.avg_player_count, v.max_player_count
+                    (game_id, day, avg_player_count, max_player_count,
+                     avg_viewer_count, max_viewer_count)
+                SELECT g.game_id, v.day, v.avg_player_count, v.max_player_count,
+                       a.avg_viewer_count, a.max_viewer_count
                 FROM speed.v_daily_player_stats v
                 JOIN mart.dim_games g ON g.steam_appid = v.steam_appid
+                -- Jointure EXTERNE : un titre sans identifiant Twitch resolu
+                -- garde sa frequentation jouee, audience a NULL. Une jointure
+                -- interne le ferait disparaitre de la table de faits, ce qui
+                -- transformerait une source manquante en perte de donnee.
+                LEFT JOIN speed.v_daily_viewer_stats a
+                       ON a.steam_appid = v.steam_appid AND a.day = v.day
                 WHERE v.day = %s
                 ON CONFLICT (game_id, day) DO UPDATE
                    SET avg_player_count = EXCLUDED.avg_player_count,
-                       max_player_count = EXCLUDED.max_player_count
+                       max_player_count = EXCLUDED.max_player_count,
+                       avg_viewer_count = EXCLUDED.avg_viewer_count,
+                       max_viewer_count = EXCLUDED.max_viewer_count
                 """,
                 (jour,),
             )

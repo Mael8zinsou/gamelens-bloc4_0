@@ -50,7 +50,13 @@ def config() -> dict:
         "pg_password": os.getenv("POSTGRES_PASSWORD", "devlocal_app"),
         "kafka_servers": os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
         "topic_players": os.getenv("KAFKA_TOPIC_PLAYERS", "gamelens.steam.player_count"),
+        "topic_viewers": os.getenv("KAFKA_TOPIC_VIEWERS", "gamelens.twitch.viewer_count"),
         "poll_interval": int(os.getenv("STEAM_POLL_INTERVAL_SECONDS", "60")),
+        # Identifiants Twitch. Absents, la collecte d'audience est ignoree
+        # sans faire echouer quoi que ce soit : meme asymetrie que le canal
+        # de notification, un depot fraichement clone doit fonctionner.
+        "twitch_client_id": os.getenv("TWITCH_CLIENT_ID", ""),
+        "twitch_client_secret": os.getenv("TWITCH_CLIENT_SECRET", ""),
     }
 
 
