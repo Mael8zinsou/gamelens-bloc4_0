@@ -141,6 +141,9 @@ services:
       - ./sql/schema_silver_speed.sql:/docker-entrypoint-initdb.d/10_schema_silver_speed.sql:ro
       # 15 et non 05 : le schema bronze accorde des droits aux roles
       # etl_service et analyst, qui sont crees par le script Silver.
+      # 12 : la table d'audience porte une clef etrangere vers
+      # speed.game_mapping, creee par le script Silver monte en 10.
+      - ./sql/schema_silver_twitch.sql:/docker-entrypoint-initdb.d/12_schema_silver_twitch.sql:ro
       - ./sql/schema_bronze.sql:/docker-entrypoint-initdb.d/15_schema_bronze.sql:ro
       - ./sql/schema_gold.sql:/docker-entrypoint-initdb.d/20_schema_gold.sql:ro
       - ./sql/schema_supervision.sql:/docker-entrypoint-initdb.d/30_schema_supervision.sql:ro
