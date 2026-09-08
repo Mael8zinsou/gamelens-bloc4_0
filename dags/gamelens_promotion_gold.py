@@ -221,7 +221,7 @@ def promotion_gold():
     def controler_qualite_gold(jour: str, _pop: int, _prix: int) -> None:
         """Controles de qualite sur la couche Gold, en PASS/FAIL.
 
-        Materialise le principe pose dans CLAUDE.md : l'integrite ne repose pas
+        Materialise le principe pose au cadrage : l'integrite ne repose pas
         seulement sur les contraintes declarees, elle est verifiee a chaque run
         et fait echouer le pipeline en cas de violation, plutot que d'etre
         constatee plus tard par un analyste devant un tableau de bord faux.

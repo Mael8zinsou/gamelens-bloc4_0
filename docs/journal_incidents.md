@@ -539,7 +539,7 @@ dans les memes circonstances :
 
 1. Un avertissement en tete du module lui-meme, la ou se trouvera quiconque
    sera tente de raccourcir le nom.
-2. Un fait d'environnement dans `CLAUDE.md`, la ou on cherche avant de modifier
+2. Un fait d'environnement dans les consignes de travail, la ou on cherche avant de modifier
    la configuration des conteneurs.
 3. Le present incident, qui porte le raisonnement complet.
 

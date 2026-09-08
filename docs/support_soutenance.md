@@ -1078,7 +1078,9 @@ elles remplacent le cadre automatiquement.
 | `airflow` | `docs/captures/airflow.png` | D15 | http://localhost:8080, les 5 DAG puis un graphe | non |
 | `grafana` | `docs/captures/grafana.png` | D21 | http://localhost:3000, le tableau de bord entier | non |
 
-Celle marquée « réseau requis » est à prendre **avant le dépôt du 09/09**.
+Celle marquée « réseau requis » **a été prise le 08/09**, sur le dernier run
+vert de la branche principale. Les deux autres ne sont pas des manques : leurs
+diapositives de repli portent déjà la preuve textuelle.
 
 La consommation de crédits ne figure plus dans ce tableau : elle est désormais
 portée par un graphique généré depuis les chiffres mesurés, ce qui vaut mieux

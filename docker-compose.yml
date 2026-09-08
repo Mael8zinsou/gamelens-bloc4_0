@@ -157,7 +157,7 @@ services:
   # --------------------------------------------------------------------------
   # Apache Kafka en mode KRaft (sans ZooKeeper), noeud unique.
   #
-  # Choix assume : le Bloc 1 prevoyait Kafka, et CLAUDE.md autorisait une
+  # Choix assume : le Bloc 1 prevoyait Kafka, et le cadrage autorisait une
   # alternative plus legere si Kafka s'averait trop lourd en local. Le mode
   # KRaft, disponible depuis Kafka 3.3, supprime la dependance a ZooKeeper et
   # ramene le cluster a un seul conteneur : l'alternative n'est donc pas

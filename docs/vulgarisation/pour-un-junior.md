@@ -1237,7 +1237,7 @@ documentée d'une architecture surveillée.
 | Les tests et leurs résultats réels | `docs/cahier_recettes.md`, 70 cas, tous PASS |
 | Les commandes réellement exécutées | `docs/commandes_successives.md` |
 | Ce qu'il faut faire tourner, surveiller et purger | `docs/feuille_route_exploitation.md` |
-| L'état d'avancement et les pièges d'environnement | `CLAUDE.md` |
+| L'état d'avancement et les écarts connus | `README.md`, puis la section 6 de la feuille de route |
 | Le pipeline temps réel | `ingestion/` |
 | L'orchestration | `dags/` |
 | Tout ce qui vise Snowflake | `entrepot/` |

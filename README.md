@@ -13,28 +13,33 @@ le pilotage ; ce depot en est la realisation executable.
 Medallion croisee avec une architecture Lambda, reprise du Bloc 1.
 
 ```
-      Steam Web API                        Steam appdetails
-      GetNumberOfCurrentPlayers            price_overview
-      (temps reel, sans authentification)  (tarification)
-                 |                                    |
-                 v                                    v
-      ingestion/steam_producer.py         ingestion/steam_prices.py
-                 |     \                            /     |
-                 |      +--------------------------+      |
-                 |                    |                   |
-                 |                    v                   |
-                 |        bronze.reponses_brutes          |
-                 |        archive de tout appel,          |
-                 |        abouti ou non, sans UPDATE      |
-                 |                                        |
-                 v                                        |
-      Apache Kafka (mode KRaft)                           |
-      gamelens.steam.player_count                         |
-                 |                                        |
-      ingestion/kafka_to_postgres.py                      |
-                 |                                        |
-                 v                                        v
-      PostgreSQL, couche Silver speed (schema speed)
+   Steam Web API           Twitch Helix            Steam appdetails
+   GetNumberOf             /streams                price_overview
+   CurrentPlayers          OAuth client_creds      (tarification)
+   (qui joue)              (qui regarde)
+        |                       |                        |
+        v                       v                        v
+   steam_producer.py       twitch_producer.py      steam_prices.py
+        |       \               |        \              /      |
+        |        +--------------+---------+------------+       |
+        |                       |                              |
+        |                       v                              |
+        |           bronze.reponses_brutes                     |
+        |           archive de tout appel,                     |
+        |           abouti ou non, sans UPDATE                 |
+        |                       |                              |
+        v                       v                              |
+   Apache Kafka (mode KRaft), DEUX topics separes              |
+   gamelens.steam.player_count                                 |
+   gamelens.twitch.viewer_count                                |
+                    |                                          |
+        ingestion/kafka_to_postgres.py                         |
+        un seul consumer, abonne aux deux topics,              |
+        qui choisit sa table sur le topic d'origine            |
+                    |                                          |
+                    v                                          v
+   PostgreSQL, couche Silver speed (schema speed)
+   player_count_events, viewer_count_events, price_snapshots
                  |
         +--------+-----------------------------+
         |                                      |
@@ -48,6 +53,13 @@ Medallion croisee avec une architecture Lambda, reprise du Bloc 1.
                                    fact_popularity_history,
                                    v_popularity_dashboard
 ```
+
+**Deux sources, deux axes.** Steam mesure qui joue, Twitch mesure qui
+regarde, et le rapport des deux ne se deduit d'aucun des deux. Les topics sont
+**separes** et non distingues par un type d'evenement sur un topic unique : les
+deux flux n'ont ni la meme cadence de panne ni le meme puits, et rejouer les
+offsets d'une source ne doit pas rejouer ceux de l'autre. Voir DA-13 dans
+`docs/documentation_technique.md`.
 
 **Deux couches Gold, deux DAG, et c'est delibere.** Snowflake est la cible ;
 le prototype PostgreSQL est conserve comme reference de comparaison et comme
@@ -72,15 +84,21 @@ docker compose up -d                 # 7 conteneurs : PostgreSQL, Kafka, 4 Airfl
 Copy-Item .env.example .env          # puis ajuster si besoin
 python -m pip install -r requirements.txt
 
-python ingestion/create_topics.py      # declaration explicite des topics
-python ingestion/seed_game_mapping.py  # referentiel des titres suivis
+python ingestion/create_topics.py      # les deux topics, declares explicitement
+python ingestion/seed_game_mapping.py  # referentiel des 150 titres suivis
+python ingestion/seed_twitch_ids.py    # resolution des identifiants Twitch
 python ingestion/steam_producer.py --once
+python ingestion/twitch_producer.py --once
 python ingestion/kafka_to_postgres.py --timeout 30 --depuis-le-debut
 python ingestion/steam_prices.py --once
 ```
 
-Les quatre schemas PostgreSQL (Silver speed, Bronze, Gold prototype,
-supervision) sont appliques automatiquement au premier demarrage : ils sont
+La collecte d'audience est **facultative** : sans `TWITCH_CLIENT_ID` ni
+`TWITCH_CLIENT_SECRET` dans `.env`, `twitch_producer.py` journalise et rend 0
+sans rien tenter. Le reste de la chaine fonctionne a l'identique.
+
+Les cinq schemas PostgreSQL (Silver speed, audience Twitch, Bronze, Gold
+prototype, supervision) sont appliques automatiquement au premier demarrage : ils sont
 montes dans `docker-entrypoint-initdb.d`. **Ils ne rejouent pas** sur un volume
 deja initialise ; les appliquer alors a la main par
 `docker exec -i gamelens-postgres psql ... < sql/<fichier>.sql`.
@@ -134,9 +152,10 @@ couche de demonstration sans message d'erreur. Passer par
 |---|---|
 | `config/watchlist.json` | Titres suivis, source du referentiel `game_mapping` |
 | `docker-compose.yml` | Composants d'infrastructure locaux |
-| `ingestion/` | Pipeline temps reel et tarifaire : producer, consumer, referentiel, topics, archivage Bronze |
+| `ingestion/` | Pipeline temps reel et tarifaire : deux producers (Steam, Twitch), un consumer abonne aux deux topics, referentiel, topics, archivage Bronze |
 | `sql/schema_bronze.sql` | Couche Bronze, archive brute en append only |
 | `sql/schema_silver_speed.sql` | Couche Silver speed, PostgreSQL |
+| `sql/schema_silver_twitch.sql` | Audience diffusee, table separee : zero spectateur est une observation, l'absence n'en est pas une |
 | `sql/schema_gold_snowflake.sql` | Couche Gold, cible Snowflake |
 | `sql/commentaires_gold_snowflake.sql` | Commentaires des colonnes Snowflake, separes du schema qui n'est pas rejouable |
 | `sql/schema_gold.sql` | Prototype PostgreSQL du Gold, conserve comme reference |
@@ -146,6 +165,7 @@ couche de demonstration sans message d'erreur. Passer par
 | `entrepot/` | Connexion Snowflake, promotion Snowpark, controles d'integrite et recette de CI |
 | `dbt/` | Projet dbt : 4 sources et 1 modele, 29 contrats declaratifs au total (25 portes par les sources, 4 par le modele) |
 | `supervision/` | Moteur d'alertes et verification du tableau de bord |
+| `outils/construire_panel.py` | Generateur de `config/watchlist.json` : chaque appid confronte au nom rendu par Steam |
 | `outils/generer_dictionnaire.py` | Generateur des dictionnaires de donnees, depuis le catalogue des bases |
 | `outils/generer_schema.py` | Generateur du schema de donnees : catalogue et DDL recoupes, puis dessin |
 | `outils/diagramme.py` | Rendu du schema en SVG et PNG, sans moteur de rendu externe |
@@ -178,9 +198,9 @@ couche de demonstration sans message d'erreur. Passer par
 | `docs/vulgarisation/` | Deux versions vulgarisees du projet, pour un junior et pour un non-specialiste |
 
 Les dictionnaires de `docs/annexes/` ne s'editent pas a la main : ils sont
-generes depuis les `COMMENT ON` des fichiers de `sql/` par
-`outils/generer_dictionnaire.py`, et la CI echoue si le fichier versionne ne
-correspond plus au catalogue.
+generes par `outils/generer_dictionnaire.py`, et la CI echoue si le fichier
+versionne ne correspond plus. Attention a la source exacte, elle n'est pas celle
+qu'on suppose : voir « Documentation generee » plus bas.
 
 ## Ou se trouve la preuve de chaque competence
 
@@ -192,7 +212,7 @@ correspond plus au catalogue.
 | C4.2.2, methode 3, calcul distribue | Snowpark, et non Spark local | `entrepot/snowpark_promotion.py`, DA-04 |
 | C4.2.3, CI/CD | 6 etages, base Snowflake jetable, image publiee | `.github/workflows/ci.yml` |
 | C4.3.1, supervision | 5 indicateurs SQL, 6 regles, Grafana comme code | `sql/schema_supervision.sql`, `supervision/`, `docker/grafana/` |
-| C4.3.2, exploitation | 10 sections, 13 points de vigilance | `docs/feuille_route_exploitation.md` |
+| C4.3.2, exploitation | 10 sections, 14 points de vigilance dont 9 ouverts | `docs/feuille_route_exploitation.md` |
 | C4.3.3, documentation technique | 13 decisions datees, 2 annexes generees | `docs/documentation_technique.md` |
 | C4.4.1, recettes | 70 PASS, 0 partiel, 0 en attente | `docs/cahier_recettes.md` |
 | C4.4.2, incident reel | INC-004 retenu, 9 incidents documentes | `docs/journal_incidents.md` |
@@ -223,11 +243,22 @@ python supervision/verifier_tableau_bord.py    # controle des 7 panneaux
 Interfaces : Airflow sur http://localhost:8080, Grafana sur http://localhost:3000,
 compte `admin` / `admin` pour les deux.
 
-**Limite connue et assumee : rien ne previent un humain.** Les alertes sont
-persistees et visibles, aucun canal de notification n'est branche. C'est V-02
-dans `docs/feuille_route_exploitation.md`, l'ecart le plus important entre cette
-plateforme et une plateforme exploitee, et il est chiffre : une alerte de
-fraicheur est restee ouverte 6 j 20 h en aout.
+**Canal de notification externe, depuis le 07/09/2026.** Les alertes critiques
+partent sur un canal Telegram, mesure a 2 secondes entre le declenchement et la
+reception. Le canal est FACULTATIF : sans `TELEGRAM_BOT_TOKEN` ni
+`TELEGRAM_CHAT_ID`, la notification est un no-op qui rend un succes ; un jeton
+present mais injoignable, en revanche, trace un echec. L'asymetrie est voulue et
+testee : un dispositif d'alerte ne doit jamais faire tomber la chaine qu'il
+surveille, mais son propre silence ne doit pas etre silencieux.
+
+Le DAG `gamelens_battement`, a 8h et 20h, est un temoin separe qui denonce
+l'arret de la supervision : un dispositif qui se surveille lui-meme ne prouve
+rien.
+
+Ces deux briques referment V-02 et V-07, jusque-la les deux ecarts les plus
+importants entre cette plateforme et une plateforme exploitee. Ce que leur
+absence avait coute est mesure : une alerte de fraicheur etait restee ouverte
+6 j 20 h en aout, sans que personne n'en soit averti.
 
 ## Integration continue
 
@@ -258,6 +289,121 @@ et par le SHA du commit.
 Airflow qu'un client Windows ne sait pas lire. Lancer `pytest tests`, comme le
 fait la CI.
 
+## Pieges d'environnement
+
+Ces points ont tous coute du temps au moins une fois. Ce qui est deja couvert
+plus haut n'est pas repete : port hote 5433, `MSYS_NO_PATHCONV=1` depuis Git
+Bash, scripts de `sql/` qui ne rejouent pas sur un volume deja initialise.
+
+- **Airflow ne tourne pas nativement sous Windows**, il lui faut un POSIX. Le
+  conteneur n'est pas un confort, il est obligatoire.
+- **Airflow 3 differe nettement d'Airflow 2** : `api-server` remplace
+  `webserver`, `dag-processor` est un service separe obligatoire, et
+  `logical_date` vaut `None` sur un run manuel. Toujours partir du
+  `docker-compose.yaml` officiel de la version exacte plutot que d'un tutoriel
+  Airflow 2, qui donnera une configuration qui ne demarre pas. Voir INC-006.
+- **Apres toute modification d'un DAG**, lancer `airflow dags reserialize` :
+  l'analyseur ne rescanne le dossier que toutes les cinq minutes, et l'attente
+  passe facilement pour une erreur de code.
+- **Les logs Airflow contiennent des `:` dans les noms de dossier**, qu'un
+  client Windows ne sait pas lire. Les consulter par `docker exec ... cat`, pas
+  depuis l'hote.
+- **`pytest` lance a la racine echoue a la collecte**, sur le lien symbolique
+  `docker/airflow/logs/dag_processor/latest`, qu'un client Windows ne sait pas
+  lire non plus. Lancer `pytest tests`, comme le fait la CI. Ce n'est pas une
+  regression.
+- **`python -m venv` ne fonctionne pas sur ce poste** : le module `venv` de
+  l'installation Python est vide. Ne pas chercher pourquoi, passer par un
+  conteneur.
+- **PostgreSQL et Kafka ne repondent pas a un navigateur**, et c'est normal :
+  ils parlent leur protocole binaire sur TCP, pas HTTP, et `curl` y rend
+  « Empty reply from server ». Seuls 8080 et 3000 sont des interfaces web.
+- **Le chemin de travail contient accents et espaces, et cela ne pose pas de
+  probleme** a Docker Desktop. L'hypothese a ete testee puis ecartee, voir
+  INC-002 : ne pas la reprendre au premier symptome venu.
+- **Le depot n'a pas de `.gitattributes` et melange LF et CRLF** selon les
+  fichiers. Apres une edition ecrite depuis Python, verifier que le regime du
+  fichier n'a pas change avant de committer : une conversion involontaire
+  presente un fichier entierement reecrit la ou sept lignes ont bouge. Voir
+  OBS-68.
+
+## Ce qui ressemble a un defaut et n'en est pas
+
+Chacun de ces choix a l'air d'un oubli. Chacun est delibere et teste, et
+« corriger » l'un d'eux casse quelque chose, parfois en silence.
+
+- **Les quatre ports publies sont lies a `127.0.0.1`**, pas a `0.0.0.0` :
+  `- "127.0.0.1:5433:5432"` et ses trois voisins. Sans adresse de liaison,
+  Docker publie sur toutes les interfaces, or le mot de passe de la base est
+  dans le depot. Rien n'en patit : les conteneurs se joignent par le reseau
+  Docker, et la CI se connecte depuis le runner en local. Voir OBS-89.
+- **`bronze.reponses_brutes` n'accorde ni UPDATE ni DELETE**, pas meme a
+  `etl_service`. Une archive modifiable n'est plus une archive. Teste par
+  TBRZ-04.
+- **La tache Twitch du DAG d'ingestion ne leve jamais**, et sans
+  `TWITCH_CLIENT_ID` la collecte est un no-op qui rend un succes. Une source
+  facultative ne doit pas casser une chaine eliminatoire ; son echec est trace
+  dans `speed.pipeline_runs`, ou la supervision le releve. Teste par TTWI-05.
+- **Le canal Telegram est facultatif de la meme facon, mais un jeton present et
+  injoignable trace un echec.** L'asymetrie est voulue : un dispositif d'alerte
+  ne doit pas faire tomber la chaine qu'il surveille, et son propre silence ne
+  doit pas etre silencieux. Teste par TNOT-04 et TNOT-05.
+- **Le consumer est abonne aux DEUX topics** et choisit sa table sur le topic
+  d'origine du message. Un topic inconnu leve plutot que d'etre ignore : ecrire
+  une audience dans la table de frequentation serait pire qu'une panne.
+- **`entrepot/recette_ci.py` refuse les bases protegees**, `gamelens` en tete,
+  et sort en code 1. Laisser `SNOWFLAKE_DATABASE` vide pour obtenir une base
+  jetable nommee d'apres le run. Ne pas contourner ce refus : c'est lui qui
+  empeche la CI de detruire la couche de demonstration.
+- **`entrepot/connexion_snowflake.py` ne doit pas etre raccourci** en
+  `connexion.py`. Ce nom-la masquait le paquet PyPI `connexion`, celui dont
+  Airflow se sert pour son authentification, des lors que `entrepot/` figurait
+  sur son `PYTHONPATH` : l'interface web cessait de demarrer. Voir INC-009.
+- **Un seul modele de roles** pour toute la plateforme : `etl_service`,
+  `analyst`, `dashboard_viewer`, plus `gamelens_app` comme proprietaire. Les
+  roles `gamelens_etl` et `gamelens_reader` d'une version anterieure ont ete
+  supprimes, ne pas les reintroduire. Voir OBS-25.
+- **Ne pas retirer `grants` ni `persist_docs`** du modele
+  `dbt/models/gold/v_popularity_dashboard.sql`. Sans le premier, la vue perd
+  ses droits et le tableau de bord se vide sans erreur ; sans le second, elle
+  perd son `COMMENT`, et c'est le controle du dictionnaire, a un autre etage de
+  la CI, qui echoue sur un message sans rapport. Testes par TDBT-04 et TDBT-05.
+- **`dbt/profiles.yml` a deux cibles, `local` et `ci`, et il faut les deux.**
+  `dbt-snowflake` refuse `private_key` et `private_key_path` renseignes
+  ensemble, et un `env_var()` sur une variable absente rend un champ present et
+  vide, ce qui declenche ce refus. Ne pas les fusionner.
+
+## Documentation generee : d'ou le generateur lit la verite
+
+Les dictionnaires et le schema de donnees de `docs/annexes/` sont **generes,
+jamais edites a la main**, et la CI echoue si le fichier versionne ne
+correspond plus. Le piege est ailleurs, et il a produit une correction fantome :
+**le generateur ne lit pas les fichiers de `sql/`, il lit le catalogue vivant**,
+`obj_description()` cote PostgreSQL et `information_schema` cote Snowflake.
+
+Corriger un `COMMENT ON` dans `sql/` puis regenerer ne change donc rien. Le
+chemin reel est en trois temps : editer le `.sql`, **appliquer** le `COMMENT ON`
+a la base, puis regenerer par `python outils/generer_dictionnaire.py`, avec
+`--cible snowflake` pour la couche Gold.
+
+`sql/commentaires_gold_snowflake.sql` porte les commentaires de colonnes
+Snowflake separement du schema, parce que celui-ci contient des
+`CREATE OR REPLACE TABLE` et ne peut pas etre rejoue. Le reappliquer apres toute
+recreation du schema.
+
+Enfin, **la base stocke en UTC et seul l'affichage est converti**, par
+`GAMELENS_TIMEZONE` dont le defaut est `Europe/Paris`. Piege associe : ce qui
+est formate par `to_char()` en SQL sort dans le fuseau de la SESSION et echappe
+au convertisseur Python. Voir OBS-92.
+
 ## Etat d'avancement
 
-Voir le tableau de suivi et la liste des ecarts connus dans `CLAUDE.md`.
+Tous les livrables du Bloc 4 sont ecrits, et les trois competences
+eliminatoires sont couvertes par des briques executees et vertes en integration
+continue.
+
+Les ecarts connus ne sont pas dissimules : ils sont numerotes dans la section 6
+de `docs/feuille_route_exploitation.md`, quatorze points de vigilance dont neuf
+restent ouverts. Les incidents reellement vecus sont dans
+`docs/journal_incidents.md`, les arbitrages et fausses pistes dans
+`docs/observations.md`.

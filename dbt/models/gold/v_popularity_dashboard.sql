@@ -4,7 +4,7 @@
 
   Pourquoi celui-la et pas un autre. Cette vue vivait jusqu'ici au milieu de
   sql/schema_gold_snowflake.sql, un fichier qui contient vingt-quatre
-  CREATE OR REPLACE TABLE et que CLAUDE.md interdit de rejouer : le remettre en
+  CREATE OR REPLACE TABLE qu'il est interdit de rejouer : le remettre en
   place detruirait sans un mot toute la couche de demonstration. Autrement dit,
   corriger cette vue demandait soit d'extraire son instruction a la main, soit
   de tout raser. En modele dbt elle se reconstruit seule, par `dbt run --select

@@ -204,7 +204,7 @@ PostgreSQL, par la tâche `controler_qualite_gold` du DAG.
 
 ### Reformulation induite
 
-`CLAUDE.md` écrivait que « seul `NOT NULL` est réellement appliqué ». Formulation
+Les consignes de travail écrivaient que « seul `NOT NULL` est réellement appliqué ». Formulation
 exacte tirée des observations : **les contraintes portées par la colonne
 elle-même sont appliquées** (NOT NULL, type, longueur), **celles qui portent sur
 une relation entre lignes ou entre tables ne le sont pas**.

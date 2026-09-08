@@ -91,7 +91,7 @@ git config core.quotepath false    # affiche correctement les chemins accentués
 mkdir -p sql ingestion dags docker/airflow docs tests .github/workflows dbt
 
 # [BASH] Les trois fichiers SQL préexistants étaient à la racine alors que
-# CLAUDE.md les référençait sous sql/. Écart corrigé.
+# Les consignes les référençaient sous sql/. Écart corrigé.
 mv schema_gold.sql schema_gold_snowflake.sql verify_snowflake_constraints.sql sql/
 ```
 
@@ -1790,7 +1790,7 @@ import re
 from pathlib import Path
 MOTIF = re.compile(r"`([a-zA-Z0-9_./-]+\.(?:py|sql|md|yml|yaml|json|txt))`")
 absents = {}
-for doc in list(Path("docs").rglob("*.md")) + [Path("CLAUDE.md"), Path("README.md")]:
+for doc in list(Path("docs").rglob("*.md")) + [Path("README.md")]:
     for n, ligne in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
         for c in MOTIF.findall(ligne):
             if "/" in c and not Path(c).exists():
@@ -1822,7 +1822,7 @@ python -m pytest tests -q --collect-only | tail -1     # tests unitaires
 ```
 
 Le seul écart trouvé portait sur des volumes de données, et il était
-structurel : `CLAUDE.md` annonçait « 15 faits popularité, 45 faits prix » sans
+structurel : les consignes de travail annonçaient « 15 faits popularité, 45 faits prix » sans
 date, sur une couche alimentée chaque nuit. Un chiffre vivant cité sans date
 est faux par construction. Corrigé en datant la mesure.
 
@@ -1919,7 +1919,7 @@ docker compose --profile outillage run --rm snowflake-cli \
 | Comptes vérifiables (cas, DA, V, DAG, dictionnaires, étages CI, tests) | tous conformes |
 | Volumes de données annoncés | **périmés**, non datés, corrigés |
 | Affirmations au futur dans le code | **2 devenues fausses**, corrigées |
-| Cohérence interne de `CLAUDE.md` | **une contradiction**, corrigée |
+| Cohérence interne des consignes de travail | **une contradiction**, corrigée |
 | Schéma d'architecture | **faux sur la promotion Gold**, corrigé |
 
 ---
@@ -2795,7 +2795,7 @@ ls dags/*.py | wc -l                                   # -> 5
 
 # [SH] (procedure) Puis chercher ce que les documents ANNONCENT
 grep -rn "55 PASS\|11 décisions\|quatre DAG\|4 DAG\|27 min 30" \
-     docs/*.md CLAUDE.md README.md | grep -v "commandes_successives\|observations"
+     docs/*.md README.md | grep -v "commandes_successives\|observations"
 ```
 
 Le second `grep` exclut volontairement les deux journaux : ils sont
@@ -2803,7 +2803,7 @@ chronologiques, et « quatre DAG » y est **juste** dans une entrée datée du 3
 Un contrôle de cohérence qui ne distingue pas une affirmation présente d'une
 trace historique produit du bruit et finit par ne plus être lancé.
 
-Ce qu'il a trouvé le 08/09 : `CLAUDE.md` annonçait 55 cas de recette à une ligne
+Ce qu'il a trouvé le 08/09 : les consignes de travail annonçaient 55 cas de recette à une ligne
 et 70 à une autre, ainsi que l'ancienne volumétrie à une ligne et la nouvelle à
 une autre. Un fichier de consignes qui se contredit lui-même est pire
 qu'incomplet, et celui-ci le disait déjà de lui-même à propos d'un autre

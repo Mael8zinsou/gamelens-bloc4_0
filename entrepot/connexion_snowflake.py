@@ -10,7 +10,7 @@ l'api-server a cesse de demarrer. Voir INC-009.
 
 Ce module est la seule chose a changer pour basculer la couche Gold de
 PostgreSQL vers Snowflake. C'est la contrainte de conception posee dans
-CLAUDE.md pendant que le compte d'essai n'existait pas : tout ce qui vise
+au cadrage pendant que le compte d'essai n'existait pas : tout ce qui vise
 l'entrepot devait l'etre derriere une frontiere de configuration, de sorte que
 le basculement soit un changement de connexion et non une reecriture.
 

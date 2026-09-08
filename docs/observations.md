@@ -23,7 +23,7 @@ trois pipelines exigés par C4.2.2.
 
 ## OBS-01. L'environnement était déjà armé, sans que ce soit noté nulle part
 
-`CLAUDE.md` décrivait sept briques restant à construire, en laissant entendre
+Les consignes de travail décrivaient sept briques restant à construire, en laissant entendre
 qu'il fallait tout installer. La vérification a montré l'inverse : Airflow 3.1.8,
 dbt-core et dbt-snowflake 1.8.3, snowflake-connector-python, kafka-python,
 duckdb, pandas, Docker Desktop 29.1.3, WSL2 avec Ubuntu, gh CLI 2.92 étaient
@@ -88,7 +88,7 @@ conception de la supervision.
 
 ## OBS-05. Kafka n'a pas eu besoin d'être remplacé
 
-`CLAUDE.md` autorisait explicitement une alternative légère à Kafka si celui-ci
+Les consignes de travail autorisaient explicitement une alternative légère à Kafka si celui-ci
 s'avérait trop lourd en local, à condition de documenter le choix. Cette
 autorisation n'a pas servi.
 
@@ -367,7 +367,7 @@ d'intégration sur infrastructure jetable, et la publication d'image sur
 `ghcr.io`.
 
 C4.2.3 étant éliminatoire, présenter un fichier YAML jamais exécuté serait
-exactement le travers que `CLAUDE.md` interdit. Il faut un dépôt distant et au
+exactement le travers que les consignes de travail interdisent. Il faut un dépôt distant et au
 moins un run vert avant la soutenance.
 
 > **Résolu le 20/08/2026, dans la même session.** Dépôt privé créé et poussé,
@@ -727,9 +727,9 @@ Deux enseignements. Un test qui échoue peut échouer pour une raison qui n'a ri
 qui fait la différence. Et l'échec a livré une information non anticipée :
 Snowflake applique les contraintes de **type**, longueur comprise.
 
-## OBS-37. La formulation de CLAUDE.md était trop approximative
+## OBS-37. La formulation du cadrage était trop approximative
 
-Conséquence directe de l'observation précédente. `CLAUDE.md` écrivait que sur
+Conséquence directe de l'observation précédente. Le cadrage écrivait que sur
 Snowflake « seul NOT NULL est réellement appliqué ». La vérification empirique
 montre que c'est mal découpé.
 
@@ -1570,7 +1570,7 @@ chiffré une fois de plus.
 
 ## OBS-72. Le fichier écrit pour éviter les redécouvertes se contredisait lui-même
 
-`CLAUDE.md` existe pour qu'on ne redécouvre pas ce qui a déjà été établi. Au
+Les consignes de travail existent pour qu'on ne redécouvre pas ce qui a déjà été établi. Au
 31/08, il contenait deux affirmations incompatibles, à environ quarante lignes
 l'une de l'autre :
 
@@ -1596,7 +1596,7 @@ supports différents. La réponse qui a fonctionné jusqu'ici est la génératio
 (DA-09) et la règle d'arbitrage écrite ; celle qui manque encore est un contrôle
 mécanique de cohérence interne, du genre de ceux passés ici à la main.
 
-**Une confirmation immédiate, pendant la correction elle-même.** `CLAUDE.md`
+**Une confirmation immédiate, pendant la correction elle-même.** Le fichier
 annonçait « `documentation_technique.md`, 600 lignes » quand le fichier en
 faisait 679. Le chiffre corrigé à 679 était faux vingt minutes plus tard, à 697,
 du seul fait des corrections en cours. Il a donc été **supprimé** plutôt que mis
@@ -1749,7 +1749,7 @@ dans les **documents**, pas seulement dans le code.
 
 ## OBS-77. Corriger une contradiction n'avait pas déclenché la recherche des autres
 
-La session 9 avait trouvé et corrigé la note de calendrier de `CLAUDE.md`, qui
+La session 9 avait trouvé et corrigé la note de calendrier des consignes, qui
 décrivait un compte Snowflake « à recréer » alors qu'il existait depuis onze
 jours et que la section des faits d'environnement, quarante lignes plus haut, le
 disait (OBS-72).
@@ -2241,7 +2241,7 @@ la vérification : elle ne vaut que si elle sort du système qui l'a produite.
 Piège rencontré en corrigeant les commentaires, et qui aurait produit une
 correction fantôme.
 
-`CLAUDE.md` décrit les dictionnaires comme générés depuis « les `COMMENT ON` des
+Les consignes de travail décrivent les dictionnaires comme générés depuis « les `COMMENT ON` des
 fichiers de `sql/` ». C'est vrai de l'intention, faux du mécanisme :
 `outils/generer_dictionnaire.py` interroge `obj_description()` côté PostgreSQL
 et `information_schema` côté Snowflake, c'est-à-dire le **catalogue vivant**.
@@ -2254,7 +2254,7 @@ lecteur relisant le `.sql` conclurait que la correction a été faite.
 
 Le chemin réel est en trois temps : éditer le `.sql`, **appliquer** le
 `COMMENT ON` à la base, régénérer. Consigné en phase 55 et corrigé dans les
-faits d'environnement de `CLAUDE.md`.
+faits d'environnement des consignes de travail.
 
 La leçon générale : **quand une documentation est générée, la question n'est
 jamais « où est écrite la vérité » mais « d'où le générateur la lit ».** Les

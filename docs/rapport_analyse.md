@@ -217,7 +217,7 @@ archivées, la couche Bronze cesse d'être gratuite et une politique de rétenti
 devient nécessaire. Le principe de la couche, archiver ce qui a été reçu sans
 savoir d'avance ce qui servira, reste juste ; c'est sa durée de conservation qui
 doit devenir une décision explicite plutôt qu'un effet de bord. Point de
-vigilance V-15 de la feuille de route.
+vigilance V-05 de la feuille de route, requalifié de faible à forte le même jour.
 
 La cadence d'appel, elle, n'est plus le facteur limitant qu'annonçait la version
 précédente de cette section : à 150 titres, un cycle occupe 1 min 16 s sur une
@@ -490,8 +490,8 @@ produit du code plus long et moins juste.
 
 ## 9. Points de vigilance
 
-Les treize points suivis figurent dans `feuille_route_exploitation.md` avec leur
-échéance et leur action. Cette section retient ceux qui relèvent d'un choix
+Les quatorze points suivis figurent dans `feuille_route_exploitation.md` avec
+leur échéance et leur action, cinq d'entre eux étant refermés. Cette section retient ceux qui relèvent d'un choix
 d'architecture, et non de l'exploitation courante.
 
 ### 9.1 Dépendance au fournisseur d'entrepôt

@@ -55,10 +55,8 @@ source :
 - `docs/observations.md` pour les surprises et les fausses pistes ;
 - `docs/cahier_recettes.md` pour les tests et leurs résultats réels ;
 - `docs/commandes_successives.md` pour ce qui a été tapé, dans l'ordre ;
-- `docs/feuille_route_exploitation.md` pour l'exploitation courante et les
-  points de vigilance ;
-- `CLAUDE.md` pour l'état d'avancement, les contraintes d'environnement et la
-  liste des écarts connus laissés ouverts.
+- `docs/feuille_route_exploitation.md` pour l'exploitation courante, les
+  contraintes d'environnement et les points de vigilance laissés ouverts.
 
 ## Entretien
 
@@ -135,8 +133,9 @@ vulgarisation faux est pire qu'absent, puisqu'il enseigne une chose inexacte
 avec assurance. Il l'a été onze jours.
 
 **Session 11 (31/08/2026), relu et laissé en l'état.** La session a produit le
-rapport d'analyse `docs/rapport_analyse.md` et remis à plat `CLAUDE.md` et le
-`README.md` de la racine. Aucune brique n'a été ajoutée ni retirée : un rapport
+rapport d'analyse `docs/rapport_analyse.md` et remis à plat les consignes de
+travail et le `README.md` de la racine. Aucune brique n'a été ajoutée ni
+retirée : un rapport
 est un document, pas un composant. Les deux documents ont été relus contre les
 mesures de coût que le rapport a produites, qu'ils ne citent nulle part, et
 contre la liste des écarts gelés, qu'ils décrivent déjà correctement. Rien à

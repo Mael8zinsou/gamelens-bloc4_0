@@ -112,7 +112,7 @@ DELETE FROM dim_stores WHERE store_id = 'test-0000-0000-0000-000000000002';
 --
 -- Enseignement collateral, non anticipe : Snowflake applique les contraintes de
 -- TYPE, longueur comprise, en plus de NOT NULL. Ce n'est donc pas
--- "seul NOT NULL est applique", formule qu'employait CLAUDE.md, mais plutot
+-- "seul NOT NULL est applique", formule qu'employait le cadrage, mais plutot
 -- "les contraintes portees par la colonne elle-meme sont appliquees, celles qui
 -- portent sur une RELATION entre lignes ou entre tables ne le sont pas".
 --

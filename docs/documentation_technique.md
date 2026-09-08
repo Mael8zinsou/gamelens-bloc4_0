@@ -287,7 +287,7 @@ finit toujours par poser.
 **Date** : 27/08/2026, session 8.
 
 **Ce qui a déclenché la décision** : un écart entre l'annoncé et le réel. Le
-Bloc 1, `CLAUDE.md` et les commentaires de colonnes de
+Bloc 1, les consignes de travail et les commentaires de colonnes de
 `sql/schema_gold_snowflake.sql` affirmaient tous les trois, au présent, que
 l'intégrité de la couche Gold reposait sur des tests dbt nommément cités
 (`not_null`, `unique`, `relationships`, `expression_is_true`, `accepted_values`).

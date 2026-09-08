@@ -41,6 +41,10 @@ Thumbs.db
 # Bonus
 note_modifications_support.md
 
+# Consignes de travail locales, non exposees sur le depot distant.
+# Le fichier continue d'exister sur le poste, il n'est simplement plus suivi.
+CLAUDE.md
+
 # Fichiers de verrouillage crees par PowerPoint et Word quand un document
 # est ouvert. Temporaires, invisibles, et sans interet pour le depot.
 ~$*
