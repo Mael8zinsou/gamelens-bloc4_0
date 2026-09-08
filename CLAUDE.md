@@ -61,7 +61,8 @@ un incident réel et sa méthode d'investigation (C4.4.2).
   plus une vue `v_popularity_dashboard` et un warehouse `gamelens_wh` dimensionné XS avec
   auto-suspend à 60s pour préserver les crédits d'essai.
 - Sources de données : API RAWG (catalogue), Steam Web API (`GetNumberOfCurrentPlayers`, sans auth,
-  et `appdetails`/`price_overview` pour la tarification), Twitch API (OAuth).
+  et `appdetails`/`price_overview` pour la tarification), **Twitch Helix
+  (`/streams`, OAuth `client_credentials`), branchée le 08/09/2026**.
   **Le scraping GOG n'est plus une source du Bloc 4** : l'arbitrage du Bloc 3 (3.3) l'a sorti du
   périmètre, et la tarification passe donc par l'API Steam. L'incident GOG n'a plus à être rejoué
   pour le C4.4.2 : INC-004, réellement vécu le 19/08/2026, remplit ce rôle. GOG reste en filet
@@ -157,8 +158,8 @@ sessions 11 et 12 manquaient dans deux d'entre eux.
 | **C4.2.2 méthode 1, pipeline temps réel** | ✅ **Exécuté et désormais orchestré** : Steam vers Kafka vers PostgreSQL. Idempotence prouvée par rejeu. DAG `gamelens_ingestion_temps_reel` toutes les 15 min, porte de sortie, test négatif broker coupé et reprise automatique vérifiée. |
 | **C4.2.2 méthode 2, orchestrateur** | ✅ **Exécuté** : Airflow 3.1.8 en conteneurs, **5 DAG**. `gamelens_promotion_gold` (6 tâches), `gamelens_promotion_snowflake`, `gamelens_ingestion_temps_reel`, `gamelens_supervision`, `gamelens_battement`. Tests négatifs de porte de fraîcheur réussis sur les deux promotions. |
 | **C4.2.2 méthode 3, calcul distribué** | ✅ **Exécuté et désormais orchestré** : Snowpark, MERGE idempotents et calcul analytique (fenêtre glissante 7 j, classement par genre). Nature distribuée prouvée par le SQL généré et l'historique de session. DAG `gamelens_promotion_snowflake` quotidien depuis le 31/08/2026. |
-| Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté quotidiennement** par le DAG de promotion. Volumes au 31/08/2026 : 15 dim_games, 45 faits popularité, 120 faits prix. Chiffres datés : ils croissent à chaque nuit. |
-| Schéma Gold Snowflake (cible finale) | ✅ **Exécuté** sur `RTZSXDV-PM63908` (AWS_EU_WEST_3) : 27 instructions, 0 erreur, 8 contrôles au vert. **Alimentée quotidiennement** par `gamelens_promotion_snowflake` depuis le 31/08/2026, V-12 refermé. Volumes mesurés le 31/08/2026 : 15 dim_games, 60 faits popularité sur 4 journées, 165 faits prix. Plus profonde que la couche PostgreSQL, et c'est attendu : la promotion Snowpark rejoue tout l'historique par MERGE. |
+| Schéma Gold PostgreSQL | ✅ Construit, testé, **alimenté quotidiennement** par le DAG de promotion. Volumes au 08/09/2026 : **150 dim_games** (tous avec `twitch_game_id`), 240 faits popularité dont 150 avec audience, 504 faits prix. Chiffres datés : ils croissent à chaque nuit. |
+| Schéma Gold Snowflake (cible finale) | ✅ **Exécuté** sur `RTZSXDV-PM63908` (AWS_EU_WEST_3) : 27 instructions, 0 erreur, 8 contrôles au vert. **Alimentée quotidiennement** par `gamelens_promotion_snowflake` depuis le 31/08/2026, V-12 refermé. Volumes mesurés le 08/09/2026 : **150 dim_games**, 255 faits popularité sur 8 journées dont 150 avec audience, 504 faits prix. Plus profonde que la couche PostgreSQL, et c'est attendu : la promotion Snowpark rejoue tout l'historique par MERGE. |
 | **C4.2.3 pipeline CI/CD** | ✅ **Exécuté, 6 étages verts** sur `Mael8zinsou/gamelens-bloc4_0` (privé). Qualité, tests, intégrité du DAG, intégration sur infrastructure jetable, **recette Snowflake sur base jetable**, publication d'image sur `ghcr.io` avec double étiquetage `latest` et SHA. Le premier run avait échoué : défaut dans l'assertion, pas dans l'infra (OBS-22). |
 | Recette automatisée de l'entrepôt | ✅ **Exécutée sur le runner** (run 32954104664, 41 s). Base Snowflake créée pour le run, schéma livré appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles d'intégrité et contrats dbt vérifiés en positif **et en négatif** sur le même jeu fautif, base supprimée. |
 | **C4.3.1 supervision et alertes** | ✅ **Construit et exécuté.** 5 vues d'indicateurs SQL, 6 règles d'alerte avec cycle de vie complet (déclenchement, non-duplication, fermeture automatique), DAG `gamelens_supervision` toutes les 15 min, tableau de bord Grafana provisionné comme code, 7 panneaux vérifiés. **Canal externe depuis le 07/09/2026** : notification Telegram immédiate des alertes critiques (mesurée à 2 s), plus `gamelens_battement` à 8h et 20h, DAG séparé qui dénonce l'arrêt de la supervision. V-02 et V-07 refermés, DA-12. |
@@ -166,7 +167,7 @@ sessions 11 et 12 manquaient dans deux d'entre eux.
 | **A4.1 rapport d'analyse** | ✅ **Écrit** : `docs/rapport_analyse.md`. Deux parties, calquées sur les deux livrables de la grille. Besoins métiers traduits en exigences, état de l'existant, contraintes, puis les composants un par un avec l'alternative écartée, l'analyse de dépendance fournisseur composant par composant, et une estimation des coûts **mesurée** sur l'historique de facturation, pas estimée. |
 | **C4.3.3 documentation technique** | ✅ **Écrite** : `docs/documentation_technique.md`. Point d'entrée, 11 décisions d'architecture datées avec leur contrepartie, traçabilité champ par champ, référence de configuration, matrice de droits, plus **2 annexes générées** depuis le catalogue et vérifiées par la CI. |
 | **dbt sur Snowflake** | ✅ **Construit et exécuté** : 29 contrats déclaratifs sur 4 sources, 1 modèle (la vue de tableau de bord, sortie d'un script SQL non rejouable). Éprouvés en positif et en négatif, sur base jetable et sur la couche de démonstration. |
-| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **55 PASS, 0 partiel, 0 en attente**. |
+| Cahier de recettes complet | ✅ `docs/cahier_recettes.md` : **70 PASS, 0 partiel, 0 en attente**. |
 | Incident réel documenté | ✅ **INC-004 retenu** pour le C4.4.2. 9 incidents au total, INC-001 à INC-009, tous réellement vécus. Le dernier, INC-009, est né de la correction de V-12. |
 | **Support de soutenance** | ✅ **Construit** : `docs/support_soutenance.md` est la source, deux PPTX en sont des sorties, la version projetée sans marquage de conformité et la version de répétition avec. 30 diapositives, 33 replis compris, **27:30 de contenu sur 30:00**. Organisé sur la grille et non chronologiquement : les 31 sous-critères ont chacun leur diapositive, vérifié par script (phase 47). |
 | **Preuves et feuille du jury** | ✅ 10 preuves textuelles datées dans `docs/preuves/`, rejouables par `outils/capturer_preuves.py`. 5 visuels plus le schéma de données, tous générés. `docs/feuille_jury.pdf` met les 31 critères en regard des numéros de diapositive, depuis trois sources et sans saisie manuelle. **Reste 1 capture d'écran**, GitHub Actions, réseau requis. |
@@ -208,6 +209,20 @@ sessions 11 et 12 manquaient dans deux d'entre eux.
   pas dans Grafana : l'outil affiche les indicateurs, il ne les définit pas.
 - Les logs Airflow contiennent des `:` dans les noms de dossier, **illisibles par un
   client Windows**. Les lire via `docker exec ... cat`, pas depuis l'hôte.
+- **Le canal Twitch est FACULTATIF**, comme celui de Telegram : sans
+  `TWITCH_CLIENT_ID` ni `TWITCH_CLIENT_SECRET`, la collecte d'audience est un
+  no-op qui rend un succès. Et la tâche Twitch du DAG d'ingestion **ne lève
+  jamais** : une source facultative ne doit pas casser une chaîne éliminatoire,
+  son échec étant tracé dans `speed.pipeline_runs` où la supervision le voit.
+  Ne pas « corriger » ce silence apparent, il est testé (TTWI-05).
+- **Une ligne Bronze d'audience Twitch pèse 3 231 octets contre 176 pour un
+  compteur Steam**, dix-huit fois plus, parce que `/helix/streams` décrit jusqu'à
+  cent diffusions. La projection Bronze passe de 41 Mo à **17,5 Go par an**, dont
+  16 pour la seule audience. V-05 a été requalifié de faible à forte en
+  conséquence. Ne pas tronquer la charge archivée pour économiser : voir DA-13.
+- **Le consumer est abonné aux DEUX topics** et choisit sa table sur le topic
+  d'origine du message. Un topic inconnu lève plutôt que d'être ignoré : écrire
+  une audience dans la table de fréquentation serait pire qu'une panne.
 - **Le canal Telegram est FACULTATIF et le restera** : sans `TELEGRAM_BOT_TOKEN`
   ni `TELEGRAM_CHAT_ID`, la notification est un no-op qui rend un succès. Un
   jeton présent mais injoignable, en revanche, trace un échec et déclenche
@@ -336,7 +351,11 @@ sessions 11 et 12 manquaient dans deux d'entre eux.
   du périmètre. `fact_prices` est donc alimentée par l'API Steam `appdetails`
   (`price_overview`), vérifiée fonctionnelle. Cela lève la contradiction entre le schéma
   Gold et le Bloc 3, sans vider la table de faits.
-- **Panel de titres** : 15 jeux indépendants réels, chaque `appid` vérifié en direct.
+- **Panel de titres** : porté à **150 jeux** le 08/09/2026, chaque `appid` vérifié
+  contre `appdetails` par `outils/construire_panel.py`, qui reproduit
+  `config/watchlist.json` à l'octet près. Ne pas éditer ce fichier à la main.
+  Cinq `appid` présumés désignaient un autre jeu et ont été rejetés par le
+  contrôle de nom. Était de 15 jeux jusqu'à cette date.
   Les trois AAA cités en exemple au Bloc 1 (570, 730, 1091500) sont écartés, incohérents
   avec le positionnement d'éditeur indépendant de Kestrel Interactive.
 - **Incident C4.4.2** : privilégier un incident réellement vécu pendant la construction

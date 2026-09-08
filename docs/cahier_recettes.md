@@ -1124,6 +1124,162 @@ qui rend cette coexistence défendable plutôt que redondante.
 - **Verdict** : **PASS**. La redirection de base par `executer_sql.py` reste
   nécessaire pour le schéma lui-même, mais plus pour cet objet.
 
+## Panel élargi et seconde source (session 13)
+
+## TPAN-01. Chaque identifiant du panel désigne bien le jeu attendu
+
+- **Objet** : construire un panel de 150 titres suppose 150 identifiants Steam,
+  et un identifiant erroné ne produit aucune erreur : il collecte des données
+  parfaitement valides, sur le mauvais jeu. Aucun contrôle situé en aval ne peut
+  rattraper cela.
+- **Procédure** : `outils/construire_panel.py` soumet à l'API `appdetails` un
+  couple (nom attendu, identifiant présumé) et **rejette tout candidat dont le
+  nom rendu par Steam diverge du nom attendu**, la comparaison se faisant sur
+  les lettres et chiffres seuls pour tolérer les suffixes éditoriaux.
+- **Attendu** : les identifiants erronés sont rejetés et nommés.
+- **Observé (08/09/2026)** : sur 187 candidats, **5 identifiants désignaient un
+  autre jeu**.
+
+  | Attendu | Ce que Steam rend réellement |
+  |---|---|
+  | `Void Bastards` | *Warhammer 40,000: Mechanicus* |
+  | `Sundered` | *MXGP3 - The Official Motocross Videogame* |
+  | `7 Billion Humans` | *Asteion Nights* |
+  | `Neon Abyss` | *Life of a Mercenary* |
+  | `SUPERHOT: MIND CONTROL DELETE` | *SUPERHOT VR* |
+
+- **Verdict** : **PASS**. 150 titres retenus, 37 rejetés dont ces 5.
+- **Ce que le cas démontre** : un contrôle qui vérifie une **correspondance**
+  et non une simple absence d'erreur. Les cinq identifiants fautifs
+  répondaient tous en HTTP 200.
+
+## TPAN-02. Le panel est reproductible, pas seulement versionné
+
+- **Objet** : le fichier `config/watchlist.json` affirme que le nom, le
+  développeur et le genre sont lus à la source. Sans outil rejouable, cette
+  affirmation n'est pas vérifiable.
+- **Procédure** : sauvegarde du fichier versionné, exécution complète de
+  `outils/construire_panel.py`, comparaison binaire.
+- **Attendu** : fichier identique à l'octet près, deux exceptions comprises.
+- **Observé (08/09/2026)** : `cmp` silencieux. Les deux exceptions assumées,
+  Disco Elysium conservé sans genre `Indie` et Wallpaper Engine exclu bien
+  qu'il passe tous les filtres, sont **portées par la règle** et non appliquées
+  à la main.
+- **Verdict** : **PASS**.
+
+## TPAN-03. Un cycle à 150 titres tient dans sa fenêtre d'ordonnancement
+
+- **Objet** : multiplier le panel par dix allonge le cycle. Un cycle plus long
+  que sa cadence produirait des exécutions qui se chevauchent.
+- **Attendu** : durée nettement inférieure aux 15 minutes de la cadence.
+- **Observé (08/09/2026)** : **1 min 16 s** côté Steam, **58 s** côté Twitch,
+  150 relevés sur 150 des deux côtés, **0 rejet**. Marge de plus de douze
+  minutes.
+- **Verdict** : **PASS**.
+- **Note** : la contrainte annoncée par le rapport d'analyse, à savoir que la
+  cadence d'appel deviendrait limitante avant le stockage, est **infirmée par
+  la mesure**. C'est le stockage qui devient contraignant en premier, voir V-05.
+
+## TTWI-01. Les 150 titres du panel sont résolus côté Twitch
+
+- **Objet** : `speed.game_mapping` porte depuis le Bloc 1 un nom qui annonce la
+  résolution d'identifiants entre plateformes, et ne résolvait que des
+  identifiants Steam.
+- **Procédure** : `ingestion/seed_twitch_ids.py`, correspondance exacte par
+  `/helix/games?name=` puis recherche approchante par
+  `/helix/search/categories`, **dont on refuse le flou** : un résultat n'est
+  accepté que si son nom normalisé égale le nom cherché.
+- **Attendu** : un maximum de titres résolus, et **aucun rattachement inventé**.
+- **Observé (08/09/2026)** : `150/150 titres resolus, 0 sans categorie Twitch`.
+  La normalisation absorbe les écarts de casse, `Undertale` côté GameLens contre
+  `UNDERTALE` côté Twitch.
+- **Verdict** : **PASS**.
+
+## TTWI-02. L'audience diffusée est collectée et écrite en Silver
+
+- **Objet** : éprouver la chaîne complète de la seconde source, du producteur au
+  puits, et non le seul formatage.
+- **Observé (08/09/2026)** :
+
+  | Étape | Résultat |
+  |---|---|
+  | Collecte | 150 relevés sur 150, **58 s**, 0 rejet |
+  | Archivage Bronze | 150 réponses, toutes exploitables |
+  | Écriture Silver | 150 lignes, `lus=150, ecrits=150` |
+  | Cumul mesuré | **102 880 spectateurs**, pic à **51 289** |
+
+- **Verdict** : **PASS**.
+
+## TTWI-03. L'idempotence tient sur les deux topics à la fois
+
+- **Objet** : le consumer a été **paramétré et non dupliqué** pour absorber la
+  seconde source. La garantie de livraison, propriété éliminatoire, doit tenir
+  après cette modification.
+- **Procédure** : remise du groupe de consommation au début des **deux** topics
+  par `kafka-consumer-groups.sh --reset-offsets --to-earliest`, puis
+  consommation complète.
+- **Attendu** : tous les messages relus, aucune ligne insérée, aucun compte
+  modifié.
+- **Observé (08/09/2026)** : `lus=735, ecrits=0`, sept lots dont un final,
+  chacun rapportant `0 inseres, N doublons absorbes`. Comptes inchangés, 150
+  lignes d'audience et 1 860 de fréquentation.
+- **Verdict** : **PASS**.
+- **Ce qui a changé depuis la session 1** : la preuve d'origine portait sur
+  **15 messages et une source**. Elle en couvre maintenant **735 et deux**, avec
+  un puits différent par topic.
+
+## TTWI-04. Zéro spectateur est une observation, pas une absence
+
+- **Objet** : ce cas justifie une décision de modèle. Une table distincte a été
+  créée plutôt que des colonnes ajoutées à la fréquentation, parce qu'un titre
+  sans diffusion rend légitimement zéro là qu'un titre retiré du catalogue ne
+  rend rien du tout. Fusionner les deux flux imposerait de distinguer le zéro de
+  l'absence dans une colonne nullable.
+- **Attendu** : des zéros réellement présents, écrits, et distincts de NULL.
+- **Observé (08/09/2026)** : **54 titres sur 150 à zéro spectateur**, tous
+  écrits en base. La contrainte `CHECK (viewer_count >= 0)` les accepte, et
+  `avg_viewer_count` reste NULL en couche Gold pour un titre sans identifiant
+  Twitch, ce qui est un état différent.
+- **Verdict** : **PASS**.
+
+## TTWI-05. Une source facultative ne peut pas casser la chaîne éliminatoire
+
+- **Objet** : Twitch est greffée sur le pipeline temps réel, qui porte une
+  compétence éliminatoire. Une panne de la source d'appoint ne doit pas
+  empêcher l'écriture de la source principale, déjà publiée sur Kafka.
+- **Attendu** : sans identifiants, la tâche réussit sans rien tenter ; en cas
+  d'échec, la tâche réussit malgré tout et l'échec est **tracé** dans
+  `speed.pipeline_runs`, où la règle critique `echecs_composants` le relève.
+- **Observé (08/09/2026)** : les deux producteurs sont **parallèles** dans le
+  DAG et la tâche Twitch ne lève jamais ; sans `TWITCH_CLIENT_ID`, le producteur
+  journalise `identifiants Twitch absents, collecte d'audience ignoree` et rend
+  0. Le contrôle de sortie du DAG rapporte le nombre de relevés d'audience
+  **sans l'exiger**.
+- **Verdict** : **PASS**.
+- **Raisonnement repris de DA-12** : un dispositif accessoire ne doit jamais
+  être placé sur le chemin critique de l'essentiel. Ici la conséquence est
+  double, la tâche ne lève pas **et** l'échec reste visible ailleurs.
+
+## TTWI-06. L'audience atteint les deux couches Gold
+
+- **Objet** : `avg_viewer_count` et `max_viewer_count` sont déclarées depuis le
+  Bloc 2 et nulles depuis. Une source collectée mais non promue ne vaudrait pas
+  mieux.
+- **Attendu** : les deux colonnes alimentées des deux côtés, par **jointure
+  externe** pour qu'un titre sans identifiant Twitch conserve sa fréquentation.
+- **Observé (08/09/2026)** :
+
+  | Couche | Faits | Dont avec audience | Pic | `dim_games` avec `twitch_game_id` |
+  |---|---|---|---|---|
+  | PostgreSQL | 240 | **150** | 51 289 | 150 / 150 |
+  | Snowflake | 255 | **150** | 51 289 | 150 / 150 |
+
+- **Verdict** : **PASS**. 8 contrôles d'intégrité et 29 contrats dbt restent au
+  vert après la modification des deux promotions.
+- **Ce que la donnée permet et qu'aucune source seule ne donnait** : le rapport
+  entre spectateurs et joueurs, de **0,05** pour Rust à **13,62** pour Fall
+  Guys, 544 joueurs pour 7 408 spectateurs.
+
 ## Détail des contrôles de l'étage d'intégration
 
 Chacun a une assertion explicite, aucun ne se contente d'un code de retour nul.
@@ -1192,7 +1348,9 @@ attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 | Contrats dbt | 6 | 0 | 0 |
 | Promotion Snowflake | 4 | 0 | 0 |
 | Canal de notification | 6 | 0 | 0 |
-| **Total** | **61** | **0** | **0** |
+| Panel élargi | 3 | 0 | 0 |
+| Seconde source, Twitch | 6 | 0 | 0 |
+| **Total** | **70** | **0** | **0** |
 
 Le cloisonnement des rôles est décrit par 3 cas de la section Sécurité et par
 TBRZ-04, compté avec la couche Bronze. À l'exécution, ces quatre cas se

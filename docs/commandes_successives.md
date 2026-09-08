@@ -2665,3 +2665,116 @@ docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
 grep -n -A3 "session.create_dataframe" entrepot/snowpark_promotion.py
 # -> une seule, Steam, ecrite en dur
 ```
+
+## Phase 57. Construire et vérifier le panel (procédure)
+
+Le fichier `config/watchlist.json` **ne s'édite pas à la main** : il est produit
+par `outils/construire_panel.py`, qui le reproduit a l'octet pres.
+
+```bash
+# [BASH] Construire, ou reconstruire apres ajout de candidats
+python outils/construire_panel.py
+# -> 150 titres, 119 developpeurs distincts
+#    genres : Action 77, Adventure 28, Simulation 24, RPG 9, Strategy 6, Indie 6
+
+# [BASH] Prouver que le panel versionne est REPRODUCTIBLE et non seulement versionne
+cp config/watchlist.json /tmp/reference.json
+python outils/construire_panel.py
+cmp /tmp/reference.json config/watchlist.json && echo "identique a l octet pres"
+
+# [BASH] Repercuter dans le referentiel. Idempotent : UPSERT sur steam_appid.
+python ingestion/seed_game_mapping.py
+# -> 150 titres presents dans speed.game_mapping
+```
+
+Ce que le script rejette, et qu'il faut lire plutot que survoler : tout
+candidat dont le nom rendu par Steam diverge du nom attendu. Cinq y sont passes
+le 08/09/2026 (OBS-98).
+
+## Phase 58. Brancher la source d'audience Twitch (procédure)
+
+Les deux identifiants sont **facultatifs** : sans eux la collecte d'audience est
+un no-op qui rend un succes, et le reste de la plateforme fonctionne a
+l'identique.
+
+```bash
+# [BASH] 1. Verifier la FORME des valeurs sans jamais afficher le secret
+python - <<'FIN'
+from pathlib import Path
+v = dict(l.split("=", 1) for l in Path(".env").read_text(encoding="utf-8").splitlines()
+         if "=" in l and not l.startswith("#"))
+for cle in ("TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET"):
+    x = v.get(cle, "").strip()
+    ok = len(x) == 30 and x.isalnum() and x.islower()
+    print(f"{cle}: longueur {len(x)}, forme {'attendue' if ok else 'SUSPECTE'}")
+FIN
+
+# [BASH] 2. RECREER les conteneurs : un restart ne relit pas .env
+docker compose up -d
+
+# [BASH] 3. Creer le topic dedie (idempotent)
+MSYS_NO_PATHCONV=1 docker exec gamelens-airflow-scheduler \
+  python /opt/gamelens/ingestion/create_topics.py
+
+# [BASH] 4. Appliquer le schema Silver de la source (idempotent)
+docker exec -i gamelens-postgres psql -U gamelens_app -d gamelens \
+  -v ON_ERROR_STOP=1 < sql/schema_silver_twitch.sql
+
+# [BASH] 5. Resoudre les identifiants de categorie. Idempotent, ne reprend que
+#           les titres non resolus sauf --tout.
+MSYS_NO_PATHCONV=1 docker exec gamelens-airflow-scheduler \
+  python /opt/gamelens/ingestion/seed_twitch_ids.py
+# -> 150/150 titres resolus, 0 sans categorie Twitch
+
+# [BASH] 6. Un cycle de collecte, puis ecriture en Silver
+MSYS_NO_PATHCONV=1 docker exec gamelens-airflow-scheduler \
+  python /opt/gamelens/ingestion/twitch_producer.py --once
+MSYS_NO_PATHCONV=1 docker exec gamelens-airflow-scheduler \
+  python /opt/gamelens/ingestion/kafka_to_postgres.py --timeout 25
+```
+
+## Phase 59. Prouver l'idempotence sur les DEUX topics (procédure)
+
+`--depuis-le-debut` ne suffit pas : l'option pilote `auto_offset_reset`, que
+Kafka ne consulte QUE si le groupe n'a aucun offset valide. En regime etabli
+elle n'a aucun effet, et le rejeu rend `lus=0`. Il faut remettre le groupe au
+debut.
+
+```bash
+# [BASH] Remise du groupe au debut des deux topics
+MSYS_NO_PATHCONV=1 docker exec gamelens-kafka \
+  /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:29092 \
+  --group gamelens-silver-speed --reset-offsets --to-earliest --all-topics --execute
+
+# [BASH] Rejeu complet
+MSYS_NO_PATHCONV=1 docker exec gamelens-airflow-scheduler \
+  python /opt/gamelens/ingestion/kafka_to_postgres.py --timeout 25
+# -> lus=735, ecrits=0   chaque lot : "0 inseres, N doublons absorbes"
+
+# [SQL] Les comptes doivent etre STRICTEMENT inchanges
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT 'audience' AS flux, count(*) FROM speed.viewer_count_events
+   UNION ALL SELECT 'frequentation', count(*) FROM speed.player_count_events"
+```
+
+## Phase 60. Mesurer la volumétrie réelle (diagnostic)
+
+A ne pas confondre avec `pg_total_relation_size`, qui inclut les index et
+l'a-plat des pages : a faible volume, l'overhead fixe domine et le chiffre est
+ininterpretable. La taille de tuple est ce qu'on veut comparer.
+
+```bash
+# [SQL] Taille de ligne par flux, et part de la charge JSON archivee
+docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT source, count(*) AS lignes,
+          round(avg(pg_column_size(t.*)))    AS octets_ligne,
+          round(avg(pg_column_size(charge))) AS dont_charge
+     FROM bronze.reponses_brutes t WHERE charge IS NOT NULL
+    GROUP BY source ORDER BY source"
+# steam_player_count  176 octets dont  77 de charge
+# steam_appdetails    329 octets dont 237 de charge
+# twitch_viewers     3231 octets dont 3138 de charge   <- dix-huit fois plus
+```
+
+Piege documente en OBS-100 : les chiffres publies avant le 08/09/2026 etaient
+des tailles de CHARGE presentees comme des tailles de ligne.

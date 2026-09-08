@@ -30,7 +30,8 @@ Tous les matins, les mêmes questions reviennent :
 - de quoi parle-t-on sur les plateformes de diffusion en direct ?
 
 Les réponses existent, éparpillées. Steam sait combien de joueurs sont
-connectés. Twitch sait qui est regardé. Un catalogue en ligne sait quels jeux
+connectés. Twitch sait qui est regardé. Les deux sont interrogés depuis le
+8 septembre 2026 ; jusque-là, seul Steam l'était. Un catalogue en ligne sait quels jeux
 existent. Chacun met ces informations à disposition par une API, c'est-à-dire
 une adresse où un programme peut aller poser une question et recevoir une
 réponse.
@@ -205,7 +206,8 @@ n'a pas bougé.
 ### Le calcul se fait ailleurs que sur la machine
 
 À un moment, il faut calculer des moyennes glissantes et des classements. Sur
-15 jeux, n'importe quel ordinateur y arrive. Sur des millions de lignes, non.
+150 jeux, n'importe quel ordinateur y arrive encore. Sur des millions de
+lignes, non.
 
 La solution du métier est de faire calculer par une machinerie prévue pour, qui
 répartit le travail sur plusieurs machines. C'est ce qu'on appelle du **calcul
@@ -782,8 +784,41 @@ vieillira mal si le projet grandit.
 
 ---
 
-Dernière mise à jour : 08/09/2026, fin de session 13. Les chiffres cités ici
-(incidents, volumes, durées) sont datés : ils étaient exacts au jour dit, et
-plusieurs d'entre eux croissent chaque nuit.
+## Deux sources valent mieux qu'une, et pas pour la raison qu'on croit
+
+Ajouté le 8 septembre 2026, en même temps que le passage de 15 à 150 jeux
+suivis.
+
+L'objection naturelle est qu'une source de plus, c'est surtout du travail de
+plus. Elle serait juste si la seconde source mesurait la même chose que la
+première. Ce n'est pas le cas ici, et c'est tout l'intérêt.
+
+Steam dit combien de gens **jouent**. Twitch dit combien de gens **regardent**.
+Ce sont deux questions différentes, et leur rapport dit quelque chose qu'aucune
+des deux ne dit seule. Mesuré le jour du branchement :
+
+- Rust : 76 000 joueurs, 4 000 spectateurs. Un jeu qu'on joue.
+- Fall Guys : 544 joueurs, 7 400 spectateurs. **Treize fois plus de gens le
+  regardent qu'il n'y a de gens en train d'y jouer.**
+
+Un éditeur qui ne regarderait que le premier chiffre passerait à côté du
+second. Et l'audience monte généralement **avant** les ventes : c'est un signal
+d'avance, pas une redondance.
+
+Il y a un prix, et il a surpris. Quand on demande à Steam combien de joueurs,
+il répond par un nombre. Quand on demande à Twitch qui diffuse, il répond par
+la description de cent diffusions, avec leurs titres, leurs langues, leurs
+images. Comme la plateforme conserve chaque réponse telle qu'elle est arrivée,
+elle conserve tout cela : **dix-huit fois plus de place pour le même nombre de
+questions posées**. La place occupée chaque année passe de 41 Mo à environ
+17 Go.
+
+Ce n'est pas une erreur, c'est une conséquence qu'on n'avait pas calculée
+d'avance. Elle rend nécessaire quelque chose qui était jusqu'ici remis à plus
+tard : décider combien de temps on garde les vieilles réponses.
+
+Dernière mise à jour : 08/09/2026, session 13, seconde révision. Les chiffres
+cités ici (incidents, volumes, durées) sont datés : ils étaient exacts au jour
+dit, et plusieurs d'entre eux croissent chaque nuit.
 
 Pour le détail technique des décisions, voir [`pour-un-junior.md`](pour-un-junior.md).

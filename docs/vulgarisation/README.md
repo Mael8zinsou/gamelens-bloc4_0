@@ -16,8 +16,8 @@ documents-ci font l'inverse : ils partent du lecteur.
 | [`explique-simplement.md`](explique-simplement.md) | Quelqu'un qui sait ce qu'est un programme, une base de données, une API, mais pour qui « pipeline », « idempotence » ou « couche Gold » ne veulent rien dire. | « C'est quoi, ton truc ? » | ~35 min |
 
 Les durées sont recalculées sur le nombre de mots à chaque révision, sinon elles
-vieillissent en silence : au 08/09/2026, 9 721 mots pour la version junior et
-6 561 pour la version simple. Elles avaient été annoncées à 25 et 12 minutes
+vieillissent en silence : au 08/09/2026 apres seconde revision, 10 063 mots
+pour la version junior et 6 857 pour la version simple. Elles avaient été annoncées à 25 et 12 minutes
 quand les documents faisaient à peu près la moitié de cette taille. La révision
 de la session 12 ne les avait pas déplacées une fois arrondies ; celle de la
 session 13 les déplace toutes les deux d'un cran, ce qui est la raison même de
@@ -210,4 +210,31 @@ qu'il surveille.
 Les durées de lecture bougent pour la première fois depuis qu'elles sont
 recomptées, de 45 à 50 minutes et de 30 à 35.
 
-Dernière mise à jour : 08/09/2026, fin de session 13.
+**Session 13, seconde révision (08/09/2026).** La même session a déclenché la
+règle deux fois, ce qui ne s'était jamais produit. La première fois pour le
+canal de notification ; la seconde pour le panel porté de 15 à 150 titres et le
+raccordement de Twitch.
+
+Ce qui change dans les deux documents n'est pas le récit d'une brique de plus,
+c'est un **chiffre qui servait d'argument et qui est devenu faux**. Les deux
+textes citaient « 41 Mo par an » pour la couche brute, en tirant la leçon
+qu'une objection de volume formulée sans mesure ne vaut rien. La leçon tient ;
+le chiffre est passé à 17,5 Go, facteur 437.
+
+Deux causes, et la seconde est la plus instructive. D'abord une faute de
+désignation : les octets annoncés étaient ceux de la charge archivée, pas ceux
+de la ligne. Ensuite une source verbeuse : Twitch répond par la description de
+cent diffusions là où Steam répond par un entier, soit dix-huit fois plus de
+place pour le même nombre de questions.
+
+La version Feynman gagne une section sur ce que deux sources apportent, avec le
+seul chiffre qui frappe, Fall Guys et ses treize spectateurs par joueur. La
+version junior garde la leçon d'origine et lui ajoute celle qui la corrige :
+*un registre de risques se relit quand l'architecture change, pas seulement
+quand un risque se matérialise.*
+
+Les durées de lecture ne bougent pas cette fois, malgré 700 mots de plus : 50 et
+35 minutes après arrondi. C'est la raison de recompter plutôt que de reconduire,
+dans un sens comme dans l'autre.
+
+Dernière mise à jour : 08/09/2026, fin de session 13, seconde révision.

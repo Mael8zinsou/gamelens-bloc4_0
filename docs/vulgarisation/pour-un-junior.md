@@ -528,14 +528,38 @@ n'archive pas, la question « qu'est-ce qu'on perd ? » est structurellement
 impossible à poser.
 
 **Le coût, mesuré et pas estimé.** L'objection réflexe à une couche Bronze est
-le volume. 78 octets par relevé de fréquentation, 238 par relevé tarifaire,
-soit environ 114 Ko par jour et **41 Mo par an** à la cadence en place. La
-leçon n'est pas « c'est petit », c'est qu'une objection de volume formulée sans
-mesure ne vaut rien, et qu'il suffisait de trois minutes pour la trancher.
+le volume, et la réponse écrite ici pendant trois semaines était : environ
+**41 Mo par an**. La leçon qu'on en tirait, qu'une objection de volume formulée
+sans mesure ne vaut rien, reste juste. Le chiffre, lui, ne l'est plus, et la
+manière dont il a cessé de l'être vaut mieux que le chiffre.
 
-**Ce qui manque encore** : une politique de conservation. Rien ne purge cette
-table aujourd'hui. À 41 Mo par an ce n'est pas urgent, mais une couche qui
-grossit sans règle finit par en imposer une dans l'urgence.
+**Deux corrections, le 08/09/2026.**
+
+La première est une faute de désignation plutôt que de mesure. Les 78 et 238
+octets annoncés étaient les tailles de la **charge JSON archivée**, pas celles
+de la ligne. Une ligne porte en plus une centaine d'octets de métadonnées,
+source, identifiant, horodatage, statut. Le nombre était juste, ce qu'il
+prétendait décrire ne l'était pas. Retiens-le : *personne ne va vérifier un
+chiffre qui a l'air mesuré.*
+
+La seconde est plus intéressante. Le panel est passé de 15 à 150 titres, et une
+seconde source a été raccordée. Or une réponse de Twitch décrit jusqu'à **cent
+diffusions**, chacune avec son titre, sa langue, ses vignettes ; une réponse de
+Steam tient dans un entier. Pour un **nombre de lignes identique**, la ligne
+archivée pèse **3 231 octets contre 176**. La projection annuelle passe de 41 Mo
+à **17,5 Go**, dont 16 pour la seule audience. Facteur 437.
+
+**Ce qui manque encore** : une politique de conservation, et ce n'est plus une
+remarque de confort. Le point de vigilance correspondant était classé *faible*
+depuis l'origine, et ce classement était **juste au moment où il a été posé**.
+Il est devenu faux sans que personne n'y touche, parce qu'une décision prise
+ailleurs a multiplié son assiette. *Un registre de risques se relit quand
+l'architecture change, pas seulement quand un risque se matérialise.*
+
+Et la tentation à écarter : tronquer ce qu'on archive pour économiser. Ce serait
+décider aujourd'hui de ce dont on aura besoin demain, exactement ce que cette
+couche existe pour éviter. C'est la **durée de conservation** qui doit devenir
+une décision, pas le contenu.
 
 ## 3.9 Deux filets valent mieux qu'un, à condition de vérifier qu'ils s'accordent
 
@@ -1090,11 +1114,21 @@ bases, ce qui demande des droits élevés. Mais `ACCOUNTADMIN` va bien au-delà 
 ce qui est nécessaire, et le principe du moindre privilège dit qu'on aurait dû
 créer un rôle dédié avec `CREATE DATABASE` et rien de plus.
 
-## Les volumes sont ceux d'un laboratoire
+## Les volumes ne sont plus tout à fait ceux d'un laboratoire
 
-15 jeux, et des faits qui se comptent en dizaines. Dernière mesure, le
-31/08/2026 : côté PostgreSQL 45 faits de popularité et 120 faits tarifaires ;
-côté Snowflake 60 et 165, répartis sur quatre journées. L'écart entre les deux
+Cette section disait « 15 jeux, et des faits qui se comptent en dizaines ».
+Depuis le 08/09/2026 le panel compte **150 titres**, chacun vérifié contre
+l'API Steam, et une seconde source alimente la plateforme.
+
+Dernière mesure, le 08/09/2026 : côté PostgreSQL 150 dimensions, 240 faits de
+popularité dont 150 portant l'audience diffusée, 504 faits tarifaires ; côté
+Snowflake 150, 255 et 504, répartis sur huit journées.
+
+Ce qui a le plus changé n'est pas le nombre de lignes mais leur poids : voir
+plus haut, la projection annuelle de la couche brute passe de 41 Mo à 17,5 Go.
+C'est le stockage, et non plus la cadence d'appel, qui devient contraignant en
+premier. Un cycle complet de collecte prend 1 min 16 s côté Steam et 58 s côté
+Twitch, sur 150 titres, dans une fenêtre de 15 minutes. L'écart entre les deux
 couches n'est pas une anomalie et vaut d'être compris : la promotion PostgreSQL
 traite une journée par run, la promotion Snowpark rejoue tout l'historique
 disponible par `MERGE`. Les deux portent la même journée la plus récente, pas la
@@ -1117,7 +1151,8 @@ donc jamais posées :
 - **La couche Bronze existe depuis le 27/08, mais pas sur S3.** C'est une table
   PostgreSQL, `bronze.reponses_brutes`. L'écart avec l'architecture annoncée au
   Bloc 1 est assumé : le support change, la propriété recherchée est la même.
-  Elle n'a pas de politique de conservation, et croît d'environ 41 Mo par an.
+  Elle n'a pas de politique de conservation, et croît d'environ **17,5 Go par
+  an** depuis le raccordement de Twitch, contre 41 Mo auparavant.
 - **Un seul environnement.** Pas de séparation développement / recette /
   production. La chaîne d'intégration crée bien une base jetable, ce qui en est
   une ébauche.
@@ -1198,8 +1233,8 @@ documentée d'une architecture surveillée.
 | Ce que tu cherches | Où |
 |---|---|
 | Les incidents au format complet | `docs/journal_incidents.md` |
-| Les surprises, fausses pistes, arbitrages | `docs/observations.md`, 93 entrées |
-| Les tests et leurs résultats réels | `docs/cahier_recettes.md`, 61 cas, tous PASS |
+| Les surprises, fausses pistes, arbitrages | `docs/observations.md`, 102 entrées |
+| Les tests et leurs résultats réels | `docs/cahier_recettes.md`, 70 cas, tous PASS |
 | Les commandes réellement exécutées | `docs/commandes_successives.md` |
 | Ce qu'il faut faire tourner, surveiller et purger | `docs/feuille_route_exploitation.md` |
 | L'état d'avancement et les pièges d'environnement | `CLAUDE.md` |
@@ -1209,6 +1244,6 @@ documentée d'une architecture surveillée.
 | La supervision | `supervision/` et `sql/schema_supervision.sql` |
 | La chaîne d'intégration continue | `.github/workflows/ci.yml`, six étages |
 
-Dernière mise à jour : 08/09/2026, fin de session 13. Les chiffres cités
-(incidents, observations, cas de recette, volumes) sont datés : ils étaient
-exacts au jour dit, et les volumes croissent chaque nuit.
+Dernière mise à jour : 08/09/2026, session 13, seconde révision. Les chiffres
+cités (incidents, observations, cas de recette, volumes) sont datés : ils
+étaient exacts au jour dit, et les volumes croissent chaque nuit.

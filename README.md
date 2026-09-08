@@ -186,7 +186,7 @@ correspond plus au catalogue.
 | Competence | Realisation | Preuve |
 |---|---|---|
 | C4.2.1, architecture d'entrepot | Deux couches Gold, Snowflake et PostgreSQL | `sql/schema_gold_snowflake.sql`, `sql/schema_gold.sql`, `sql/verify_snowflake_constraints.sql` |
-| C4.2.2, methode 1, temps reel | Steam vers Kafka vers PostgreSQL, idempotent | `ingestion/`, DAG `gamelens_ingestion_temps_reel` |
+| C4.2.2, methode 1, temps reel | Steam et Twitch vers Kafka vers PostgreSQL, idempotent sur les deux topics | `ingestion/`, DAG `gamelens_ingestion_temps_reel` |
 | C4.2.2, methode 2, orchestrateur | Airflow 3.1.8, 5 DAG | `dags/`, http://localhost:8080 |
 | C4.2.2, methode 3, calcul distribue | Snowpark, et non Spark local | `entrepot/snowpark_promotion.py`, DA-04 |
 | C4.2.3, CI/CD | 6 etages, base Snowflake jetable, image publiee | `.github/workflows/ci.yml` |

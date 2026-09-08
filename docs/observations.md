@@ -2341,3 +2341,140 @@ Le silence entre les deux etages merite d'etre note : la CI etait rouge depuis
 les commits du canal, et rien ne l'avait dit, faute d'avoir pousse. Le canal de
 notification, lui, surveille la plateforme ; personne ne surveillait la chaine
 qui la valide.
+
+## OBS-98. Un plan qui échoue a produit un meilleur contrôle que celui qui marchait
+
+Pour porter le panel de 15 à 150 titres, il fallait 135 identifiants Steam. Ma
+mémoire des noms de jeux est bonne, celle de leurs identifiants ne l'est pas :
+c'était le point faible connu de l'opération.
+
+**Premier plan, le bon sur le papier** : télécharger le catalogue complet par
+`ISteamApps/GetAppList`, construire une correspondance nom vers identifiant, et
+n'avoir plus à me fier qu'aux noms. Il élimine la source d'erreur au lieu de la
+surveiller, ce qui est toujours préférable.
+
+Il a rendu **404**, sur les trois variantes d'URL essayées, alors que
+`GetNumberOfCurrentPlayers` répondait 200 depuis la même machine à la même
+seconde. Point d'appel déprécié ou désormais authentifié.
+
+**Second plan, le repli** : fournir moi-même un couple (nom attendu,
+identifiant présumé), interroger `appdetails`, et **rejeter tout candidat dont
+le nom rendu par Steam diverge du nom attendu**. Autrement dit, ne pas éliminer
+la source d'erreur mais la rendre détectable.
+
+Le repli a trouvé ce que le plan initial aurait silencieusement évité :
+**cinq identifiants sur 187 désignaient un autre jeu**. `Void Bastards`
+pointait sur *Warhammer 40,000: Mechanicus*, `Sundered` sur *MXGP3*,
+`7 Billion Humans` sur *Asteion Nights*, `Neon Abyss` sur *Life of a
+Mercenary*, `SUPERHOT: MIND CONTROL DELETE` sur *SUPERHOT VR*.
+
+**Pourquoi c'est mieux, et pas seulement équivalent.** Les cinq auraient
+répondu HTTP 200 et collecté des données parfaitement valides sur les mauvais
+jeux, indéfiniment, sans qu'aucun contrôle en aval ne puisse s'en apercevoir :
+la fraîcheur aurait été bonne, la complétude bonne, les tests d'intégrité
+verts. C'est le mode de défaillance le plus coûteux qui soit, une donnée fausse
+qui se comporte comme une donnée juste.
+
+Le plan initial aurait évité ces cinq erreurs-là. Il n'aurait rien dit du
+mécanisme, et le jour où le catalogue lui-même se serait trompé, ou bien où
+quelqu'un aurait ajouté un titre à la main, rien n'aurait alerté. **Un contrôle
+qui compare deux sources indépendantes vaut mieux qu'une source réputée
+fiable.**
+
+## OBS-99. La règle d'admission a failli supprimer un titre du panel d'origine
+
+Le filtre retenu pour les nouveaux candidats était : `type=game` et genre
+`Indie` déclaré par Steam, ce qui colle au positionnement d'éditeur indépendant
+de Kestrel Interactive.
+
+Appliqué à l'ensemble, il rejetait **Disco Elysium**, que Steam classe en `RPG`
+sans mention `Indie`. Or ce titre appartient au panel initial vérifié en session
+1, et surtout il porte le **cas documenté de divergence de nom**, `Disco
+Elysium` côté GameLens contre `Disco Elysium - The Final Cut` côté Steam, cité
+par la documentation comme exemple réel de résolution d'identifiants.
+
+Le rejeter aurait fait disparaître, sans bruit, une pièce de démonstration
+référencée ailleurs. Un filtre automatique appliqué rétroactivement a ce
+pouvoir : il ne distingue pas ce qui n'a jamais été examiné de ce qui l'a été et
+retenu.
+
+**Correction retenue** : le filtre est une règle d'**admission** pour les
+candidats nouveaux, jamais un motif d'exclusion rétroactive. Les quinze titres
+d'origine sont conservés par construction. Symétriquement, Wallpaper Engine
+passait tous les filtres et a été **exclu** parce que Steam le classe
+`type=game` sans que ce soit un jeu vidéo, ce qu'aucune API ne peut trancher.
+
+Les deux exceptions sont écrites **dans la règle** et non appliquées à la main,
+ce qui se vérifie : l'outil reproduit `config/watchlist.json` à l'octet près.
+Une exception codée en dur dans le fichier de sortie aurait été indiscernable
+d'une erreur.
+
+## OBS-100. Deux chiffres du rapport étaient des charges JSON présentées comme des lignes
+
+En recalculant la volumétrie pour 150 titres, un écart est apparu entre ce que
+mesurait `pg_column_size` et ce qu'annonçait le rapport d'analyse : **72 octets
+par relevé de fréquentation contre 78 annoncés**, ce qui semblait cohérent, mais
+**555 octets par ligne Bronze contre 78 annoncés** pour la même chose.
+
+L'explication tient en une ligne : les nombres publiés, 78 et 238 octets,
+étaient les tailles de la **charge JSON archivée**, pas celles de la ligne. Une
+ligne Bronze porte en plus une centaine d'octets de métadonnées, source,
+identifiant, horodatage, statut. Le rapport les décrivait comme « l'empreinte
+d'un relevé », ce qui les sous-estimait d'un facteur deux à trois.
+
+Ce n'est pas une faute de mesure mais une faute de **désignation**, et elle est
+plus insidieuse : le nombre était juste, c'est ce qu'il prétendait décrire qui
+ne l'était pas. Personne ne va vérifier un chiffre qui a l'air mesuré.
+
+## OBS-101. Une brique ajoutée a multiplié par 437 un risque classé faible
+
+Suite directe de la précédente, et c'est la mesure la plus intéressante de la
+session.
+
+Une réponse de `/helix/streams` décrit jusqu'à cent diffusions, chacune avec son
+titre, sa langue, ses vignettes et ses étiquettes. Une réponse de
+`GetNumberOfCurrentPlayers` tient dans un entier. Pour un **nombre de lignes
+identique**, la ligne Bronze pèse **3 231 octets contre 176**, dix-huit fois
+plus.
+
+Projection annuelle à panel et cadence constants : **17,5 Go**, dont 16 pour la
+seule audience, contre les **41 Mo** que le rapport annonçait. Un facteur 437,
+dont un tiers vient du passage à 150 titres et le reste de la verbosité de la
+source.
+
+**Ce que ça révèle du registre de risques.** V-05, « couche Bronze sans
+conservation définie », était classé *faible* avec un horizon d'une douzaine de
+mois. Ce classement était **juste au moment où il a été posé**. Il est devenu
+faux sans que personne ne touche à V-05, parce qu'une décision d'architecture
+prise ailleurs a multiplié son assiette.
+
+La règle qui s'en dégage : **un registre de risques se relit quand
+l'architecture change, pas seulement quand un risque se matérialise.** Ajouter
+une source n'est pas un acte local ; ça déplace la sévérité de points de
+vigilance qui ne mentionnent pas cette source.
+
+Et la tentation à écarter, tant qu'à faire : tronquer la charge archivée pour
+économiser. Ce serait décider aujourd'hui de ce dont on aura besoin demain,
+c'est-à-dire exactement ce que la couche Bronze existe pour éviter. C'est la
+**durée de conservation** qui doit devenir une décision, pas le contenu.
+
+## OBS-102. La seconde source a produit un indicateur qu'aucune des deux ne portait
+
+Le premier cycle de collecte croisée donne, pour le 08/09/2026 :
+
+| Titre | Joueurs | Spectateurs | Spectateurs par joueur |
+|---|---|---|---|
+| Rust | 76 154 | 3 959 | 0,05 |
+| Project Zomboid | 75 006 | 51 289 | 0,68 |
+| Darkest Dungeon | 5 213 | 11 476 | 2,20 |
+| Fall Guys | 544 | 7 408 | **13,62** |
+
+Deux ordres de grandeur d'écart entre le premier et le dernier. Fall Guys a
+treize fois plus de spectateurs que de joueurs simultanés ; Rust en a vingt fois
+moins.
+
+**Ce que ça vaut pour la défense de l'architecture.** L'objection attendue est
+qu'une seconde source ajoute du volume sans ajouter d'information. Ce tableau y
+répond : le rapport entre les deux axes n'existe dans ni l'une ni l'autre des
+sources, il naît de leur jointure. C'est la justification la plus concrète de la
+couche Gold, dont c'est précisément le métier.

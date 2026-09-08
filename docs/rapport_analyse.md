@@ -138,10 +138,15 @@ réellement exécuté à un composant ambitieux jamais lancé.
 
 | Source | Accès | Contrainte imposée | Rôle retenu |
 |---|---|---|---|
-| RAWG | clé gratuite, 20 000 requêtes/mois | quota mensuel | Catalogue. **Non branchée à ce jour**, voir 4.4 |
-| Steam Web API, `GetNumberOfCurrentPlayers` | sans authentification | rend un compteur instantané, non un flux | Popularité jouée, cœur du temps réel |
-| Steam Store API, `appdetails` | sans authentification | tarifs par région | Tarification, depuis l'arbitrage du Bloc 3 |
-| Twitch API | OAuth, enregistrement développeur | jeton à renouveler | Popularité diffusée. **Non branchée à ce jour** |
+| Steam Web API, `GetNumberOfCurrentPlayers` | sans authentification | rend un compteur instantané, non un flux | Popularité **jouée**, cœur du temps réel |
+| Steam Store API, `appdetails` | sans authentification | un seul titre par appel utile | Tarification, depuis l'arbitrage du Bloc 3 |
+| Twitch Helix, `/streams` | OAuth `client_credentials` | jeton applicatif, 800 points/minute | Popularité **diffusée**. **Branchée le 08/09/2026** |
+| RAWG | clé gratuite, 20 000 requêtes/mois | quota mensuel | Catalogue. **Non branchée**, voir 4.4 |
+
+Les trois premières sont collectées toutes les 15 minutes pour les deux
+premières, une fois par jour pour la tarification. Un cycle complet mesure
+**1 min 16 s** côté Steam et **58 s** côté Twitch, sur 150 titres, dans une
+fenêtre de 15 minutes.
 
 ### 4.2 Une contrainte d'environnement structurante
 
@@ -161,73 +166,122 @@ un historique faux.
 Le référentiel demande les volumes à traiter. Ils sont ici mesurés sur la
 plateforme en fonctionnement, pas estimés.
 
-| Grandeur | Mesure |
+**Correction du 08/09/2026, à lire avant le tableau.** Les versions
+antérieures de cette section annonçaient « 78 octets » par relevé de
+fréquentation et « 238 octets » par relevé tarifaire. Ces deux nombres étaient
+les tailles de la **charge JSON archivée**, présentées comme des tailles de
+ligne. Une ligne de la couche Bronze porte en plus une centaine d'octets de
+métadonnées, ce qui les sous-estimait d'un facteur deux à trois. Les mesures
+ci-dessous sont des tailles de tuple complètes, obtenues par `pg_column_size`.
+
+| Grandeur | Mesure au 08/09/2026 |
 |---|---|
-| Empreinte d'un relevé de fréquentation | **78 octets** |
-| Empreinte d'un relevé tarifaire | **238 octets** |
-| Couche Bronze, croissance annuelle à 15 titres | **environ 41 Mo/an** |
-| Base applicative complète (Bronze + Silver + Gold) | **8,9 Mo** |
-| Base de métadonnées de l'orchestrateur | **12 Mo** |
-| Couche Gold Snowflake | 15 dimensions, 60 faits de popularité, 165 tarifs |
+| Ligne Bronze, relevé de fréquentation Steam | **176 octets** dont 77 de charge |
+| Ligne Bronze, relevé tarifaire Steam | **329 octets** dont 237 de charge |
+| Ligne Bronze, relevé d'audience Twitch | **3 231 octets** dont 3 138 de charge |
+| Ligne Silver, fréquentation / audience | **72 / 88 octets** |
+| Base applicative complète (Bronze + Silver + Gold) | **11,3 Mo** |
+| Base de métadonnées de l'orchestrateur | **13,9 Mo** |
+| Couche Gold Snowflake | 150 dimensions, 255 faits de popularité, 504 tarifs |
 
-**Le fait le plus utile de ce tableau** est que la base de l'orchestrateur pèse
-plus que la donnée du produit. À cette échelle, le coût de stockage n'est pas
-un critère d'architecture : c'est un argument à assumer devant un jury plutôt
-qu'à masquer.
+**Le fait le plus utile de ce tableau** reste que la base de l'orchestrateur
+pèse plus que la donnée du produit, 13,9 Mo contre 11,3. À cette échelle, le
+coût de stockage n'est pas un critère d'architecture : c'est un argument à
+assumer devant un jury plutôt qu'à masquer.
 
-**Projection à l'échelle réelle du commanditaire.** Un suivi de 200 titres,
-portefeuille et panel concurrent réunis, multiplie la volumétrie par environ 13,
-soit de l'ordre de **550 Mo par an**. La cadence d'appel, elle, devient le vrai
-facteur limitant bien avant le stockage.
+**Le second fait le plus utile est nouveau, et il est contre-intuitif.** Un
+relevé d'audience Twitch pèse **dix-huit fois** un relevé de fréquentation
+Steam. Ce n'est pas une question de nombre de lignes, qui est identique, mais
+de taille de réponse : Steam rend un entier, Twitch rend jusqu'à cent objets de
+diffusion décrivant chacun son titre, sa langue, ses vignettes et ses
+étiquettes. La couche Bronze archivant la réponse telle que reçue, elle
+archive tout cela.
 
-### 4.4 Une seule source, un seul fournisseur : le choix et son prix
+**Projection annuelle à cadence et panel constants**, calculée sur ces mesures :
 
-Deux des quatre sources analysées au Bloc 1 ne sont pas raccordées, RAWG et
-Twitch, et le suivi GOG est sorti du périmètre par l'arbitrage du Bloc 3. Les
-colonnes correspondantes existent dans le schéma et restent nulles.
+| Flux | Lignes par jour | Mo par an |
+|---|---|---|
+| Bronze, audience Twitch | 14 400 | **16 195** |
+| Bronze, fréquentation Steam | 14 400 | 882 |
+| Silver, audience puis fréquentation | 14 400 chacun | 441 puis 361 |
+| Bronze et Silver, tarifs | 150 | 21 |
+| **Total** | | **environ 17,5 Go par an** |
 
-**La raison n'est pas seulement un arbitrage de périmètre.** Steam est la seule
-source examinée qui réponde **sans authentification et sans quota**, sur ses
-deux endpoints. C'est ce qui a rendu applicable la règle de travail du bloc :
-rejouer la chaîne des dizaines de fois, dans l'intégration continue, sur
-conteneur jetable, depuis un clone neuf, **sans jamais placer un secret sur le
-chemin critique du premier test**.
+Le rapport avec les 41 Mo par an annoncés jusqu'ici est de **437**. Il vient
+pour un tiers du passage de 15 à 150 titres, et pour le reste de l'archivage
+d'une source verbeuse dont les réponses sont deux ordres de grandeur au-dessus
+de celles de Steam.
+
+**Ce que cette mesure oblige à décider.** À 16 Go par an de charges Twitch
+archivées, la couche Bronze cesse d'être gratuite et une politique de rétention
+devient nécessaire. Le principe de la couche, archiver ce qui a été reçu sans
+savoir d'avance ce qui servira, reste juste ; c'est sa durée de conservation qui
+doit devenir une décision explicite plutôt qu'un effet de bord. Point de
+vigilance V-15 de la feuille de route.
+
+La cadence d'appel, elle, n'est plus le facteur limitant qu'annonçait la version
+précédente de cette section : à 150 titres, un cycle occupe 1 min 16 s sur une
+fenêtre de 15 minutes, et Twitch 58 s. C'est le stockage qui devient contraignant
+en premier, ce qui inverse la conclusion antérieure.
+
+### 4.4 Deux sources, deux axes, et ce qui reste dehors
+
+**Steam a été la première source, et pour une raison qui n'est pas
+l'habitude.** C'est la seule des sources examinées qui réponde **sans
+authentification et sans quota**, sur ses deux points d'appel. C'est ce qui a
+rendu applicable la règle de travail du bloc : rejouer la chaîne des dizaines de
+fois, dans l'intégration continue, sur conteneur jetable, depuis un clone neuf,
+**sans jamais placer un secret sur le chemin critique du premier test**.
 
 Ce n'est pas un cas isolé mais un biais constant de la plateforme, le même qui
 rend le canal de notification facultatif et qui permet à l'étage de tests de
-tourner sans la clef Snowflake : **fonctionner avec rien de configuré**. Chacune
-des alternatives examinées ci-dessous demande une clef ou un jeton.
+tourner sans la clef Snowflake : **fonctionner avec rien de configuré**.
 
-**Le prix de ce choix, énoncé plutôt que subi.** Ce n'est pas une source unique,
-c'est un **fournisseur unique** : les deux endpoints appartiennent à Valve, donc
-une décision de Valve ne retire pas une part de la donnée mais sa totalité.
-C'est le point de vigilance V-10 de la feuille de route, requalifié en ce sens.
-Second effet, moins visible : la plateforme n'a jamais éprouvé le renouvellement
-d'un jeton **sur une source**, la paire de clefs RSA ne couvrant que l'entrepôt.
+**Twitch a été raccordée le 08/09/2026, et c'est la première fois qu'un secret
+entre sur le chemin d'une source.** Le flux OAuth `client_credentials`
+n'engage aucun utilisateur, il authentifie l'application seule, ce qui est le
+seul mode qu'un traitement automatique puisse satisfaire ; c'est le même
+raisonnement que la paire de clefs RSA côté Snowflake. Sans identifiants, la
+collecte d'audience est un no-op qui rend un succès, de sorte que la propriété
+« fonctionne avec rien de configuré » est préservée.
 
-**Les alternatives, évaluées sur l'axe qu'elles ajoutent** et non sur leur
-richesse. En raccorder une ne vaut que si elle mesure autre chose.
+**Ce que la seconde source apporte, et qui n'est pas un supplément de volume.**
+Steam mesure qui joue, Twitch mesure qui regarde. Ce sont deux axes et non deux
+mesures du même. Le rapport entre les deux est un indicateur qu'aucune source
+seule ne produit, et il varie de deux ordres de grandeur d'un titre à l'autre :
 
-| Source | Axe ajouté | Accès, vérifié le 08/09/2026 |
-|---|---|---|
-| Twitch Helix | Audience diffusée, **seul indicateur avancé** | OAuth `client_credentials` |
-| IGDB | Catalogue | **Mêmes identifiants que Twitch**, 4 req/s |
-| RAWG | Catalogue | Clef propre, 20 000 requêtes par mois |
-| GG.deals | Tarifs multi-boutiques | Clef gratuite, **attribution avec lien actif obligatoire** |
-| IsThereAnyDeal | Tarifs multi-boutiques | Clef gratuite, 1 000 requêtes par 5 minutes |
-| GOG | Tarifs | **Scraping, pas une API** : sorti du périmètre au Bloc 3 |
+| Titre | Joueurs | Spectateurs | Spectateurs par joueur |
+|---|---|---|---|
+| Rust | 76 154 | 3 959 | 0,05 |
+| Project Zomboid | 75 006 | 51 289 | 0,68 |
+| Darkest Dungeon | 5 213 | 11 476 | 2,20 |
+| Fall Guys | 544 | 7 408 | **13,62** |
 
-Deux faits orientent la suite. **IGDB s'authentifie par les identifiants
-Twitch**, une seule inscription ouvrant les deux, ce qui disqualifie RAWG par
-simple économie de moyens. Et Twitch est la seule à apporter un axe réellement
-neuf, l'audience diffusée précédant les ventes, là où un catalogue n'apporte que
-du statique. La priorité de raccordement est donc Twitch, puis IGDB, et le suivi
-tarifaire multi-boutiques ensuite : `dim_stores` existe déjà pour l'accueillir
-et ne porte aujourd'hui qu'une seule ligne.
+Mesures du 08/09/2026. Un titre peut avoir treize fois plus de spectateurs que
+de joueurs simultanés, ce qui est exactement le genre d'écart qu'un éditeur
+veut détecter tôt : l'audience diffusée est un indicateur avancé, elle précède
+généralement les ventes.
 
-L'état actuel est porté honnêtement partout où il se lit. Le cahier de recettes
-liste ces sources parmi ce qui n'est pas couvert, et le dictionnaire de données
-porte, colonne par colonne, la mention « source non branchée à ce jour ».
+**Cette source fait aussi travailler une brique qui ne travaillait pas.**
+`speed.game_mapping` porte depuis le Bloc 1 un nom qui annonce la résolution
+d'identifiants entre plateformes ; jusqu'ici elle ne résolvait que des
+identifiants Steam. Les 150 titres du panel portent désormais leur identifiant
+de catégorie Twitch, résolu par correspondance exacte puis par recherche
+approchante dont on refuse le flou, et propagé jusqu'à `dim_games`.
+
+**Ce qui reste dehors, et pourquoi.** Le catalogue, c'est-à-dire RAWG ou IGDB,
+n'est pas raccordé ; `metacritic_score` et `critical_tier` restent donc vides,
+ce que le dictionnaire de données déclare colonne par colonne. Entre les deux,
+IGDB serait retenue : elle s'authentifie par les **mêmes identifiants que
+Twitch**, déjà en place, là où RAWG demanderait une inscription de plus pour la
+même information. La tarification multi-boutiques, elle, attend : `dim_stores`
+existe pour l'accueillir et ne porte qu'une seule ligne.
+
+**La dépendance résiduelle, énoncée plutôt que subie.** Deux fournisseurs
+valent mieux qu'un, mais la répartition n'est pas symétrique : Valve porte
+toujours **la totalité** de la fréquentation et de la tarification, Twitch
+seulement l'audience. Une décision de Valve retirerait donc encore l'essentiel
+du produit. C'est le point de vigilance V-10, réduit et non refermé.
 
 ## 5. Les contraintes
 

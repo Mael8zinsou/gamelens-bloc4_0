@@ -487,6 +487,78 @@ conversion se fait au plus tard possible, à la composition, jamais à l'écritu
 Deux défauts d'affichage ont été trouvés par les premiers messages **lus**, non
 par les tests, ce qui est consigné en OBS-91 et couvert par TNOT-06.
 
+## DA-13 Une seconde source pour un second axe, pas pour du volume
+
+**Date** : 08/09/2026, session 13.
+
+**Ce qui a déclenché la décision** : le schéma promettait un monde
+multi-sources que les sources ne livraient pas. `speed.game_mapping` porte
+depuis le Bloc 1 un nom qui annonce la résolution d'identifiants entre
+plateformes et ne résolvait que des identifiants Steam ; `dim_stores` porte un
+vocabulaire contrôlé `api` / `scraping` pour une seule valeur ;
+`avg_viewer_count` était déclarée depuis le Bloc 2 et toujours nulle. Ce n'est
+pas la maigreur du volume qui était attaquable, c'est **l'écart entre ce que le
+schéma déclare et ce que les sources livrent**.
+
+**Le critère de choix n'a pas été la richesse de la source mais l'axe
+qu'elle ajoute.** Une source ne vaut d'être raccordée que si elle mesure autre
+chose. RAWG et IGDB apportent un catalogue, donc du statique. GG.deals et
+IsThereAnyDeal apportent des tarifs multi-boutiques, utiles mais sur un axe
+déjà couvert. **Twitch mesure qui regarde là où Steam mesure qui joue**, et
+c'est le seul indicateur avancé du lot : l'audience diffusée précède
+généralement les ventes.
+
+**Décision** : raccorder Twitch Helix, et une seule source à la fois.
+
+**Trois choix de conception, chacun contre un mode de défaillance précis.**
+
+*Une table distincte plutôt que des colonnes de plus.* La fréquentation et
+l'audience ont le même grain apparent mais pas la même disponibilité : un titre
+sans diffusion rend légitimement **zéro spectateur**, quand un titre retiré du
+catalogue Steam ne rend **rien**. Les fusionner imposerait de distinguer le zéro
+de l'absence dans une colonne nullable, exactement l'ambiguïté que la couche
+Bronze existe pour éviter. Mesuré au premier cycle : 54 titres sur 150 à zéro.
+
+*Le consumer est paramétré, pas dupliqué.* Un second module aurait été plus
+rapide à écrire et sans risque pour le chemin éprouvé, mais aurait figé **deux
+exemplaires de la garantie de livraison**, donc deux endroits où la corriger le
+jour où elle se révèle fausse. La boucle, l'ordre des validations et le traçage
+restent uniques ; seuls la requête d'écriture et l'extraction des paramètres
+varient selon le topic. Les topics, eux, restent séparés : rejouer les offsets
+d'une source ne doit pas rejouer ceux de l'autre.
+
+*La tâche Twitch ne fait jamais échouer le run.* Twitch est une source
+facultative greffée sur une chaîne éliminatoire. Si sa tâche échouait, la
+consommation passerait en `upstream_failed` et la collecte Steam, déjà publiée
+sur Kafka, ne serait pas écrite. C'est le défaut que DA-12 nomme à propos du
+canal de notification. L'échec n'est pas tu pour autant : `execution()`
+l'inscrit dans `speed.pipeline_runs` avant de le propager, et la règle critique
+`echecs_composants` le relève au cycle suivant.
+
+**Contrepartie assumée, et elle est double.**
+
+D'abord, **un secret entre pour la première fois sur le chemin d'une source**.
+La plateforme tenait jusqu'ici la propriété « fonctionne avec rien de
+configuré », Steam répondant sans authentification ni quota. Le flux OAuth
+`client_credentials` n'engage aucun utilisateur, ce qui est le seul mode qu'un
+traitement automatique puisse satisfaire, et sans identifiants la collecte est
+un no-op qui rend un succès : la propriété est préservée, mais elle n'est plus
+gratuite.
+
+Ensuite, et c'est la contrepartie qui n'avait pas été anticipée, **la couche
+Bronze change d'ordre de grandeur**. Une réponse de `/helix/streams` décrit
+jusqu'à cent diffusions ; la ligne archivée pèse 3 231 octets contre 176 pour un
+compteur Steam, dix-huit fois plus pour le même nombre de lignes. La projection
+annuelle passe de 41 Mo à **17,5 Go**, dont 16 pour la seule audience. Le point
+de vigilance V-05, classé faible depuis l'origine, est requalifié en
+conséquence.
+
+**Approximation assumée** : l'audience est la somme des **100 diffusions les
+plus regardées**, Helix les rendant triées par audience décroissante. Au-delà,
+la queue longue est faite de diffusions à un ou deux spectateurs. La troncature
+est constatée par la présence d'un curseur de pagination, journalisée et
+archivée, plutôt que passée sous silence.
+
 ## 3.1 Fréquentation
 
 | Étape | Objet | Transformation appliquée |
@@ -525,8 +597,8 @@ importe : une erreur sur l'une d'elles ne serait pas rattrapable autrement.
 
 | Étape | Objet | Transformation appliquée |
 |---|---|---|
-| Saisie | `config/watchlist.json` | panel de 15 titres, chaque `appid` vérifié en direct |
-| Silver | `speed.game_mapping` | table de correspondance entre identifiants Steam, Twitch et RAWG |
+| Saisie | `config/watchlist.json` | panel de **150 titres**, généré par `outils/construire_panel.py` : nom, développeur et genre lus dans l'API Steam `appdetails`, tout candidat dont le nom rendu diverge du nom attendu rejeté |
+| Silver | `speed.game_mapping` | table de correspondance entre identifiants Steam, Twitch et RAWG. `twitch_game_id` résolu pour **150 titres sur 150** par `ingestion/seed_twitch_ids.py` |
 | Gold | `mart.dim_games` | promotion des titres `is_active`, clef naturelle `steam_appid`, mise à jour sur conflit |
 
 `mart.dim_games.game_id` est un UUID interne, généré à la promotion et
@@ -540,11 +612,13 @@ jour où celui-ci change de numérotation.
 
 | Colonne | État |
 |---|---|
-| `avg_viewer_count`, `max_viewer_count` | vides, la source Twitch n'est pas branchée |
-| `dim_games.twitch_game_id` | vide, même raison |
 | `dim_games.gog_slug` | vide, le suivi GOG est hors périmètre depuis le Bloc 3 |
-| `dim_games.release_date`, `metacritic_score`, `critical_tier` | vides, source catalogue RAWG non branchée |
-| `dim_stores` | une seule boutique, Steam |
+| `dim_games.release_date`, `metacritic_score`, `critical_tier` | vides, aucune source catalogue raccordée. IGDB serait retenue plutôt que RAWG : elle s'authentifie par les **mêmes identifiants que Twitch**, déjà en place |
+| `dim_stores` | une seule boutique, Steam. La table existe pour en accueillir plusieurs |
+
+Trois lignes ont quitté ce tableau le 08/09/2026 : `avg_viewer_count`,
+`max_viewer_count` et `dim_games.twitch_game_id` sont alimentées depuis le
+raccordement de Twitch, respectivement pour 150 faits et 150 titres sur 150.
 
 ---
 

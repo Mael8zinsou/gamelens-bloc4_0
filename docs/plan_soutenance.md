@@ -133,7 +133,7 @@ subie.
 | # | Critère, verbatim | Preuve montrée |
 |---|---|---|
 | 13 | un pipeline temps réel (ex : SQL, Python) | Steam vers Kafka vers PostgreSQL, et le rejeu des offsets qui prouve l'idempotence |
-| 14 | un orchestrateur (ex : Apache Airflow) | **DIRECT 2** : les 4 DAG et leur historique de runs |
+| 14 | un orchestrateur (ex : Apache Airflow) | **DIRECT 2** : les 5 DAG et leur historique de runs |
 | 15 | des calculs distribués (ex : Spark) | Snowpark, le SQL généré et l'historique de session |
 
 Le critère cite Spark, le projet a choisi Snowpark. L'exigence porte sur le
@@ -222,7 +222,7 @@ entièrement sur des conteneurs locaux.
 | | Moment | Section | Durée | Ce qu'il coche |
 |---|---|---|---|---|
 | DIRECT 1 | `dashboard_viewer` refusé sur `mart.fact_prices`, puis la vue qui lui répond | 3 | ~40 s | critère 11 |
-| DIRECT 2 | Airflow : les 4 DAG, l'historique des runs, le graphe d'une promotion | 4 | ~60 s | critère 14 |
+| DIRECT 2 | Airflow : les 5 DAG, l'historique des runs, le graphe d'une promotion | 4 | ~60 s | critère 14 |
 | DIRECT 3 | Grafana : les 7 panneaux, avec la donnée du jour | 6 | ~60 s | critère 19 |
 
 Vérifié le 01/09/2026 : le refus tombe bien (`ERROR: permission denied for table
@@ -280,7 +280,7 @@ Elles visent des interfaces graphiques et ne peuvent pas être automatisées ici
 | # | Où | Ce qu'il faut cadrer | Critère | Réseau |
 |---|---|---|---|---|
 | 1 | GitHub, onglet Actions | Les 6 étages d'un run vert | 16, **éliminatoire** | requis |
-| 2 | http://localhost:8080 | Les 4 DAG, puis le graphe de `gamelens_promotion_gold` | 14, **éliminatoire** | non |
+| 2 | http://localhost:8080 | Les 5 DAG, puis le graphe de `gamelens_promotion_gold` | 14, **éliminatoire** | non |
 | 3 | http://localhost:3000 | Le tableau de bord entier, 7 panneaux | 19 | non |
 | 4 | Snowsight, Admin puis Usage | La consommation par entrepôt | 9 | requis |
 
