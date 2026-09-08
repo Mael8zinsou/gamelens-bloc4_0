@@ -63,7 +63,7 @@ def extraire_silver() -> dict[str, pd.DataFrame]:
     """
     requetes = {
         "GAME_MAPPING": """
-            SELECT steam_appid, unified_name, developer, genre
+            SELECT steam_appid, unified_name, developer, genre, twitch_game_id
             FROM speed.game_mapping WHERE is_active
         """,
         "DAILY_STATS": """
@@ -157,6 +157,7 @@ def promouvoir_dimensions(session: Session) -> int:
                     "UNIFIED_NAME": source["UNIFIED_NAME"],
                     "DEVELOPER": source["DEVELOPER"],
                     "GENRE": source["GENRE"],
+                    "TWITCH_GAME_ID": source["TWITCH_GAME_ID"],
                     "GOLD_LOADED_AT": F.current_timestamp(),
                 }
             ),
@@ -167,6 +168,7 @@ def promouvoir_dimensions(session: Session) -> int:
                     "DEVELOPER": source["DEVELOPER"],
                     "GENRE": source["GENRE"],
                     "STEAM_APPID": source["STEAM_APPID"],
+                    "TWITCH_GAME_ID": source["TWITCH_GAME_ID"],
                     "GOLD_LOADED_AT": F.current_timestamp(),
                 }
             ),

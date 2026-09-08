@@ -105,14 +105,17 @@ def promotion_gold():
             cur.execute(
                 """
                 INSERT INTO mart.dim_games
-                    (unified_name, genre, developer, steam_appid, gold_loaded_at)
-                SELECT m.unified_name, m.genre, m.developer, m.steam_appid, now()
+                    (unified_name, genre, developer, steam_appid, twitch_game_id,
+                     gold_loaded_at)
+                SELECT m.unified_name, m.genre, m.developer, m.steam_appid,
+                       m.twitch_game_id, now()
                 FROM speed.game_mapping m
                 WHERE m.is_active
                 ON CONFLICT ON CONSTRAINT uq_dim_games_steam_appid DO UPDATE
                    SET unified_name   = EXCLUDED.unified_name,
                        genre          = EXCLUDED.genre,
                        developer      = EXCLUDED.developer,
+                       twitch_game_id = EXCLUDED.twitch_game_id,
                        gold_loaded_at = now()
                 """
             )

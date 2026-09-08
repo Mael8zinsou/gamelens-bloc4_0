@@ -70,7 +70,7 @@ Referentiel unifie des jeux suivis (portefeuille Kestrel Interactive + panel con
 | `metacritic_score` | `smallint` | oui |  | Note critique agregee, attendue entre 0 et 100. Bornes verifiees par controle applicatif. |
 | `critical_tier` | `text` | oui |  | Acclaimed, Favorable ou Mixed. Vide a ce jour : la derivation depuis metacritic_score suppose un catalogue (RAWG ou IGDB) non branche. |
 | `steam_appid` | `integer` | oui |  | Identifiant Steam. Clef naturelle, contrainte UNIQUE. |
-| `twitch_game_id` | `text` | oui |  | Identifiant Twitch. Source non branchee a ce jour. |
+| `twitch_game_id` | `text` | oui |  | Identifiant de categorie Twitch, propage depuis speed.game_mapping. Resolu pour la totalite du panel depuis le 08/09/2026. |
 | `gog_slug` | `text` | oui |  | Identifiant GOG. Conserve bien que le suivi GOG soit hors perimetre depuis le Bloc 3. |
 | `rawg_id` | `integer` | oui |  | Identifiant RAWG, source catalogue. Source non branchee a ce jour. |
 | `gold_loaded_at` | `timestamp with time zone` | non | `now()` | Instant de promotion vers la couche Gold. |
@@ -107,8 +107,8 @@ Agregats journaliers de popularite jouee et diffusee, promus depuis la couche Si
 | `day` | `date` | non |  | Journee agregee. Avec game_id, forme la clef primaire et definit le grain journalier. |
 | `avg_player_count` | `numeric(12,2)` | oui |  | Moyenne des releves de frequentation de la journee. Colonne large, pas de modele EAV. |
 | `max_player_count` | `integer` | oui |  | Pic de frequentation de la journee. |
-| `avg_viewer_count` | `numeric(12,2)` | oui |  | Moyenne de l'audience diffusee. Nulle tant que la source Twitch n'est pas branchee. |
-| `max_viewer_count` | `integer` | oui |  | Pic d'audience diffusee. Non alimente. |
+| `avg_viewer_count` | `numeric(12,2)` | oui |  | Moyenne journaliere de l'audience diffusee sur Twitch, somme des spectateurs des 100 streams les plus regardes. Nulle si le titre n'a pas de categorie Twitch resolue. |
+| `max_viewer_count` | `integer` | oui |  | Pic d'audience diffusee de la journee, sur les memes releves. |
 
 Contraintes :
 
@@ -150,6 +150,19 @@ Agregat journalier de la frequentation, promu vers mart.fact_popularity_history 
 | `avg_player_count` | `numeric` | oui |  |  |
 | `max_player_count` | `integer` | oui |  |  |
 | `min_player_count` | `integer` | oui |  |  |
+| `observation_count` | `bigint` | oui |  |  |
+
+### `speed.v_daily_viewer_stats` (vue)
+Agregat journalier de l'audience diffusee, promu vers mart.fact_popularity_history par le DAG de promotion. observation_count sert de controle de completude.
+
+| Colonne | Type | Nul | Defaut | Description |
+|---|---|---|---|---|
+| `steam_appid` | `integer` | oui |  |  |
+| `unified_name` | `text` | oui |  |  |
+| `day` | `date` | oui |  |  |
+| `avg_viewer_count` | `numeric` | oui |  |  |
+| `max_viewer_count` | `integer` | oui |  |  |
+| `avg_stream_count` | `numeric` | oui |  |  |
 | `observation_count` | `bigint` | oui |  |  |
 
 ### `speed.v_indicateur_completude` (vue)
@@ -244,10 +257,10 @@ Referentiel de resolution des identifiants entre plateformes (Steam, Twitch, RAW
 |---|---|---|---|---|
 | `steam_appid` | `integer` | non |  | Identifiant Steam, clef naturelle du referentiel. Verifie en direct titre par titre. |
 | `unified_name` | `text` | non |  | Nom canonique retenu par GameLens, arbitre entre les libelles divergents des sources. |
-| `developer` | `text` | oui |  | Studio de developpement, renseigne manuellement. |
+| `developer` | `text` | oui |  | Studio de developpement, lu dans l'API Steam appdetails par outils/construire_panel.py et non saisi a la main. |
 | `genre` | `text` | oui |  | Genre principal. Sert de partition au classement distribue calcule par Snowpark. |
 | `steam_name` | `text` | oui |  | Libelle exact cote Steam, conserve pour tracer les ecarts avec unified_name. |
-| `twitch_game_id` | `text` | oui |  | Identifiant Twitch. Nul tant que la source de popularite diffusee n'est pas branchee. |
+| `twitch_game_id` | `text` | oui |  | Identifiant de categorie Twitch, resolu par ingestion/seed_twitch_ids.py. Nul si le titre n'a pas de categorie chez Twitch. |
 | `rawg_id` | `integer` | oui |  | Identifiant RAWG, source catalogue. |
 | `is_active` | `boolean` | non | `true` | Titre suivi par la collecte. Mis a faux plutot que supprime, pour ne pas orpheliner l'historique. |
 | `updated_at` | `timestamp with time zone` | non | `now()` | Derniere modification de la ligne de correspondance. |
@@ -317,6 +330,29 @@ Contraintes :
 - `price_snapshots_steam_appid_fkey` : `FOREIGN KEY (steam_appid) REFERENCES speed.game_mapping(steam_appid)`
 - `price_snapshots_pkey` : `PRIMARY KEY (snapshot_id)`
 - `uq_price_snapshot` : `UNIQUE (steam_appid, collected_at)`
+
+### `speed.viewer_count_events` (table)
+Releves d'audience diffusee sur Twitch, un enregistrement par titre et par instant de collecte. Puits idempotent du topic gamelens.twitch.viewer_count.
+
+| Colonne | Type | Nul | Defaut | Description |
+|---|---|---|---|---|
+| `event_id` | `bigint` | non | `nextval('speed.viewer_count_events_event` | Clef primaire technique. |
+| `steam_appid` | `integer` | non |  | Titre concerne, identifiant pivot de la plateforme. Reference speed.game_mapping. |
+| `twitch_game_id` | `text` | non |  | Identifiant Twitch effectivement interroge. Conserve pour tracer la resolution operee par game_mapping. |
+| `viewer_count` | `integer` | non |  | Somme des spectateurs de tous les streams en direct du titre a cet instant. Zero est une observation valide, pas une absence. |
+| `stream_count` | `integer` | non |  | Nombre de streams en direct a cet instant. Distingue une forte audience concentree d'une audience diffuse. |
+| `collected_at` | `timestamp with time zone` | non |  | Instant du releve, cote GameLens. Avec steam_appid, definit le grain et porte l'idempotence. |
+| `ingested_at` | `timestamp with time zone` | non | `now()` | Instant de l'ecriture en base. L'ecart avec collected_at est la latence supervisee. |
+| `kafka_partition` | `integer` | oui |  | Partition Kafka d'origine, conservee pour le diagnostic. |
+| `kafka_offset` | `bigint` | oui |  | Offset Kafka d'origine, conserve pour le diagnostic. |
+
+Contraintes :
+
+- `viewer_count_events_stream_count_check` : `CHECK ((stream_count >= 0))`
+- `viewer_count_events_viewer_count_check` : `CHECK ((viewer_count >= 0))`
+- `viewer_count_events_steam_appid_fkey` : `FOREIGN KEY (steam_appid) REFERENCES speed.game_mapping(steam_appid)`
+- `viewer_count_events_pkey` : `PRIMARY KEY (event_id)`
+- `uq_viewer_count_event` : `UNIQUE (steam_appid, collected_at)`
 
 ---
 

@@ -44,7 +44,7 @@ Referentiel unifie des jeux suivis (portefeuille Kestrel Interactive + panel con
 | `metacritic_score` | `NUMBER(3,0)` | oui | Note critique agregee, attendue entre 0 et 100. Bornes verifiees par verifier_gold.py, non par le moteur. |
 | `critical_tier` | `TEXT(16777216)` | oui | Acclaimed, Favorable ou Mixed. Vide a ce jour : la derivation depuis metacritic_score suppose un catalogue (RAWG ou IGDB) non branche. |
 | `steam_appid` | `NUMBER(10,0)` | oui | Identifiant Steam, clef naturelle. Contrainte UNIQUE declaree mais non appliquee : le doublon est rattrape par controle applicatif. |
-| `twitch_game_id` | `TEXT(16777216)` | oui | Identifiant Twitch. Source non branchee a ce jour. |
+| `twitch_game_id` | `TEXT(16777216)` | oui | Identifiant de categorie Twitch, propage depuis speed.game_mapping. Resolu pour la totalite du panel depuis le 08/09/2026. |
 | `gog_slug` | `TEXT(16777216)` | oui | Identifiant GOG. Conserve bien que le suivi GOG soit hors perimetre depuis le Bloc 3. |
 | `rawg_id` | `NUMBER(10,0)` | oui | Identifiant RAWG, source catalogue. Source non branchee a ce jour. |
 | `gold_loaded_at` | `TIMESTAMP_NTZ` | non | Instant de promotion vers la couche Gold. |
@@ -68,8 +68,8 @@ Agregats journaliers de popularite jouee et diffusee, promus depuis la couche Si
 | `day` | `DATE` | non | Journee agregee. Avec game_id, definit le grain. Sert egalement de clef de regroupement du stockage (CLUSTER BY). |
 | `avg_player_count` | `NUMBER(12,2)` | oui | Moyenne des releves de frequentation de la journee. Colonne large, pas de modele EAV. |
 | `max_player_count` | `NUMBER(10,0)` | oui | Pic de frequentation de la journee. |
-| `avg_viewer_count` | `NUMBER(12,2)` | oui | Moyenne de l'audience diffusee. Nulle tant que la source Twitch n'est pas branchee. |
-| `max_viewer_count` | `NUMBER(10,0)` | oui | Pic d'audience diffusee. Non alimente. |
+| `avg_viewer_count` | `NUMBER(12,2)` | oui | Moyenne journaliere de l'audience diffusee sur Twitch, somme des spectateurs des 100 streams les plus regardes. Nulle si le titre n'a pas de categorie Twitch resolue. |
+| `max_viewer_count` | `NUMBER(10,0)` | oui | Pic d'audience diffusee de la journee, sur les memes releves. |
 
 ### `mart.fact_prices` (table)
 Tarifs collectes par jeu et par boutique. Alimentee par l'API Steam appdetails (price_overview), qui remplace le scraping GOG sorti du perimetre par l'arbitrage du Bloc 3 (3.3).

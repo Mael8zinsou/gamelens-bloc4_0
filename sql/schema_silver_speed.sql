@@ -188,13 +188,13 @@ COMMENT ON COLUMN speed.game_mapping.steam_appid IS
     'Identifiant Steam, clef naturelle du referentiel. Verifie en direct titre par titre.';
 COMMENT ON COLUMN speed.game_mapping.unified_name IS
     'Nom canonique retenu par GameLens, arbitre entre les libelles divergents des sources.';
-COMMENT ON COLUMN speed.game_mapping.developer IS 'Studio de developpement, renseigne manuellement.';
+COMMENT ON COLUMN speed.game_mapping.developer IS 'Studio de developpement, lu dans l''API Steam appdetails par outils/construire_panel.py et non saisi a la main.';
 COMMENT ON COLUMN speed.game_mapping.genre IS
     'Genre principal. Sert de partition au classement distribue calcule par Snowpark.';
 COMMENT ON COLUMN speed.game_mapping.steam_name IS
     'Libelle exact cote Steam, conserve pour tracer les ecarts avec unified_name.';
 COMMENT ON COLUMN speed.game_mapping.twitch_game_id IS
-    'Identifiant Twitch. Nul tant que la source de popularite diffusee n''est pas branchee.';
+    'Identifiant de categorie Twitch, resolu par ingestion/seed_twitch_ids.py. Nul si le titre n''a pas de categorie chez Twitch.';
 COMMENT ON COLUMN speed.game_mapping.rawg_id IS 'Identifiant RAWG, source catalogue.';
 COMMENT ON COLUMN speed.game_mapping.is_active IS
     'Titre suivi par la collecte. Mis a faux plutot que supprime, pour ne pas orpheliner l''historique.';

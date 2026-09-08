@@ -163,7 +163,7 @@ COMMENT ON COLUMN mart.dim_games.metacritic_score IS
 COMMENT ON COLUMN mart.dim_games.critical_tier IS
     'Acclaimed, Favorable ou Mixed. Vide a ce jour : la derivation depuis metacritic_score suppose un catalogue (RAWG ou IGDB) non branche.';
 COMMENT ON COLUMN mart.dim_games.steam_appid IS 'Identifiant Steam. Clef naturelle, contrainte UNIQUE.';
-COMMENT ON COLUMN mart.dim_games.twitch_game_id IS 'Identifiant Twitch. Source non branchee a ce jour.';
+COMMENT ON COLUMN mart.dim_games.twitch_game_id IS 'Identifiant de categorie Twitch, propage depuis speed.game_mapping. Resolu pour la totalite du panel depuis le 08/09/2026.';
 COMMENT ON COLUMN mart.dim_games.gog_slug IS
     'Identifiant GOG. Conserve bien que le suivi GOG soit hors perimetre depuis le Bloc 3.';
 COMMENT ON COLUMN mart.dim_games.rawg_id IS 'Identifiant RAWG, source catalogue. Source non branchee a ce jour.';
@@ -190,5 +190,5 @@ COMMENT ON COLUMN mart.fact_popularity_history.avg_player_count IS
     'Moyenne des releves de frequentation de la journee. Colonne large, pas de modele EAV.';
 COMMENT ON COLUMN mart.fact_popularity_history.max_player_count IS 'Pic de frequentation de la journee.';
 COMMENT ON COLUMN mart.fact_popularity_history.avg_viewer_count IS
-    'Moyenne de l''audience diffusee. Nulle tant que la source Twitch n''est pas branchee.';
-COMMENT ON COLUMN mart.fact_popularity_history.max_viewer_count IS 'Pic d''audience diffusee. Non alimente.';
+    'Moyenne journaliere de l''audience diffusee sur Twitch, somme des spectateurs des 100 streams les plus regardes. Nulle si le titre n''a pas de categorie Twitch resolue.';
+COMMENT ON COLUMN mart.fact_popularity_history.max_viewer_count IS 'Pic d''audience diffusee de la journee, sur les memes releves.';
