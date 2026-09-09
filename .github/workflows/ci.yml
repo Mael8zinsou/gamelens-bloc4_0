@@ -179,7 +179,7 @@ jobs:
           if [ -n "${manquants}" ]; then
             echo "objets absents apres initialisation : ${manquants}"; exit 1
           fi
-          echo "les 19 objets attendus des schemas bronze, speed et mart sont presents"
+          echo "les 21 objets attendus des schemas bronze, speed et mart sont presents"
 
       - name: Tests de securite sur les roles
         # Ces tests ont besoin d'une base : l'etage `tests` les ignore

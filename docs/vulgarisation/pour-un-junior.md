@@ -937,7 +937,7 @@ plus haute, pas le problème lui-même.
 |---|---|---|
 | INC-001 | Airflow ne tourne pas nativement sous Windows, mais `import airflow` réussit | Un import qui passe ne prouve pas qu'un composant fonctionne |
 | INC-002 | Git Bash réécrit les chemins de volume Docker. L'hypothèse « c'est l'accent dans le chemin » était fausse | Change une variable à la fois : le même montage depuis PowerShell a disculpé les accents |
-| INC-003 | Compte Snowflake à recréer, recréation volontairement différée | Un compte d'essai a une durée de vie : ne l'allume pas avant d'en avoir l'usage |
+| INC-003 | Rien pour parler à l'entrepôt : ni compte, ni configuration. Réglé dès le lendemain, et le diagnostic se trompait sur la cause (pas un essai expiré, un compte jamais créé) | Tant que la panne dure, construis derrière une frontière de configuration. Ici la contrainte a disparu et la propriété est restée : la bascule vers le vrai entrepôt n'a coûté aucune réécriture |
 | INC-005 | Le DAG aurait dupliqué ses lignes au rejeu, faute de contrainte d'unicité | Détecté sans plantage, en cherchant à écrire un `ON CONFLICT` et en constatant qu'il n'avait rien où s'ancrer |
 | INC-006 | `logical_date` vaut `None` sur un lancement manuel en Airflow 3 | Ne suppose pas qu'une valeur fournie par le cadre est toujours présente |
 | INC-007 | Quatre collectes réelles, une seule ligne de journal | Vérifie l'effet de bord attendu, pas seulement le résultat principal |

@@ -41,42 +41,54 @@ quinzaine de titres. C'est une alternative construite plutôt qu'achetée à des
 outils du marché.
 
 ```
-        Steam Web API                    Steam Store API
-   GetNumberOfCurrentPlayers                appdetails
-              |                                  |
-              +--------- archivage brut ---------+
-              |                                  |
-              v                                  v
-        bronze.reponses_brutes  (tout appel, abouti ou non)
-              |
-              v
-   ingestion/steam_producer.py  --->  Apache Kafka (KRaft)
-                                   gamelens.steam.player_count
-                                             |
-                              ingestion/kafka_to_postgres.py
-                                             |
-                                             v
-                       PostgreSQL, schema speed  (Silver speed)
-                    player_count_events, price_snapshots,
-                    game_mapping, pipeline_runs, alertes
-                                             |
-                    +------------------------+------------------------+
-                    |                                                 |
-   DAG gamelens_promotion_gold              DAG gamelens_promotion_snowflake
-        quotidien, 02h30 UTC                        quotidien, 03h00 UTC
-        SQL, hook PostgreSQL                     appelle snowpark_promotion.py
-                    |                                                 |
-                    v                                                 v
-        PostgreSQL, schema mart                          Snowflake, schema mart
-        prototype et repli                                 cible de production
-        dim_games, dim_stores,                      dim_games, dim_stores,
-        fact_prices,                                fact_prices,
-        fact_popularity_history                     fact_popularity_history
-                    |                                                 |
-                    v                                                 v
-        speed.v_indicateur_gold                     controle en fin de DAG, plus
-        retard en jours                             29 contrats dbt en CI et
-                                                    8 controles applicatifs
+    Steam Web API           Twitch Helix          Steam Store API
+ GetNumberOfCurrentPlayers    /streams               appdetails
+      (qui joue)          (qui regarde)          (price_overview)
+           |                    |                       |
+           v                    v                       v
+   steam_producer.py    twitch_producer.py       steam_prices.py
+           |     \              |      \             /      |
+           |      +-------------+-------+-----------+       |
+           |                    |                           |
+           |                    v                           |
+           |      bronze.reponses_brutes                    |
+           |      tout appel, abouti ou non, sans UPDATE    |
+           |                                                |
+           v                    v                           |
+   Apache Kafka (KRaft), DEUX topics separes                |
+   gamelens.steam.player_count                              |
+   gamelens.twitch.viewer_count                             |
+                    |                                       |
+      ingestion/kafka_to_postgres.py                        |
+      un seul consumer abonne aux deux topics, qui          |
+      choisit sa table sur le topic d'origine du message    |
+                    |                                       |
+                    v                                       v
+   PostgreSQL, schema speed  (Silver speed)
+   player_count_events, viewer_count_events, price_snapshots,
+   game_mapping, pipeline_runs, alertes
+                    |
+      +-------------+--------------------------+
+      |                                        |
+ DAG gamelens_promotion_gold      DAG gamelens_promotion_snowflake
+   quotidien, 02h30 UTC                quotidien, 03h00 UTC
+   SQL, hook PostgreSQL             appelle snowpark_promotion.py
+      |                                        |
+      v                                        v
+ PostgreSQL, schema mart              Snowflake, schema mart
+ prototype et repli                   cible de production
+ dim_games, dim_stores,               dim_games, dim_stores,
+ fact_prices,                         fact_prices,
+ fact_popularity_history              fact_popularity_history
+      |                                        |
+      v                                        v
+ speed.v_indicateur_gold              controle en fin de DAG, plus
+ retard en jours                      29 contrats dbt en CI et
+                                      8 controles applicatifs
+
+ En travers de tout : DAG gamelens_supervision, 6 regles au quart
+ d'heure et notification immediate des critiques ; DAG gamelens_battement,
+ 08h et 20h, temoin separe qui denonce l'arret du precedent.
 ```
 
 **Les deux branches sont ordonnancees depuis le 31/08/2026.** Jusque-la, seule
@@ -92,14 +104,27 @@ Leur profondeur d'historique, elle, differe legitimement, et il vaut mieux le
 savoir avant qu'on ne le demande. Les deux promotions n'ont pas la meme portee :
 celle de PostgreSQL traite **une journee par execution**, celle de Snowpark
 rejoue **tout l'historique disponible** par MERGE, ce qui la rend idempotente
-mais aussi rattrapante. Mesure du 31/08/2026 : 4 journees cote Snowflake
-(19, 20, 27, 31/08) contre 3 cote PostgreSQL, a qui manque le 19/08 faute d'une
-execution datee de ce jour-la. Ce n'est pas un defaut, c'est une consequence de
-deux strategies d'ecriture differentes.
+mais aussi rattrapante.
 
-**Quatre DAG Airflow** orchestrent l'ensemble : ingestion toutes les 15 minutes,
+Mesure du 09/09/2026, prise sur les deux couches le meme jour :
+
+| Couche Gold | Journees | Plus ancienne | Faits de popularite | Tarifs |
+|---|---|---|---|---|
+| Snowflake, cible | **9** | 19/08/2026 | 405 | 945 |
+| PostgreSQL, prototype | 8 | 20/08/2026 | 390 | 900 |
+
+L'ecart tient a une seule journee, toujours la meme depuis le premier releve du
+31/08 : le 19/08, que PostgreSQL n'a jamais eu faute d'une execution datee de ce
+jour-la, et que Snowpark rattrape a chaque MERGE. Ce n'est pas un defaut, c'est
+la consequence de deux strategies d'ecriture differentes, et c'est aussi la
+raison pour laquelle les deux chiffres ne convergeront jamais d'eux-memes.
+
+**Cinq DAG Airflow** orchestrent l'ensemble : ingestion toutes les 15 minutes,
 promotion PostgreSQL à 02h30 UTC, promotion Snowflake à 03h00, supervision
-toutes les 15 minutes.
+toutes les 15 minutes, et un battement à 8h et 20h. Le cinquième est le plus
+récent, ajouté le 07/09/2026, et le seul dont l'objet ne soit pas de traiter de
+la donnée : il surveille la supervision, ce qu'aucun des quatre autres ne peut
+faire. Voir DA-12.
 
 **Deux architectures croisées.** Medallion pour les couches (Bronze, Silver,
 Gold), Lambda pour les chemins (rapide et batch). Le raisonnement est en
@@ -593,7 +618,34 @@ centimes, le repli de `initial` sur `final`, et la dérivation du drapeau de
 promotion. C'est précisément parce qu'elles existent que la couche Bronze
 importe : une erreur sur l'une d'elles ne serait pas rattrapable autrement.
 
-## 3.3 Référentiel des jeux
+## 3.3 Audience diffusée
+
+| Étape | Objet | Transformation appliquée |
+|---|---|---|
+| Source | `/helix/streams`, un appel par `twitch_game_id`, jusqu'à 100 diffusions rendues triées par audience décroissante | aucune |
+| Bronze | `bronze.reponses_brutes.charge` | aucune, corps JSON conservé tel quel. **3 231 octets par ligne** contre 176 côté Steam, voir DA-13 |
+| Transport | message Kafka `{steam_appid, twitch_game_id, unified_name, viewer_count, stream_count, collected_at}` sur `gamelens.twitch.viewer_count` | **somme** des `viewer_count` des diffusions rendues, et comptage de celles-ci |
+| Silver | `speed.viewer_count_events.viewer_count`, `.stream_count` | aucune ; `ingested_at` ajouté par la base |
+| Agrégat | `speed.v_daily_viewer_stats` | `AVG` arrondie à 2 décimales et `MAX` par jeu et par jour, en UTC |
+| Gold | `mart.fact_popularity_history.avg_viewer_count`, `.max_viewer_count` | reprise de la vue d'agrégat |
+
+**La seule transformation de fond est la somme**, et c'est aussi la seule
+approximation. Helix ne rend que les 100 diffusions les plus regardées, triées
+par audience décroissante ; au-delà, la queue longue est faite de diffusions à
+un ou deux spectateurs. La troncature n'est pas passée sous silence : elle se
+constate à la présence d'un curseur de pagination, qui est journalisé et
+archivé. Voir DA-13.
+
+**Point de vigilance de lecture, symétrique de celui de 3.1 et plus piégeux.**
+Un titre sans aucune diffusion rend légitimement **zéro spectateur**, et cette
+ligne est écrite comme les autres. Un zéro d'audience est donc une mesure, pas
+une absence de mesure, contrairement à ce qu'un tableau de bord laisse
+spontanément croire. Mesuré au premier cycle : 54 titres sur 150 à zéro. C'est
+la raison pour laquelle l'audience vit dans **sa propre table** plutôt qu'en
+colonnes de `player_count_events`, où il aurait fallu distinguer le zéro de
+l'absence dans une colonne nullable.
+
+## 3.4 Référentiel des jeux
 
 | Étape | Objet | Transformation appliquée |
 |---|---|---|
@@ -606,7 +658,7 @@ indépendant de tout identifiant source. C'est la convention posée au Bloc 2 :
 une clef technique ne doit rien devoir à un fournisseur, sous peine de casser le
 jour où celui-ci change de numérotation.
 
-## 3.4 Ce qui n'est pas alimenté
+## 3.5 Ce qui n'est pas alimenté
 
 À dire clairement, pour qu'un lecteur ne cherche pas une donnée absente.
 
@@ -643,7 +695,15 @@ conteneurs. Aucune valeur de connexion n'est écrite en dur dans le code.
 | Variable | Défaut | Remarque |
 |---|---|---|
 | `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | `kafka:29092` dans les conteneurs |
-| `KAFKA_TOPIC_PLAYERS` | `gamelens.steam.player_count` | |
+| `KAFKA_TOPIC_PLAYERS` | `gamelens.steam.player_count` | fréquentation, source Steam |
+| `KAFKA_TOPIC_VIEWERS` | `gamelens.twitch.viewer_count` | audience, source Twitch |
+
+**Deux topics et non un seul avec un type d'événement**, alors qu'un unique
+consumer les lit tous les deux. Les deux flux n'ont ni la même cadence de panne
+ni le même puits, et rejouer les offsets d'une source ne doit pas rejouer ceux
+de l'autre. Le consumer choisit sa table sur le topic d'origine du message, et
+**lève sur un topic inconnu** plutôt que de l'ignorer : écrire une audience dans
+la table de fréquentation serait pire qu'une panne.
 
 Deux écouteurs distincts, et c'est volontaire : `INTERNAL` sur `kafka:29092`
 pour le réseau Docker, `EXTERNAL` sur `localhost:9092` pour le poste. Un client
@@ -695,6 +755,36 @@ sans rapport apparent, et l'incident complet est en INC-004.
 
 ---
 
+## 4.6 Sources et canaux facultatifs
+
+Cinq variables ajoutées les 07 et 08/09/2026. Elles partagent une propriété qui
+est un choix et non une commodité : **absent n'est pas cassé, configuré mais
+injoignable l'est.**
+
+| Variable | Défaut | Lue par | Remarque |
+|---|---|---|---|
+| `TWITCH_CLIENT_ID` | aucun | `ingestion/twitch_producer.py` | OAuth `client_credentials`, aucun utilisateur engagé |
+| `TWITCH_CLIENT_SECRET` | aucun | idem | |
+| `TELEGRAM_BOT_TOKEN` | aucun | `supervision/notifications.py` | canal d'alerte, voir DA-12 |
+| `TELEGRAM_CHAT_ID` | aucun | idem | identifiant de canal, **négatif**, forme `-100xxxxxxxxxx` |
+| `GAMELENS_TIMEZONE` | `Europe/Paris` | idem | fuseau d'**affichage** seulement |
+
+Sans identifiants, la collecte d'audience et la notification sont des no-op qui
+rendent un succès : un dépôt fraîchement cloné et la chaîne d'intégration
+continue n'ont ni compte Twitch ni salon de messagerie, et doivent fonctionner
+sans. Avec des identifiants présents mais refusés, l'exécution est tracée en
+échec dans `speed.pipeline_runs`, ce qui déclenche la règle critique
+`echecs_composants`. Taire un composant déclaré qui ne fonctionne plus
+reproduirait le défaut que ces composants corrigent. Les deux comportements sont
+testés, TTWI-05 et TNOT-04, TNOT-05 : ce n'est pas un silence à corriger.
+
+**`GAMELENS_TIMEZONE` ne change rien à ce qui est stocké.** La base écrit en UTC
+et continue de le faire ; seule la mise en forme destinée à un lecteur est
+convertie, au plus tard possible. Piège connu : ce qui est formaté par `to_char()`
+en SQL sort dans le fuseau de la **session** et échappe donc au convertisseur
+Python. Voir OBS-92.
+
+---
 # 5. Modèle de sécurité
 
 Quatre rôles, posés au Bloc 1, déclinés à l'identique sur PostgreSQL et
@@ -784,9 +874,9 @@ lancement manuel. Partir du fichier compose officiel de la version exacte.
 | `ingestion/` | pipeline temps réel, collecte tarifaire, archivage Bronze |
 | `dags/` | cinq DAG Airflow |
 | `entrepot/` | tout ce qui vise Snowflake : connexion, exécution SQL, Snowpark, contrôles, recette de CI |
-| `supervision/` | règles d'alerte et vérification du tableau de bord |
+| `supervision/` | règles d'alerte, canal de notification, vérification du tableau de bord |
 | `sql/` | schémas et documentation des colonnes |
-| `outils/` | génération du dictionnaire de données |
+| `outils/` | générateurs : dictionnaires, schéma de données, panel de titres, support de soutenance et ses visuels |
 | `tests/` | tests unitaires et tests de sécurité |
 | `docker/` | images Airflow et outillage, provisionnement Grafana |
 | `docs/` | documentation, dont ce fichier |
@@ -804,9 +894,14 @@ cp .env.example .env          # completer la section Snowflake si besoin
 docker compose up -d          # 7 conteneurs
 docker compose ps             # attendre que tous soient healthy
 python -m pip install -r requirements.txt
-python ingestion/create_topics.py       # declaration explicite des topics
+python ingestion/create_topics.py       # declaration explicite des DEUX topics
 python ingestion/seed_game_mapping.py   # referentiel des titres suivis
+python ingestion/seed_twitch_ids.py     # facultatif, resout les identifiants Twitch
 ```
+
+La derniere commande n'a d'effet qu'avec des identifiants Twitch renseignes
+(section 4.6). Sans eux, la plateforme demarre et fonctionne, l'audience seule
+etant absente.
 
 Les schémas PostgreSQL sont appliqués automatiquement au premier démarrage, par
 les scripts montés dans `docker-entrypoint-initdb.d`, dans l'ordre `00`, `10`,
@@ -824,9 +919,12 @@ docker exec -i gamelens-postgres psql -U gamelens_app -d gamelens \
 
 Elle n'est pas seulement écrite, elle est **exécutée à chaque push**. L'étage
 d'intégration de la chaîne monte un socle Docker neuf, applique les schémas,
-vérifie la présence des 19 objets attendus **par leur nom**, exécute le pipeline
+vérifie la présence des 21 objets attendus **par leur nom**, exécute le pipeline
 de bout en bout, contrôle le résultat en base, éprouve l'idempotence, et
-vérifie que la couche Bronze s'est alimentée.
+vérifie que la couche Bronze s'est alimentée. Ils étaient 19 avant que la
+seconde source n'ajoute `speed.viewer_count_events` et `speed.v_daily_viewer_stats`,
+et la liste est nommée précisément pour que ce genre d'ajout la fasse grandir
+sans rien casser.
 
 Une procédure d'installation qu'on ne rejoue jamais devient fausse sans que
 personne ne le remarque.
@@ -867,8 +965,8 @@ fréquente soit aussi la plus rapide à détecter.
 | Étage | Ce qu'il vérifie |
 |---|---|
 | Qualité | lint et format sur cinq répertoires |
-| Tests unitaires | 39 tests, sans infrastructure |
-| Intégrité des DAG | les cinq DAG s'analysent et sont enregistrés, vérifié par leur nom |
+| Tests unitaires | 57 tests, sans infrastructure |
+| Intégrité des DAG | les DAG s'analysent et sont enregistrés, vérifiés **par leur nom**. La liste en porte quatre sur cinq au 09/09/2026 : `gamelens_battement` n'y a pas été ajouté, voir la réserve de TING-01 dans le cahier de recettes |
 | Intégration | socle Docker neuf, pipeline complet, sécurité, idempotence, Bronze, dictionnaire |
 | Recette de l'entrepôt | base Snowflake jetable, schéma appliqué, calcul distribué confronté à des valeurs calculées à la main, contraintes du moteur éprouvées, contrôles en positif **et en négatif** |
 | Publication | image poussée avec double étiquetage |
@@ -893,11 +991,25 @@ Snowflake vient de laisser entrer faute d'appliquer ses contraintes.
 |---|---|---|
 | [A1, dictionnaire PostgreSQL](annexes/dictionnaire_donnees.md) | schémas `bronze`, `speed`, `mart` : tables, vues, colonnes, types, contraintes | **généré** |
 | [A2, dictionnaire Gold Snowflake](annexes/dictionnaire_gold_snowflake.md) | couche Gold cible | **généré** |
+| [A3, schéma de données Gold](annexes/schema_donnees.md) | diagramme des quatre tables, contraintes par type, matrice de droits lue par `SHOW GRANTS` | **généré** |
 
-Ces deux annexes sont produites depuis le catalogue des bases par
-`outils/generer_dictionnaire.py`, et **ne doivent jamais être modifiées à la
-main**. La source des descriptions est constituée par les `COMMENT ON` des
-fichiers de `sql/`.
+Les trois annexes sont produites depuis le catalogue des bases,
+`outils/generer_dictionnaire.py` pour les deux premières et
+`outils/generer_schema.py` pour la troisième, et **ne doivent jamais être
+modifiées à la main**. La source des descriptions est constituée par les
+`COMMENT ON` des fichiers de `sql/`.
+
+**Piège que la génération ne supprime pas** : le générateur ne lit pas les
+fichiers de `sql/`, il lit le **catalogue vivant**. Corriger un commentaire dans
+`sql/` puis régénérer ne change donc rien tant que le `COMMENT ON` n'a pas été
+appliqué à la base. C'est OBS-95, et c'est la nuance qui sépare « documentation
+générée » de « documentation vraie ».
+
+**A3 a une particularité qu'il faut dire** : les cibles des clés étrangères y
+sont lues dans le DDL et non dans le catalogue, celui-ci ne les exposant pas sur
+ce moteur (`SHOW IMPORTED KEYS` refusé, `key_column_usage` inexistant). Les deux
+sources sont recoupées sur le nombre de contraintes par type, et la génération
+s'arrête si elles divergent.
 
 ```bash
 python outils/generer_dictionnaire.py                       # PostgreSQL
@@ -913,7 +1025,21 @@ la commande à lancer.
 C'est ce qui distingue une garantie d'une consigne. « Penser à régénérer après
 modification du schéma » n'est pas un mécanisme, c'est un espoir.
 
+**Et c'est encore un espoir pour A3.** `outils/generer_schema.py` porte le même
+mode `--verifier`, mais la chaîne ne l'appelle pas : seuls les deux
+dictionnaires sont vérifiés. L'écart est énoncé ici plutôt que laissé à
+découvrir, parce que le paragraphe ci-dessus deviendrait faux si on le lisait
+comme couvrant les trois annexes.
+
+```bash
+python outils/generer_schema.py             # regenere A3
+python outils/generer_schema.py --verifier  # sans ecrire, pas encore en CI
+```
+
 ---
 
-Dernière mise à jour : 27/08/2026. Les annexes se régénèrent, ce document se
-relit à chaque décision d'architecture nouvelle.
+Dernière mise à jour : 09/09/2026, document confronté à la plateforme en
+fonctionnement et non relu seul. Les annexes se régénèrent ; ce document se
+relit à chaque décision d'architecture nouvelle, et **à chaque brique ajoutée**,
+la révision du 09/09 ayant trouvé une source, un topic, une table Silver et un
+DAG absents du schéma d'ensemble.

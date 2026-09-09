@@ -525,6 +525,14 @@ Trois comportements vérifiés séparément.
 - **Observé (20/08/2026)** : ligne présente, `lus=6, ecrits=2`.
 - **Verdict** : **PASS**.
 - **Automatisé** : oui, étage `integration` de la CI, avec assertion explicite.
+- **Ce que ce titre ne veut pas dire, et qu'il faut préciser depuis le
+  07/09/2026** : le moteur se **trace** lui-même, il ne se **surveille** pas
+  lui-même. La différence est tout l'objet de DA-12. Sa trace n'est lue que par
+  la règle `composant_muet`, qu'il évalue lui-même : arrêté, il n'écrit plus
+  rien, n'évalue plus rien, et son silence devient indiscernable du bon
+  fonctionnement. C'est `gamelens_battement`, DAG séparé, qui le surveille
+  réellement. Ce cas garde sa valeur, il ne couvre simplement pas ce que son
+  titre laisse entendre.
 
 ---
 
@@ -533,13 +541,28 @@ Trois comportements vérifiés séparément.
 Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt privé
 `Mael8zinsou/gamelens-bloc4_0`.
 
-| Étage | Contenu | État au 20/08/2026 |
-|---|---|---|
-| `qualite` | `ruff check` et `ruff format --check` sur 4 répertoires | ✅ |
-| `tests` | Tests unitaires, sans réseau ni base | ✅ `14 passed, 13 skipped` |
-| `dag` | Intégrité du DAG dans un conteneur jetable | ✅ |
-| `integration` | Socle Docker réel, 6 contrôles métier | ✅ |
-| `publication` | Image Airflow poussée sur `ghcr.io` | ✅ deux étiquettes |
+Six étages, du moins coûteux au plus coûteux, pour que l'erreur la plus fréquente
+soit aussi la plus rapide à détecter. Ce tableau décrit la chaîne **au
+09/09/2026** ; il en décrivait cinq jusqu'à cette date, la recette de l'entrepôt
+y ayant été ajoutée sans que le cahier suive.
+
+| Étage | Contenu |
+|---|---|
+| `qualite` | `ruff check` puis `ruff format --check` sur **cinq** répertoires : `ingestion`, `dags`, `tests`, `supervision`, `entrepot` |
+| `tests` | **57 tests** collectés, sans réseau ni base. Les 20 cas de sécurité y sont volontairement ignorés, faute de base |
+| `dag` | Intégrité des DAG dans un conteneur jetable, vérifiée **par leur nom**. Voir la réserve de TING-01 |
+| `integration` | Socle Docker réel, **8 contrôles métier** détaillés plus bas |
+| `entrepot` | Recette Snowflake sur base jetable, créée pour le run et supprimée après. Voir TS-14 |
+| `publication` | Image Airflow poussée sur `ghcr.io`, double étiquetage `latest` et SHA |
+
+**Dernier run vert connu** : commit `0255762`, les six étages en succès,
+4 min 15 s. La capture est `docs/captures/github_actions.png`, et c'est la
+preuve produite pour le C4.2.3.
+
+Le lint ne couvre pas `outils/`. Ce n'est pas un oubli à corriger dans
+l'urgence : ce répertoire ne produit que des documents, et un défaut de style y
+est sans effet sur la plateforme. C'est en revanche un écart à connaître avant
+d'affirmer que « tout le dépôt est linté ».
 
 ## TSUP-06. Une panne de quatre jours, détectée et refermée sans personne
 
@@ -725,7 +748,22 @@ Exécutés par la CI à chaque `push` et chaque `pull request`, dépôt privé
 - **Test négatif** : même contrôle avec `gamelens_dag_inexistant` dans la liste
   attendue. Observé : `ECHEC: gamelens_dag_inexistant absent de la liste`,
   **code de sortie 1**.
-- **Verdict** : PASS.
+- **Verdict** : PASS, sur le périmètre qu'il couvre.
+- **Réserve, relevée le 09/09/2026 et non corrigée** : la liste `ATTENDUS` du
+  fichier de chaîne porte toujours **quatre noms**. `gamelens_battement`, ajouté
+  le 07/09, n'y figure pas. Le cinquième DAG pourrait donc disparaître ou cesser
+  de s'analyser sans que cet étage vire au rouge, et la documentation technique
+  affirmait que les cinq étaient couverts. La correction tient en une ligne,
+  elle n'est volontairement pas faite ici : modifier la chaîne le jour du dépôt
+  relancerait un run dont la capture verte est elle-même un livrable.
+
+  L'ironie mérite d'être relevée plutôt que tue. Ce cas existe précisément parce
+  que le contrôle « ne vérifiait qu'un DAG sur trois », et il vient de reproduire
+  son propre défaut à une échelle plus petite. **Une liste nommée force une
+  modification consciente, elle ne la garantit pas** : elle rend l'oubli
+  possible, là où un comptage le rendait invisible. C'est un progrès, pas une
+  garantie, et les confondre est exactement ce qui a permis à ce trou de rester
+  ouvert deux jours.
 
 ## TING-02. Un cycle complet d'ingestion orchestrée
 
@@ -1292,15 +1330,26 @@ qui rend cette coexistence défendable plutôt que redondante.
 
 Chacun a une assertion explicite, aucun ne se contente d'un code de retour nul.
 
-| Contrôle | Assertion | Observé |
-|---|---|---|
-| Initialisation des schémas | Les 17 objets nommés de `speed` et `mart` existent | aucun manquant |
-| Cloisonnement des rôles | 13 cas de la matrice de droits, refus compris | `13 passed`, dont `refuse] PASSED` |
-| Pipeline temps réel | Le pipeline écrit réellement des lignes | > 0 |
-| Idempotence du puits | Le rejeu ne duplique rien | `avant rejeu : 15, apres rejeu : 15` |
-| Moteur d'alertes | Il évalue ses règles **et se trace lui-même** | `executions du moteur tracees : 1` |
+| Contrôle | Assertion |
+|---|---|
+| Initialisation des schémas | Les **21 objets nommés** de `bronze`, `speed` et `mart` existent |
+| Cloisonnement des rôles | **20 cas** de la matrice de droits, refus compris |
+| Pipeline temps réel | Le pipeline écrit réellement des lignes, et non zéro sans planter |
+| Résultat en base | Le contenu écrit est celui attendu, pas seulement du volume |
+| Couche Bronze | La collecte a bien alimenté l'archive, sans qu'on l'y ait aidée |
+| Dictionnaire de données | Le mode `--verifier` ne trouve aucun écart avec le catalogue |
+| Idempotence du puits | Le rejeu ne duplique rien : `avant rejeu : 15, apres rejeu : 15` |
+| Moteur d'alertes | Il évalue ses règles **et se trace lui-même** |
 
-Le partage entre les deux étages est vérifié et non supposé : les 13 tests de
+**Deux chiffres de ce tableau ont bougé sans que rien ne le signale**, et c'est
+la raison pour laquelle ils sont datés ici. Les objets nommés sont passés de 17
+à 21, la seconde source ayant ajouté `speed.viewer_count_events` et
+`speed.v_daily_viewer_stats`. Les cas de sécurité sont passés de 13 à 20 avec la
+couche Bronze. La liste étant **nommée et non comptée**, ces deux ajouts ont
+demandé une modification consciente du fichier de chaîne, ce qu'un comptage
+n'aurait pas exigé (OBS-32).
+
+Le partage entre les deux étages est vérifié et non supposé : les 20 cas de
 sécurité sont **ignorés** par l'étage `tests`, qui n'a pas de base, et
 **exécutés** par l'étage `integration`. Un test qui se saute silencieusement là
 où il devrait tourner serait un faux vert, exactement le travers que le reste du
@@ -1320,26 +1369,48 @@ aucun n'était une régression du code livré :
    raison légitime, la supervision ayant ajouté une table et six vues.
    L'assertion par comptage a été remplacée par une vérification des objets
    nommés. Voir OBS-32.
+4. **Session 13**, au premier `push` du canal de notification : l'étage
+   `qualite` a échoué et les cinq suivants ont été sautés. Trois erreurs `ruff`
+   dans du code écrit la veille, puis, une fois le lint corrigé, l'étage de
+   format a échoué à son tour sur trois fichiers. Il n'avait jamais été atteint,
+   le lint échouant avant lui, et sa propre rougeur restait donc invisible. Le
+   composant venait d'être annoncé « vérifié, 57 tests au vert » : c'était exact
+   et insuffisant, `pytest tests` n'étant pas la commande que la chaîne lance.
+   Voir OBS-97.
 
-**Point à assumer à l'oral** : la première exécution réelle du workflow a
-échoué, et deux des trois échecs portaient sur le test lui-même plutôt que sur
-le système testé. C'est le fonctionnement normal d'une chaîne d'intégration. Les
-étages rejoués localement passaient ; ceux qui ont cassé sont ceux qui ne
-pouvaient pas l'être, faute d'environnement jetable en local. Une CI qui passe
-au vert du premier coup sur cinq étages n'a en général rien vérifié.
+**Ce que ces quatre cas ont en commun.** La première exécution réelle du
+workflow a échoué, et sur les quatre défauts relevés depuis, deux portaient sur
+le test lui-même plutôt que sur le système testé. C'est le fonctionnement normal
+d'une chaîne d'intégration, pas un aveu. Les étages rejoués localement
+passaient ; ceux qui ont cassé sont ceux qui ne pouvaient pas l'être, faute
+d'environnement jetable en local, ou parce que la commande rejouée n'était pas
+celle de la chaîne. Une chaîne qui passe au vert du premier coup sur six étages
+n'a en général rien vérifié.
 
 ---
 
-# 6. Fonctionnalités attendues non encore couvertes
+# 6. Fonctionnalités attendues, couvertes ou non
 
 Le critère demande que le cahier reprenne **l'ensemble** des fonctionnalités
 attendues. Ce qui suit est donc listé explicitement plutôt qu'omis.
 
-| Fonctionnalité | État | Blocage |
+| Fonctionnalité | État | Reste à dire |
 |---|---|---|
-| Popularité diffusée (Twitch) | Non branchée | Colonnes présentes mais nulles |
-| Catalogue RAWG | Non branché | `dim_games` alimentée depuis la watchlist |
+| Catalogue de jeux | **Non branché** | `dim_games` est alimentée depuis la watchlist. `release_date`, `metacritic_score` et `critical_tier` restent vides, et c'est une conséquence de la source unique, pas un défaut de schéma. IGDB serait retenue plutôt que RAWG : elle s'authentifie par les **mêmes identifiants que Twitch**, déjà en place |
 | ~~Alertes vers un canal externe~~ | **Construit le 07/09/2026** | Canal Telegram, TNOT-01 à TNOT-06. Il reste que rien ne surveille l'ordonnanceur lui-même : si Airflow s'arrête, le battement s'arrête avec lui et c'est l'absence du message qui alerte |
+| ~~Popularité diffusée (Twitch)~~ | **Construite le 08/09/2026** | Six cas, TTWI-01 à TTWI-06, plus TPAN-01 à TPAN-03 pour le panel élargi. `avg_viewer_count` et `max_viewer_count` sont alimentées dans les deux couches Gold |
+
+**Cette section était fausse jusqu'au 09/09/2026**, et le document se
+contredisait sur deux pages : il déclarait la popularité diffusée « non
+branchée, colonnes présentes mais nulles » tout en portant six cas qui la
+testent et une section entière intitulée « Panel élargi et seconde source ».
+L'aveu avait survécu à sa propre correction.
+
+Le mécanisme vaut d'être nommé parce qu'il se reproduit. **La partie d'un
+document qui énonce ses manques est celle qui se périme le plus vite**, puisque
+c'est exactement la liste de ce sur quoi on va travailler ensuite. Rien ne la
+relit au moment où le manque est comblé : on ajoute le test, on ne retire pas
+l'aveu. C'est OBS-103, et c'est le troisième document du dépôt où il se produit.
 
 ---
 
@@ -1364,8 +1435,8 @@ Le cloisonnement des rôles est décrit par 3 cas de la section Sécurité et pa
 TBRZ-04, compté avec la couche Bronze. À l'exécution, ces quatre cas se
 déploient en **20 cas paramétrés**, contre 13 avant l'ajout de Bronze.
 
-Six de ces tests ont échoué avant de passer, et c'est ce qui leur donne de la
-valeur :
+Sept de ces cas n'ont pas donné leur résultat du premier coup, et c'est ce qui
+leur donne de la valeur :
 
 - **TS-02** a révélé des contraintes d'unicité manquantes dans le schéma Gold ;
 - **TS-03** a été conçu pour échouer, et l'a fait ;
@@ -1383,20 +1454,35 @@ valeur :
 
 Un test qui n'a jamais rien attrapé n'a pas encore prouvé qu'il testait quelque
 chose. Et un test qui échoue ne désigne pas nécessairement le système testé :
-dans trois cas sur cinq ici, le défaut était dans le test.
+sur les sept cas ci-dessus, **quatre désignaient le test et non le système**,
+TS-06, TS-07, TS-08 et TS-18. Deux désignaient un vrai défaut, TS-02 et TING-04.
+Le septième, TS-03, était fait pour échouer et a échoué, ce qui n'est ni l'un ni
+l'autre.
+
+Le décompte précédent annonçait « trois cas sur cinq » pour une liste qui en
+comptait sept. Ce n'est pas un détail de comptage : c'est le ratio qui porte
+l'argument, et un ratio faux affaiblit une observation juste.
 
 ## Couverture par compétence
 
 | Compétence | Tests correspondants |
 |---|---|
-| C4.2.1 schéma de données | TS-08, TS-09, TS-13, TF-04, TF-05 |
-| C4.2.2 temps réel | TF-01, TF-02, TS-01 |
+| C4.2.1 schéma de données | TS-08, TS-09, TS-13, TS-07, TF-04, TF-05 |
+| C4.2.2 temps réel | TF-01, TF-02, TF-03, TS-01 |
 | C4.2.2 orchestrateur | TS-02, TS-03, TS-04, TS-05, TS-06, TSNW-01 à TSNW-04 |
 | C4.2.2 calcul distribué | TS-10, TS-11, TS-12, TS-15 |
 | C4.2.3 CI/CD | section 5 complète, TS-14, TS-19 |
 | C4.2.1 intégrité applicative | TS-16, TS-17, TS-18 |
 | C4.2.1 intégrité déclarative (dbt) | TDBT-01 à TDBT-06 |
-| C4.3.1 supervision | TSUP-01 à TSUP-06, TING-06 |
+| C4.3.1 supervision | TSUP-01 à TSUP-06, TING-06, TNOT-01 à TNOT-06 |
 | C4.2.2 ingestion orchestrée | TING-01 à TING-05 |
 | Sécurité transverse | TSEC-01 à TSEC-03, TBRZ-04 |
 | Couche Bronze (A4.1, Medallion) | TBRZ-01 à TBRZ-06 |
+| Panel et seconde source (A4.1, C4.2.2) | TPAN-01 à TPAN-03, TTWI-01 à TTWI-06 |
+
+Ce tableau rattache les **70 cas**, sans exception. Il en laissait quinze de
+côté jusqu'au 09/09/2026 : les six du canal de notification, les trois du
+panel et les six de la seconde source, tous écrits après lui. Deux autres,
+TF-03 et TS-07, n'y avaient jamais figuré. Un tableau de couverture
+incomplet est pire qu'absent, puisqu'il donne à croire que ce qu'il ne
+nomme pas n'existe pas.

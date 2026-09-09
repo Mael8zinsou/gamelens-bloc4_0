@@ -4,7 +4,7 @@ Ce journal est tenu **au fil de la construction**, pas reconstitue apres coup. I
 
 1. alimenter la competence **C4.4.2** (methodologie d'investigation et de traitement d'un incident),
    qui exige un incident reel presente avec la methodologie appliquee ;
-2. documenter les choix contraints par l'environnement, qui seront questionnes a l'oral.
+2. documenter les choix contraints par l'environnement, et la maniere dont ils ont ete tranches.
 
 La grille d'evaluation attend qu'une methodologie permette d'identifier quatre elements, repris
 comme rubriques du gabarit ci-dessous : la **nature du probleme**, les **actions a mettre en oeuvre
@@ -101,8 +101,27 @@ l'organisation fictive Kestrel Interactive.
   `~/.snowsql` absents, aucune variable d'environnement), et compte d'essai vraisemblablement
   expire. Les scripts `sql/schema_gold_snowflake.sql` et `sql/verify_snowflake_constraints.sql`
   n'ont donc jamais ete executes reellement.
-- **Statut** : ouvert. Traitement decale, la construction se poursuit sur les briques qui n'en
-  dependent pas.
+- **Statut** : **referme le 20/08/2026.** Le compte etudiant `RTZSXDV-PM63908`
+  (region `AWS_EU_WEST_3`) a ete cree les 19 ou 20/08 avec 120 jours et 400
+  dollars de credits, et non un essai de 30 jours comme le supposait le constat
+  ci-dessus. `sql/schema_gold_snowflake.sql` y a ete execute le 20/08, 27
+  instructions et 0 erreur, et `sql/verify_snowflake_constraints.sql` a servi a
+  etablir empiriquement quelles contraintes ce moteur applique. La couche Gold
+  cible est alimentee quotidiennement depuis le 31/08 par le DAG
+  `gamelens_promotion_snowflake`.
+
+Ce qui subsiste de cet incident n'est pas la panne, c'est la contrainte qu'il a
+imposee tant qu'il durait. Faute de pouvoir executer quoi que ce soit sur
+l'entrepot, tout ce qui le visait a ete construit derriere une frontiere de
+configuration. La bascule s'est faite ensuite sans reecrire la logique de
+promotion, puis la recette d'integration continue a pu viser une base jetable
+sans modifier une ligne des scripts de controle. Voir DA-05. **La contrainte a
+disparu, la propriete qu'elle a produite est restee**, et c'est le seul
+enseignement de cette entree.
+
+Un point demeure ouvert et il est date : l'expiration du compte, attendue les
+17 ou 18/12/2026. Ce n'est plus un incident mais un point de vigilance, V-01 de
+la feuille de route d'exploitation, et le seul qui soit reellement bloquant.
 
 ---
 
@@ -257,8 +276,8 @@ erreur fonctionnelle plus haute, pas le probleme lui-meme.
 ## INC-006 logical_date nul sur un run manuel en Airflow 3
 
 - **Date de detection** : 20/08/2026, premier declenchement manuel du DAG.
-- **Severite** : bloquant pour tout declenchement manuel, donc pour la
-  demonstration en soutenance.
+- **Severite** : bloquant pour tout declenchement manuel, donc pour tout
+  rejeu a la main, qui est la voie de rattrapage d'une journee manquee.
 - **Nature du probleme** : Airflow 3 rend `logical_date` nullable et le laisse
   a `None` pour un run declenche a la main, alors qu'Airflow 2 en fournissait
   toujours un. Le code `context["logical_date"].date()` leve donc un
@@ -543,7 +562,7 @@ dans les memes circonstances :
    la configuration des conteneurs.
 3. Le present incident, qui porte le raisonnement complet.
 
-La regle generale qui en decoule, et qui vaut d'etre dite a l'oral : **ajouter
+La regle generale qui en decoule : **ajouter
 un repertoire au `PYTHONPATH` n'est pas une operation additive.** Elle peut
 retirer l'acces a des modules qui fonctionnaient, sans que rien ne le signale
 ailleurs que dans le composant qui en dependait.
@@ -582,9 +601,9 @@ construction et consignes le jour meme. **INC-004 est celui retenu pour la
 competence C4.4.2** : il est le seul a couvrir les quatre rubriques exigees par
 la grille, communication aux parties prenantes comprise.
 
-Les sessions 11 et 12 n'ont produit **aucun incident**. L'absence est ecrite ici
-plutot que laissee au silence, faute de quoi rien ne distingue un journal tenu a
-jour d'un journal oublie.
+Aucune session posterieure au 31/08/2026 n'a produit d'incident. L'absence est
+ecrite ici plutot que laissee au silence, faute de quoi rien ne distingue un
+journal tenu a jour d'un journal oublie.
 
 - **Session 11** (31/08/2026), rapport d'analyse et remise a plat des fichiers
   de suivi : aucune execution sur la plateforme, donc aucune occasion d'incident.
@@ -593,9 +612,37 @@ jour d'un journal oublie.
   effet sur la plateforme ni sur les donnees. Ils sont consignes comme
   observations (OBS-82 et OBS-84, plus les quatre defauts de l'outil de capture
   detailles en phase 43 du journal des commandes) et non comme incidents.
+- **Session 13** (07 et 08/09/2026), canal de notification, panel porte a 150
+  titres et raccordement de la seconde source : c'est la seule des sessions
+  recentes qui ait modifie la plateforme en service, et c'est donc la seule ou
+  la question se posait. Trois defauts, aucun n'ayant interrompu un service :
+  deux dans la mise en forme du premier message recu (OBS-91), un dans la chaine
+  d'integration continue, traite ci-dessous.
+- **Sessions des 08 et 09/09/2026**, controle de coherence des chiffres
+  annonces, script parle, puis revision de la feuille de route d'exploitation :
+  documents et outillage seuls. Les defauts trouves sont des ecarts entre ce
+  qu'un document affirmait et ce que la plateforme faisait, pas des pannes.
+  Le dernier en date, OBS-108, est un chiffre de duree qui mesurait un age.
 
-La distinction retenue, et elle vaut d'etre dite a l'oral : **un incident touche
-un systeme en service**. Un bug dans un generateur de documents qui n'a jamais
-tourne ailleurs que sur le poste de travail n'en est pas un, quelle que soit la
-duree passee dessus. Confondre les deux gonflerait artificiellement ce journal
+**Le cas limite, et pourquoi il est tranche dans ce sens.** Au premier `push`
+des commits du canal de notification, l'etage Qualite du code de la chaine
+d'integration a echoue et les six etages suivants ont ete sautes : trois erreurs
+de style dans du code ecrit la veille, puis trois fichiers mal formates une fois
+le premier etage corrige. La chaine est bien un systeme en service, et elle
+etait rouge.
+
+Elle n'a pourtant pas produit d'incident, pour une raison qui tient en une
+phrase : **elle a fait exactement ce pour quoi elle existe.** Un dispositif qui
+arrete du code fautif avant qu'il ne serve n'est pas en panne, il fonctionne, et
+appeler incident chaque declenchement d'une protection reviendrait a compter les
+freinages comme des accidents. Ce que l'episode apprend est ailleurs, et c'est
+OBS-97 : la verification lancee localement jusque-la, `pytest tests`, n'etait
+pas celle que la chaine lance, qui enchaine `ruff check` puis `ruff format
+--check` **avant** les tests. Annoncer un composant verifie sur la foi d'une
+commande qui n'est pas celle de la chaine, c'est annoncer autre chose que ce que
+le lecteur comprend.
+
+La distinction retenue : **un incident touche un systeme en service**. Un bug
+dans un generateur de documents qui n'a jamais tourne ailleurs que sur le poste
+de travail n'en est pas un, quelle que soit la duree passee dessus. Confondre les deux gonflerait artificiellement ce journal
 et affaiblirait l'incident qui compte.

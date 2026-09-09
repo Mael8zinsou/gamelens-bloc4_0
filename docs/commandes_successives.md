@@ -2883,3 +2883,156 @@ contient lui-même un heredoc. Écrit dans un heredoc bash, son délimiteur ferm
 celui de l'extérieur et le script est tronqué en plein milieu. Deux issues :
 choisir un délimiteur intérieur différent, comme ici, et passer par un fichier
 plutôt que par un heredoc dès que le contenu inséré ressemble à du shell.
+
+## Phase 64. Relever les temps de rétablissement sans confondre âge et durée (procédure)
+
+Le relevé qui alimente la section 7 de la feuille de route d'exploitation. Le
+filtre `resolue_le IS NOT NULL` n'est pas cosmétique : sans lui, une alerte
+encore ouverte est comptée pour son âge au moment de la requête, qui se lit
+ensuite comme une durée d'incident. Voir OBS-108.
+
+```bash
+# [SQL] 1. Durees par regle, alertes REFERMEES uniquement
+MSYS_NO_PATHCONV=1 docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT regle, severite, count(*) AS n,
+          max(resolue_le - declenchee_le) AS maxi,
+          avg(resolue_le - declenchee_le) AS moy
+     FROM speed.alertes WHERE resolue_le IS NOT NULL
+    GROUP BY 1,2 ORDER BY 2, 4 DESC"
+# -> 09/09/2026 : 27 alertes, 6 regles, aucune ouverte.
+#    fraicheur_frequentation | critique | 11 | 6 j 20 h 27 min
+#    echecs_composants       | critique |  2 | 3 j 22 h 40 min
+
+# [SQL] 2. Le denominateur qui manque au tableau : la plateforme tourne-t-elle ?
+MSYS_NO_PATHCONV=1 docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT count(DISTINCT started_at::date) AS jours_evalues,
+          min(started_at)::date, max(started_at)::date
+     FROM speed.pipeline_runs WHERE component = 'moteur_alertes'"
+# -> 9 | 2026-08-20 | 2026-09-09
+#    Neuf journees sur vingt-et-une. Une alerte ne se referme qu'a une
+#    evaluation du moteur : les durees incluent le temps ou le poste est eteint.
+
+# [SQL] 3. Delai de transmission reel du canal de notification
+MSYS_NO_PATHCONV=1 docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT alerte_id, regle, notifiee_le - declenchee_le AS delai
+     FROM speed.alertes
+    WHERE notifiee_le IS NOT NULL AND notifiee_le > declenchee_le
+    ORDER BY declenchee_le"
+# -> 1,9 s / 1,2 s / 1,1 s
+#    La condition notifiee_le > declenchee_le ecarte trois lignes du 07/09 dont
+#    les deux horodatages sont rigoureusement egaux, ce qui ne peut pas etre un
+#    delai de transmission. Origine non etablie, signalee dans le document.
+```
+
+## Phase 65. Éprouver le canal de notification hors alerte (procédure)
+
+```bash
+# [BASH] 1. Le module s'appelle `notifications`, PAS `supervision.notifications` :
+#           supervision/ est monte sur le PYTHONPATH du conteneur, il n'y est
+#           pas un paquet. La forme pointee rend ModuleNotFoundError.
+MSYS_NO_PATHCONV=1 docker exec gamelens-airflow-scheduler python -m notifications --help
+# -> usage: notifications.py [-h] [--essai] [--battement]
+
+# [BASH] 2. Essai : envoie un VRAI message sur le VRAI salon
+MSYS_NO_PATHCONV=1 docker exec gamelens-airflow-scheduler python -m notifications --essai
+
+# [SQL] 3. Distinguer « absent » de « configure mais injoignable »
+MSYS_NO_PATHCONV=1 docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT started_at, status, records_in, records_written, error_message
+     FROM speed.pipeline_runs WHERE component = 'notificateur'
+    ORDER BY started_at DESC LIMIT 5"
+# -> Un records_in non nul avec records_written a zero designe des alertes
+#    qu'il y avait a annoncer et qui ne sont pas parties.
+```
+
+## Phase 66. Confronter le schéma d'ensemble à la plateforme (procédure)
+
+Le schéma ASCII de `docs/documentation_technique.md` est dessiné à la main et
+aucune règle ne peut le lire (OBS-109). Faute de contrôle automatique, voici la
+liste des questions à lui poser, avec la commande qui rend la réponse. À rejouer
+à chaque brique ajoutée.
+
+```bash
+# [SQL] 1. Toutes les tables et vues de la couche Silver sont-elles dessinees ?
+MSYS_NO_PATHCONV=1 docker exec gamelens-postgres psql -U gamelens_app -d gamelens -c \
+  "SELECT table_name, table_type FROM information_schema.tables
+    WHERE table_schema = 'speed' ORDER BY 2, 1"
+# -> 09/09/2026 : 6 tables et 8 vues. viewer_count_events et
+#    v_daily_viewer_stats manquaient au dessin.
+
+# [BASH] 2. Tous les DAG sont-ils dessines, et sont-ils bien cinq ?
+ls dags/*.py
+# -> gamelens_battement manquait, et le texte annoncait "quatre DAG".
+
+# [BASH] 3. Tous les topics declares sont-ils dessines ?
+grep -n "KAFKA_TOPIC" .env.example
+# -> KAFKA_TOPIC_VIEWERS manquait.
+
+# [BASH] 4. Toutes les variables d'environnement sont-elles documentees ?
+#           Compare .env.example a la section 4 du document.
+grep -oE "^[A-Z_]+=" .env.example | tr -d '='
+# -> TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, TELEGRAM_BOT_TOKEN,
+#    TELEGRAM_CHAT_ID et GAMELENS_TIMEZONE n'etaient nulle part.
+
+# [BASH] 5. Les chiffres de la chaine d'integration sont-ils encore vrais ?
+python -m pytest tests -q --collect-only | tail -1
+# -> 57 tests collectes, le document en annoncait 39.
+grep -oE "\('(speed|mart|bronze)\." .github/workflows/ci.yml | wc -l
+# -> 21. La liste nommee compte 21 objets ; le document ET le message d'echo
+#    de la CI elle-meme en annoncaient encore 19.
+#    Piege : `grep -c` rend 1 ici, la liste tenant sur UNE seule ligne. Il
+#    compte les lignes qui contiennent une occurrence, pas les occurrences.
+```
+
+**Ce que ce controle ne remplace pas.** Il verifie que rien ne MANQUE au dessin.
+Il ne verifie pas que ce qui y figure soit juste, ni que les fleches aillent
+dans le bon sens. Pour cela il n'y a que la relecture, et c'est assume.
+
+## Phase 67. Vérifier un cahier de recettes SANS rejouer les tests (procédure)
+
+Rejouer soixante-dix cas coûte cher et ne dit rien de la fraîcheur du document.
+Ce qui périme dans un cahier de recettes, ce sont ses **chiffres de portée** :
+combien d'étages, combien de tests, combien d'objets, combien de cas. Ils se
+vérifient tous par lecture de fichiers, sans exécution.
+
+```bash
+# [BASH] 1. Le document et lui-meme : combien de cas declares ?
+grep -cE "^## T[A-Z]+-[0-9][0-9]\." docs/cahier_recettes.md
+# -> 70, a confronter au total de la section Synthese.
+
+# [BASH] 2. Combien d'etages la chaine compte-t-elle vraiment ?
+grep -nE "^  [a-z_-]+:$" .github/workflows/ci.yml
+# -> qualite, tests, dag, integration, entrepot, publication : SIX.
+#    Le cahier en decrivait cinq, la recette de l'entrepot manquait.
+
+# [BASH] 3. Combien de repertoires sont lintes ?
+grep -n "ruff check" .github/workflows/ci.yml
+# -> cinq, le cahier en annoncait quatre. `outils/` n'y est pas.
+
+# [BASH] 4. Combien de tests sont collectes ?
+python -m pytest tests -q --collect-only | tail -1
+# -> 57 collected. Le cahier annoncait "14 passed, 13 skipped".
+
+# [BASH] 5. Combien d'objets et combien de cas de securite ?
+grep -oE "\('(speed|mart|bronze)\." .github/workflows/ci.yml | wc -l
+# -> 21. Le cahier en annoncait 17.
+grep -cE "^    \(" tests/test_securite_roles.py
+# -> 20. Le cahier en annoncait 13 a un endroit et 20 a un autre.
+
+# [BASH] 6. Tous les DAG sont-ils dans la liste attendue ?
+ls dags/*.py | wc -l
+grep -A6 "ATTENDUS:" .github/workflows/ci.yml | grep -c "gamelens_"
+# -> 5 fichiers, 4 noms attendus. gamelens_battement n'est pas couvert.
+```
+
+**Le controle le plus rentable est le dernier, et c'est aussi le seul qui ait
+trouve un manque de la PLATEFORME et non du document.** Les cinq premiers
+comparent un document a des fichiers ; celui-ci compare deux fichiers entre eux,
+et c'est la que se logent les trous reels.
+
+**Controle de coherence interne, a ne pas negliger** : un cahier qui se
+contredit d'une section a l'autre se lit sans que rien ne s'allume. Ici, la
+section 6 declarait la popularite Twitch « non branchee » quand six cas TTWI la
+testaient trente pages plus haut. Aucune commande ne trouve cela : il faut lire
+la section qui enonce les MANQUES en dernier, apres avoir lu les cas, jamais
+avant.

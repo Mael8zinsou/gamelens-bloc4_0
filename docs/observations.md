@@ -2598,3 +2598,130 @@ pas un budget, c'est une intention.** Tant qu'aucun contenu réel n'est confront
 durée de présentation, d'une estimation de charge, et d'une projection de
 volumétrie, ce dont OBS-101 et OBS-106 sont deux autres exemplaires dans ce
 même projet.
+
+## OBS-108. Une alerte ouverte n'a pas de durée, elle a un âge
+
+La feuille de route publiait depuis le 27/08/2026 un tableau de temps de
+rétablissement, présenté comme mesuré et qui l'était. Une de ses lignes annonçait
+**2 h 18 min** pour `echecs_composants`, avec une explication qui sonnait juste :
+le test négatif du 27/08, broker coupé volontairement, échec constaté, correction.
+
+La même requête rejouée le 09/09/2026 rend **3 j 22 h 40 min** pour cette même
+alerte. Rien n'a été corrigé entre-temps, et la première mesure n'était pas
+fausse : elle mesurait autre chose que ce que son intitulé annonçait. L'alerte
+était **encore ouverte** au moment du relevé, ouverte depuis 2 h 18 min. La
+requête faisait la différence entre `declenchee_le` et `now()` faute de
+`resolue_le`, ce qui est un âge, et le résultat a été écrit dans une colonne
+intitulée « durée maximale ».
+
+Le mécanisme mérite d'être nommé parce qu'il ne se voit pas à la relecture.
+**Un incident en cours et un incident refermé donnent le même type de valeur, un
+intervalle de temps, et rien dans le nombre ne dit lequel des deux on lit.** Une
+durée d'incident n'existe qu'une fois l'incident refermé ; avant cela, tout
+chiffre publié est une borne inférieure qui vieillit toute seule dans un document
+figé. Ici, elle a vieilli d'un facteur quarante.
+
+Deux conséquences retenues.
+
+D'abord, la requête de relevé filtre désormais `resolue_le IS NOT NULL`. Elle
+rend donc moins de lignes que le journal n'en contient, et c'est voulu : mieux
+vaut un tableau incomplet qu'un tableau qui mélange deux grandeurs.
+
+Ensuite, et c'est le constat le plus gênant, **aucune des durées de ce tableau
+n'est un temps de réparation**, ce que la section ne disait pas. Une alerte ne se
+referme qu'à une évaluation du moteur, et le moteur ne tourne que lorsque la
+plateforme tourne. `moteur_alertes` s'est exécuté sur **9 journées distinctes
+entre le 20/08 et le 09/09**, soit moins d'un jour sur deux. La démonstration est
+dans le journal : l'alerte du 07/09 à 21h54 s'est refermée le 09/09 à 11h43m14s,
+à la seconde même où une alerte de fraîcheur s'ouvrait, les deux étant le premier
+cycle de supervision après un redémarrage. Ce que mesure la colonne est le délai
+avant la prochaine mise en route du poste.
+
+C'est le même défaut de désignation que les « 78 et 238 octets » de la couche
+Bronze, qui étaient les tailles de la charge JSON et non de la ligne archivée, et
+que les « 486 instances de tâches par jour » d'OBS-106. Trois fois le même
+mécanisme : le nombre est juste, l'étiquette ment, et l'étiquette est ce que le
+lecteur retient.
+
+## OBS-109. Le schéma d'ensemble est le seul artefact que rien ne vérifie
+
+La documentation technique s'ouvre sur un schéma ASCII de la plateforme. C'est
+la première chose que lit quelqu'un qui arrive, et c'est le seul objet du dépôt
+dont l'exactitude ne repose sur rien.
+
+Tout le reste est tenu par un mécanisme. Les dictionnaires sont générés depuis
+le catalogue et la chaîne d'intégration échoue s'ils ont divergé. Le schéma de
+données Gold est généré, et ses deux sources sont recoupées. Les objets de base
+sont vérifiés par leur nom à chaque exécution. Le support de soutenance est
+produit depuis un Markdown versionné. Le schéma d'ensemble, lui, est dessiné à
+la main dans un bloc de code, et **aucune règle ne peut le lire**.
+
+Le résultat était prévisible et il s'est produit. Le 09/09/2026, ce dessin
+ignorait encore une source (Twitch), un topic Kafka, une table de la couche
+Silver et un des cinq DAG, tous ajoutés les 07 et 08/09. Le texte qui l'entoure
+annonçait « quatre DAG Airflow ». Rien n'avait signalé l'écart, parce que rien
+ne pouvait le signaler : un dessin ne casse pas.
+
+Deux choses valent d'être retenues, et la seconde plus que la première.
+
+**Le degré de fausseté n'est pas proportionnel à l'effort de correction.** Le
+dessin a mis dix minutes à redessiner. Il était faux depuis deux jours dans le
+document désigné comme le point d'entrée du projet, celui qu'on lit quand on ne
+sait pas encore quoi croire. Un défaut cher à trouver et bon marché à corriger
+est le pire des profils : rien n'incite à le chercher.
+
+**Une documentation générée déplace le risque, elle ne l'annule pas, et elle le
+concentre là où il reste.** Plus la part vérifiée d'un dépôt grandit, plus la
+part non vérifiée devient invisible, parce que la confiance acquise sur la
+première déteint sur la seconde. C'est le même mécanisme qu'OBS-105, vu par
+l'autre bout : là, générer un document ne le rendait pas vrai ; ici, générer les
+autres documents a rendu celui-ci moins suspect qu'il n'aurait dû l'être.
+
+Aucun mécanisme n'est ajouté pour autant. Un contrôle qui lirait le dessin
+demanderait de lui donner une grammaire, c'est-à-dire de le remplacer par un
+format généré, et on perdrait ce qui fait sa valeur : il est lisible d'un coup
+d'oeil parce qu'il est arrangé à la main. Le traitement retenu est une consigne,
+inscrite au pied du document : il se relit **à chaque brique ajoutée**, pas
+seulement à chaque décision d'architecture. C'est un espoir et non une garantie,
+et l'écrire ainsi vaut mieux que de croire le contraire.
+
+## OBS-110. Une liste nommée rend l'oubli possible, un comptage le rendait invisible
+
+Le dépôt a remplacé partout les assertions par comptage par des **listes
+nommées**, et la raison en est bonne : un comptage s'ajuste tout seul et ne
+vérifie plus rien, alors qu'une liste nommée oblige à une modification
+consciente du fichier de chaîne quand un objet apparaît. C'est OBS-32, et le
+cahier de recettes le répète à trois endroits comme un principe acquis.
+
+Le contrôle du 09/09/2026 a trouvé le défaut que ce principe ne couvre pas. La
+liste `ATTENDUS` de l'étage d'intégrité des DAG porte **quatre noms**.
+`gamelens_battement`, ajouté le 07/09, n'y a jamais été inscrit. Le cinquième
+DAG peut donc disparaître, ou cesser de s'analyser, sans que cet étage vire au
+rouge. La documentation technique affirmait pourtant que les cinq étaient
+couverts.
+
+Le cas est piquant parce que **ce contrôle existe précisément pour ce motif** :
+TING-01 s'ouvre sur « l'étage d'intégrité de la CI ne vérifiait qu'un DAG sur
+trois ». Il vient de reproduire son propre défaut, en plus petit.
+
+La formulation à retenir n'est pas « la liste nommée ne sert à rien », elle
+sert. C'est celle-ci : **une liste nommée déplace l'oubli, du silence vers
+l'omission.** Un comptage se mettait à jour tout seul et ne signalait rien ; une
+liste nommée ne se met pas à jour toute seule et ne signale rien non plus, mais
+elle laisse une trace lisible de ce qu'elle couvre, ce qui rend l'écart
+trouvable par un humain qui compare. C'est un progrès réel, et le confondre avec
+une garantie est exactement ce qui a permis au trou de rester ouvert deux jours :
+personne ne relit une liste qu'on croit auto-suffisante.
+
+Une seconde occurrence, trouvée le même jour et de la même famille : le tableau
+« Couverture par compétence » du cahier rattachait 55 cas sur 70. Les quinze
+manquants sont ceux écrits après lui, plus deux qui n'y avaient jamais figuré.
+Un tableau de couverture incomplet est pire qu'absent : il donne à croire que ce
+qu'il ne nomme pas n'existe pas.
+
+**Le trou de la chaîne n'est pas comblé**, et ce n'est pas un oubli. La
+correction tient en une ligne, mais elle relancerait un run le jour du dépôt, et
+la capture du run vert est elle-même un livrable. L'écart est donc écrit dans
+TING-01 et dans la documentation technique, à charge pour le lecteur de décider.
+Nommer un écart qu'on choisit de ne pas corriger est un exercice différent de le
+corriger, et pas moins utile.
