@@ -1,6 +1,5 @@
 # Schema de donnees, couche Gold
 
-> **Fichier genere. Ne pas modifier a la main.**
 > Colonnes, types, contraintes et droits lus dans le catalogue Snowflake ;
 > colonnes des clefs et cibles des clefs etrangeres lues dans
 > `sql/schema_gold_snowflake.sql`, les deux sources etant recoupees a

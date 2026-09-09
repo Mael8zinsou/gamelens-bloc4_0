@@ -217,12 +217,13 @@ archivées, la couche Bronze cesse d'être gratuite et une politique de rétenti
 devient nécessaire. Le principe de la couche, archiver ce qui a été reçu sans
 savoir d'avance ce qui servira, reste juste ; c'est sa durée de conservation qui
 doit devenir une décision explicite plutôt qu'un effet de bord. Point de
-vigilance V-05 de la feuille de route, requalifié de faible à forte le même jour.
+vigilance V-05 de la feuille de route, requalifié de faible à forte le même
+jour.
 
 La cadence d'appel, elle, n'est plus le facteur limitant qu'annonçait la version
 précédente de cette section : à 150 titres, un cycle occupe 1 min 16 s sur une
-fenêtre de 15 minutes, et Twitch 58 s. C'est le stockage qui devient contraignant
-en premier, ce qui inverse la conclusion antérieure.
+fenêtre de 15 minutes, et Twitch 58 s. C'est le stockage qui devient
+contraignant en premier, ce qui inverse la conclusion antérieure.
 
 ### 4.4 Deux sources, deux axes, et ce qui reste dehors
 
@@ -377,9 +378,9 @@ second s'arrête, le premier continue et rien n'est perdu, dans la limite de la
 rétention de 168 heures.
 
 **Alternative écartée** : écrire directement en base. À 150 titres et deux
-sources, cela fonctionnerait encore, et il faut le dire franchement. Le tampon résout un problème
-d'échelle que le commanditaire n'a pas encore, et il répond à une exigence
-explicite du référentiel sur les pipelines temps réel.
+sources, cela fonctionnerait encore, et il faut le dire franchement. Le tampon
+résout un problème d'échelle que le commanditaire n'a pas encore, et il répond
+à une exigence explicite du référentiel sur les pipelines temps réel.
 
 **Ce que le tampon a réellement apporté**, et qui n'était pas prévu : lors d'un
 arrêt de sept jours du poste, il a restitué à la reprise une collecte
@@ -453,12 +454,22 @@ teste. dbt éprouve ce que Snowpark construit.
 ### 7.7 Supervision : SQL et Grafana
 
 **Rôle** : cinq vues d'indicateurs, six règles d'alerte à cycle de vie complet,
-un tableau de bord provisionné comme code.
+un tableau de bord provisionné comme code, et depuis le 07/09/2026 un canal de
+notification externe doublé d'un DAG témoin.
 
-**Arbitrage structurant** : les seuils sont définis **en SQL**, pas dans l'outil
-de visualisation. Grafana affiche les indicateurs, il ne les définit pas. Cela
-rend les règles versionnées, testables hors interface, et remplaçables sans
-perdre la logique de surveillance.
+**Premier arbitrage structurant** : les seuils sont définis **en SQL**, pas dans
+l'outil de visualisation. Grafana affiche les indicateurs, il ne les définit
+pas. Cela rend les règles versionnées, testables hors interface, et remplaçables
+sans perdre la logique de surveillance.
+
+**Second arbitrage, du 07/09/2026** : la notification n'a pas été ajoutée seule.
+Une notification est événementielle, donc muette au moment précis où le moteur
+d'alertes s'arrête ; l'ajouter seule aurait comblé un écart en aggravant son
+voisin. Le canal est donc doublé d'un battement périodique,
+`gamelens_battement`, qui part à 8h et 20h que tout aille bien ou non. Le
+principe se généralise : on ne demande pas à un dispositif de témoigner de sa
+propre existence, on lui adjoint un témoin. Voir DA-12, et 9.2 pour la
+dépendance que cela introduit.
 
 ### 7.8 Intégration continue : GitHub Actions
 
@@ -491,8 +502,10 @@ produit du code plus long et moins juste.
 ## 9. Points de vigilance
 
 Les quatorze points suivis figurent dans `feuille_route_exploitation.md` avec
-leur échéance et leur action, cinq d'entre eux étant refermés. Cette section retient ceux qui relèvent d'un choix
-d'architecture, et non de l'exploitation courante.
+leur échéance et leur action, cinq d'entre eux étant refermés. Cette section
+retient ceux qui relèvent d'un choix d'architecture, et non de l'exploitation
+courante, et elle garde les points traités plutôt que de les effacer : l'écart
+entre le constat et sa correction fait partie de l'analyse.
 
 ### 9.1 Dépendance au fournisseur d'entrepôt
 
@@ -518,14 +531,46 @@ dépendance, elle circonscrit son coût.
 assurance réelle mais partielle. Il porte le même schéma et pas la même
 profondeur d'historique : 3 journées contre 4 au 31/08/2026.
 
-### 9.2 Absence de canal de notification
+### 9.2 Le canal de notification, et la dépendance qu'il introduit
 
-Les alertes sont persistées, horodatées, et se referment seules. **Personne
-n'est prévenu.** C'est l'écart le plus important entre cette plateforme et une
-plateforme exploitée, et il est chiffré : lors d'un arrêt de quatre jours, cinq
-alertes se sont ouvertes puis refermées sans intervention et sans que quiconque
-en soit informé. Si elles ne s'étaient pas refermées, rien n'aurait changé pour
-l'exploitant.
+**Traité le 07/09/2026.** Cette section décrivait jusque-là l'écart le plus
+important entre cette plateforme et une plateforme exploitée : les alertes
+étaient persistées, horodatées, elles se refermaient seules, et **personne
+n'était prévenu**. Le chiffre rendait l'aveu concret : lors d'un arrêt de quatre
+jours, cinq alertes se sont ouvertes puis refermées sans intervention et sans
+que quiconque en soit informé, et une rupture de fraîcheur détectée en
+90 minutes est restée ouverte **6 jours et 20 heures**.
+
+Le délai entre le déclenchement et la réception est aujourd'hui de
+**2 secondes**, mesuré. Ce qui vaut d'être retenu n'est pas ce délai, c'est ce
+qu'il a fallu décider pour l'obtenir.
+
+**Une notification seule aurait aggravé le défaut voisin.** Une notification est
+événementielle : elle part quand une règle se déclenche. Si le moteur d'alertes
+s'arrête, aucune règle n'est évaluée, aucun message ne part, et le silence
+redevient indiscernable d'une plateforme saine. L'écart aurait été déplacé d'un
+cran, avec en prime l'impression que la surveillance est complète. D'où deux
+mécanismes dans deux chaînes distinctes : la notification événementielle, et un
+**battement périodique** qui part à 8h et 20h que tout aille bien ou non, de
+sorte que son absence soit elle-même le signal. Voir DA-12.
+
+**Ce qui subsiste, et qui appartient bien à cette section.** Le point de
+vigilance ne disparaît pas, il change de nature, et il en reste deux.
+
+*Le canal repose sur un service tiers gratuit et sans contrat*, du même ordre
+que la dépendance aux interfaces de collecte analysée en 9.4. Une modification
+de conditions ou une fermeture rendrait la notification muette. La dégradation
+serait propre, les alertes restant persistées et consultables, mais elle serait
+silencieuse. C'est précisément pour cela qu'un jeton présent mais injoignable
+trace un échec au lieu d'être ignoré : taire un canal déclaré qui ne fonctionne
+plus reproduirait le défaut que l'on vient de corriger.
+
+*La chaîne de témoins s'arrête un cran plus haut.* Si l'ordonnanceur meurt, les
+deux chaînes meurent ensemble, et le signal devient l'absence du message de 8h,
+c'est-à-dire un humain qui remarque qu'il n'a rien reçu. L'arbitrage est
+explicite : chaque témoin supplémentaire est un composant de plus à tenir, et
+la chaîne doit s'arrêter quelque part. Elle s'arrête ici, et il vaut mieux le
+dire que le découvrir.
 
 ### 9.3 Expiration du compte d'entrepôt
 
@@ -535,11 +580,16 @@ contraint, non le budget.
 
 ### 9.4 Dépendance à des interfaces tierces sans contrat
 
-Les quatre sources sont des API publiques utilisées dans le cadre de leurs
-conditions d'utilisation, sans engagement de service. Une modification, une
-limitation ou une fermeture est possible sans préavis. L'archivage systématique
-en couche Bronze est la seule atténuation réelle : il préserve l'historique déjà
-acquis, il ne préserve pas la collecte future.
+Les trois points d'appel raccordés, deux chez Valve et un chez Twitch, sont des
+API publiques utilisées dans le cadre de leurs conditions d'utilisation, sans
+engagement de service. Une modification, une limitation ou une fermeture est
+possible sans préavis. L'archivage systématique en couche Bronze est la seule
+atténuation réelle : il préserve l'historique déjà acquis, il ne préserve pas la
+collecte future.
+
+Le canal de notification ajoute depuis le 07/09/2026 une dépendance de même
+nature, et cette atténuation ne s'y applique pas : il n'y a pas d'historique à
+préserver, il y a un message qui part ou ne part pas. Voir 9.2.
 
 ### 9.5 Un environnement unique
 

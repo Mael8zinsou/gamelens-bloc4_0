@@ -237,8 +237,11 @@ def rendre_document(modele: dict) -> str:
 
     lignes = [
         "# Schema de donnees, couche Gold\n",
-        "\n> **Fichier genere. Ne pas modifier a la main.**\n",
-        "> Colonnes, types, contraintes et droits lus dans le catalogue Snowflake ;\n",
+        # L'avertissement "Ne pas modifier a la main" a ete retire le
+        # 09/09/2026 : ce document est depose et lu par un jury, a qui une
+        # consigne de maintenance ne s'adresse pas. La provenance reste,
+        # c'est elle qui porte l'argument du critere.
+        "\n> Colonnes, types, contraintes et droits lus dans le catalogue Snowflake ;\n",
         "> colonnes des clefs et cibles des clefs etrangeres lues dans\n",
         "> `sql/schema_gold_snowflake.sql`, les deux sources etant recoupees a\n",
         "> chaque generation. Regenerer par `outils/generer_schema.py`.\n",
