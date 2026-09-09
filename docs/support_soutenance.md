@@ -352,11 +352,15 @@ Deux commandes préparées dans un terminal déjà ouvert, police agrandie :
 
 1. `dashboard_viewer` interroge `mart.fact_prices` : `permission denied for
    table fact_prices`
+
+docker exec gamelens-postgres psql -U dashboard_viewer -d gamelens -c 'SELECT count(*) FROM mart.fact_prices;'
+
+
 2. le même rôle interroge `mart.v_popularity_dashboard` : trois lignes de
    données du jour
 
-Dire pendant que ça tourne : « le cloisonnement se prouve mieux par un refus que
-par une matrice de droits ».
+docker exec gamelens-postgres psql -U dashboard_viewer -d gamelens -c 'SELECT unified_name, day, avg_player_count, avg_viewer_count FROM mart.v_popularity_dashboard ORDER BY day DESC, avg_player_count DESC LIMIT 3;'
+
 
 Repli : `docs/preuves/c11_cloisonnement_roles.txt`, à la diapositive suivante du
 PPTX. Si le direct ne répond pas en dix secondes, passer au repli sans commenter.
